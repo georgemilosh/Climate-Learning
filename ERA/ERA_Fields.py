@@ -353,18 +353,19 @@ def CompExtremes(series, myfield, T, Tot_Mon1, threshold):
     print("A.shape = ",A.shape)
     return a_max_and_ti_postproc(A, A.shape[1])
 
-def CompCompositesThreshold(series, myfield, T, Tot_Mon1, threshold):
+def CompCompositesThreshold(series, myfield, T, Tot_Mon1, threshold, observation_time=30):
     A_max, Ti, year_a = CompExtremes(series, myfield, T, Tot_Mon1, threshold)
     
-    tau = np.arange(-30,30,1)
+    tau = np.arange(-observation_time,observation_time,1) # from observation time days before to observation_time - 1  days after the heatwave
     nb_events = 0
-    myfield.composite_mean = np.zeros((len(tau),myfield.var.shape[2],myfield.var.shape[3]))
+    myfield.composite_mean = np.zeros((len(tau),myfield.var.shape[2],myfield.var.shape[3])) # shape: (days, lat, lon)
     myfield.composite_std = np.zeros((len(tau),myfield.var.shape[2],myfield.var.shape[3]))
+    # do statistics over the years
     for y in range(series.shape[0]):
         if A_max[y] >= threshold:
             print(f'A_max[{y}] = {A_max[y]}, Ti[{y}] = {Ti[y]}')
             nb_events += 1
-            value = (myfield.var[y])[tau + (Tot_Mon1[6] + Ti[y]) ] # value of the field (over the Earth) at the day when the heatwave is at its maximum
+            value = (myfield.var[y])[tau + (Tot_Mon1[6] + Ti[y]) ] # value of the field (over the Earth) around the days when the heatwave is at its maximum
             myfield.composite_mean += value     # This is the raw sum
             myfield.composite_std += value**2   # This is the raw square sum
     print(f'number of events: {nb_events}')
