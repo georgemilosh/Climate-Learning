@@ -760,6 +760,8 @@ def autocorrelation(myseries, maxlag):
         autocorr.append(np.sum(series_pad*np.roll(series_pad, -k))/(series_pad.shape[0]*(series_pad.shape[1]-k-maxlag)))
     return autocorr
 
+
+
 class Field:
     def __init__(self, name, filename, label, Model, shape, s_year, prefix,
                  day_start=0, day_end=365, lat_start=0, lat_end=241, lon_start=0, lon_end=480, myprecision='double'):
@@ -932,6 +934,8 @@ class Field:
         anomaly_series = self.ano_mask.copy()
         return series, anomaly_series
     
+    
+    
 class Plasim_Field:
     def __init__(self, name, filename, label, Model, lat_start=0, lat_end=241, lon_start=0, lon_end=480,
                  myprecision='double', mysampling=''):
@@ -1009,17 +1013,18 @@ class Plasim_Field:
     
     def Set_area_integral(self, input_area, input_mask, containing_folder='Postproc', delta=1):   # Evaluate area integral and (possibly if delta is not 1) coarse grain it in time
         if delta == 1:
-            filename_abs =  containing_folder+'/Int_Abs_'+self.sampling+'_'+self.Model+'_'+input_area+'_'+self.filename+'.npy'
-            filename_ano_abs =  containing_folder+'/Int_Ano_Abs_'+self.sampling+'_'+self.Model+'_'+input_area+'_'+self.filename+'.npy'
+            filename_abs =  f'{containing_folder}/Int_Abs_{self.sampling}_{self.Model}_{input_area}_{self.filename}.npy'
+            filename_ano_abs =  f'{containing_folder}/Int_Ano_Abs_{self.sampling}_{self.Model}_{input_area}_{self.filename}.npy'
         else:
-            filename_abs =  containing_folder+'/Int_Abs_'+self.sampling+'_'+self.Model+'_'+input_area+'_'+self.filename+'_'+str(delta)+'.npy'
-            filename_ano_abs =  containing_folder+'/Int_Ano_Abs_'+self.sampling+'_'+self.Model+'_'+input_area+'_'+self.filename+'_'+str(delta)+'.npy'
-        if os.path.exists(filename_abs):
+            filename_abs =  f'{containing_folder}/Int_Abs_{self.sampling}_{self.Model}_{input_area}_{self.filename}_{delta}.npy'
+            filename_ano_abs =  f'{containing_folder}/Int_Ano_Abs_{self.sampling}_{self.Model}_{input_area}_{self.filename}_{delta}.npy'
+            
+        if os.path.exists(filename_abs): # load integrals
             self.abs_mask = np.load(filename_abs)
             self.ano_abs_mask = np.load(filename_ano_abs)
-            print('file ' + filename_abs + ' loaded')
-            print('file ' + filename_ano_abs + ' loaded')
-        else:
+            print(f'file {filename_abs} loaded')
+            print(f'file {filename_ano_abs} loaded')
+        else: # compute integrals
             #print("self.abs_mask = np.zeros((self.var.shape[0],self.var.shape[1]))    # integral over the area")
             self.abs_mask = np.zeros((self.var.shape[0],self.var.shape[1]),  dtype=self.np_precision)    # integral over the area
             for y in range(self.var.shape[0]):
@@ -1029,18 +1034,18 @@ class Plasim_Field:
             #print("self.ano_abs_mask = self.abs_mask - np.mean(self.abs_mask,0)")
             self.ano_abs_mask = self.abs_mask - np.mean(self.abs_mask,0)    # Evaluate grid-point climatological mean 
             if delta > 1:
-                    for obj in [self.ano_abs_mask, self.abs_mask]: # do it for both objects
-                        A = np.zeros((obj.shape[0], obj.shape[1] - delta + 1), dtype=self.np_precision)   # When we use convolve (running mean) there is an extra point that we can generate by displacing the window hence 13 instead of 14
-                        convseq = np.ones(delta)/delta
-                        for y in range(obj.shape[0]):
-                            A[y,:]=np.convolve(obj[y,:],  convseq, mode='valid')
-                        obj = A
+                for obj in [self.ano_abs_mask, self.abs_mask]: # do it for both objects
+                    A = np.zeros((obj.shape[0], obj.shape[1] - delta + 1), dtype=self.np_precision)   # When we use convolve (running mean) there is an extra point that we can generate by displacing the window hence delta - 1 instead of delta
+                    convseq = np.ones(delta)/delta
+                    for y in range(obj.shape[0]):
+                        A[y,:]=np.convolve(obj[y,:],  convseq, mode='valid')
+                    obj = A
             # if not keep the definitions of the objects
 
             np.save(filename_abs,self.abs_mask)
             np.save(filename_ano_abs,self.ano_abs_mask)
-            print('saved file ' + filename_abs)
-            print('saved file ' + filename_ano_abs)
+            print(f'saved file {filename_abs}')
+            print(f'saved file {filename_ano_abs}')
         anomaly_series = self.ano_abs_mask.copy()
         series = self.abs_mask.copy()
         
