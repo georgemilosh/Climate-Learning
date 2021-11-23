@@ -179,16 +179,18 @@ def PltReturnsHist(XX_rt, YY_rt, xx_rt, yy_rt, A_max_sorted, Tot_Mon1, area, ax1
     Ax.set_title("Events conditioned", fontsize=13)
     Ax.legend(loc = 'best', fontsize=12)
     
-def BootstrapReturnsOnly(myseries, TO, Tot_Mon1, area, ax, Ts, modified='no'):
+def BootstrapReturnsOnly(myseries, TO, Tot_Mon1, area, ax, Ts, modified='no', write_path='./'):
+    write_path = write_path.rstrip('/')
+    
     for T in Ts:
         convseq = np.ones(T)/T
         XX = []
         YY = []
         for j in range(10):
-            A = np.zeros((myseries.shape[0]//10, Tot_Mon1[9] - Tot_Mon1[6] - T+1))   # When we use convolve (running mean) there is an extra point that we can generate by displacing the window hence 13 instead of 14
+            A = np.zeros((myseries.shape[0]//10, Tot_Mon1[9] - Tot_Mon1[6] - T+1))   # When we use convolve (running mean) there is an extra point that we can generate by displacing the window hence T-1 instead of T
             for y in range(myseries.shape[0]//10):
                 A[y,:] = np.convolve(myseries[100*j+y,Tot_Mon1[6]:(Tot_Mon1[9])],  convseq, mode='valid')
-            print("A.shape = ",A.shape)
+            print(f"{A.shape = }")
             if A.shape[1] > 30: 
                 A_max, Ti, year_a = a_max_and_ti_postproc(A, A.shape[1])
             else: # The season length is too short and we need to just take maximum
@@ -202,22 +204,30 @@ def BootstrapReturnsOnly(myseries, TO, Tot_Mon1, area, ax, Ts, modified='no'):
             XX_rt, YY_rt, xx_rt, yy_rt = return_time_fix(A_max_sorted, modified)
             YY.append(np.array(YY_rt))
         YY = np.array(YY)
-        np.save('Postproc/'+TO+'_'+area+'_XX_rt_'+str(T),XX_rt)
-        np.save('Postproc/'+TO+'_'+area+'_YY_mean_'+str(T),np.mean(YY,0))
-        np.save('Postproc/'+TO+'_'+area+'_YY_std_'+str(T),np.std(YY,0))
+        
+        # save results
+        np.save(f'{write_path}/Postproc/{TO}_{area}_XX_rt_{T}',XX_rt)
+        np.save(f'{write_path}/Postproc/{TO}_{area}_YY_mean_{T}',np.mean(YY,0))
+        np.save(f'{write_path}/Postproc/{TO}_{area}_YY_std_{T}',np.std(YY,0))
+        
+        # plot
         plt.fill_between(XX_rt, np.mean(YY,0)-np.std(YY,0), np.mean(YY,0)+np.std(YY,0),label=str(T)+' days ('+TO+')')
     ax.set_xscale('log')
     ax.set_xlabel('return time $\hat{r}$ (year)')
     ax.set_ylabel('temperature anomaly threshold $a_r$ (K)')
-    ax.set_title('Temperature anomalies over '+ area, loc='left')
+    ax.set_title(f'Temperature anomalies over {area}', loc='left')
     
-def BootstrapReturns(myseries,FROM, TO, Tot_Mon1,area, ax, Ts, modified='no'):
+def BootstrapReturns(myseries,FROM, TO, Tot_Mon1,area, ax, Ts, modified='no', read_path='./', write_path='./'):
+    # remove extra / from paths
+    read_path = read_path.rstrip('/')
+    write_path = write_path.rstrip('/')
+    
     # Compare bootstrapped method (to be saved in "TO") to the points in "FROM"
-    BootstrapReturnsOnly(myseries, TO, Tot_Mon1, area, ax, Ts, modified)
+    BootstrapReturnsOnly(myseries, TO, Tot_Mon1, area, ax, Ts, modified, write_path=write_path)
     for T in Ts:
-        ERA_XX_rt = np.load('../ERA/Postproc/'+FROM+'_'+area+'_XX_rt_'+str(T)+'.npy')
-        ERA_YY_rt = np.load('../ERA/Postproc/'+FROM+'_'+area+'_YY_rt_'+str(T)+'.npy')
-        plt.scatter(ERA_XX_rt,  ERA_YY_rt, s=10, marker='x',label=str(T)+' days ('+FROM+')')
+        ERA_XX_rt = np.load(f'{read_path}/../ERA/Postproc/{FROM}_{area}_XX_rt_{T}.npy')
+        ERA_YY_rt = np.load(f'{read_path}/../ERA/Postproc/{FROM}_{area}_YY_rt_{T}.npy')
+        plt.scatter(ERA_XX_rt, ERA_YY_rt, s=10, marker='x',label=str(T)+' days ('+FROM+')')
     ax.legend(loc='best')
 
 def func1(x, a, b, c, d):
@@ -549,16 +559,32 @@ def full_extent(ax, padx=0.0, pady=[]):
     
 def return_time_fix(D_sorted, modified='no'): # In this function we fix the length
     '''
+    Computes the return time from    
     D_sorted: sorted dictionary with layout {anomaly: [day, year]}
+    
+    If modified == 'no':
+        the return time `tau` for anomaly `a` is
+        
+        `tau` = `N`/`m`
+        
+        Where `N` is the total number of events in D_sorted and `m` is the number of events which have an anomaly >= `a`
+        
+    If modified == 'yes':
+        
+        `tau` = 1/log(1 - `m`/`N`)
+        
+        For an explanation of this formula look at
+        T. Lestang et al. 'Computing return times or return periods with rare event algorithms'.
+        DOI: https://doi.org/10.1088/1742-5468/aab856
     '''
-    m = 1
+    m = 1 # index that counts how many extreme events are more extreme than a given one. Since the events are ordered, this is just the event counter.
     Y_rt = []
     X_rt = []
     y_rt = []
     x_rt = []
     for key in D_sorted:
         if modified == 'yes':
-            r1 = - 1/(np.log(1 - m/len(D_sorted)))
+            r1 = - 1/(np.log(1 - m/len(D_sorted))) # assumption of Poisson process
         else:
             r1 = len(D_sorted) / m  # compute return time
         Y_rt.append(key[0])
@@ -575,6 +601,8 @@ def a_max_and_ti_postproc(A, length=None):
     """
     generates unranked set of maximal anomalies per each year and when they occur.
     In the code A is expected to be loaded from June1 - 1   to August16 + 1 to check the maxima at the boundaries
+    
+    Future reminder: REMOVE HARDCODED NUMBERS!!!!
     """
     just_max_index = []
     if length is None:
