@@ -1365,7 +1365,7 @@ def SingleLinearRegression(i,X, y):
     #print(y_pred.shape)
     return X_test, X_train, y_test, y_train, regr, y_pred, R2
 
-def TrainTestSplit(i,X, labels, undersampling_factor,verbose): # OLD VERSION
+def TrainTestSplit(i,X, labels, undersampling_factor,verbose): # OLD VERSION # CAN SOON BE PHASED OUT
     # Split the data into training/testing sets
     a = i*X.shape[0]//10
     b = (i+1)*X.shape[0]//10
