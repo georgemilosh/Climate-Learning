@@ -913,6 +913,7 @@ class Field:
     
     def Set_area_integral(self, input_area, input_mask):   # Evaluate area integral
         series = np.zeros((self.var.shape[0],self.var.shape[1]), dtype=self.np_precision)
+        # TO BE UPDATED
         for y in range(self.var.shape[0]):
             for i in range(self.var.shape[1]):
                 self.abs_mask[y,i] = np.sum(np.sum(create_mask(self.Model,input_area,self.var[y,i,:,:])*input_mask))
