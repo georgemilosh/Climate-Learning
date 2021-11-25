@@ -353,19 +353,29 @@ def CompExtremes(series, myfield, T, Tot_Mon1, threshold):
     print("A.shape = ",A.shape)
     return a_max_and_ti_postproc(A, A.shape[1])
 
-def CompCompositesThreshold(series, myfield, T, Tot_Mon1, threshold, observation_time=30):
+def CompCompositesThreshold(series, myfield, T, Tot_Mon1, threshold, observation_time=30, return_time_series=False):
+    '''
+    If `return_time_series` is true, then the time series are returned. All other computations are carried out anyways.
+    `time_series` is a dictionary of the time series of `myfield` aroud the heatwaves keyed with the year number
+    '''
     A_max, Ti, year_a = CompExtremes(series, myfield, T, Tot_Mon1, threshold)
     
     tau = np.arange(-observation_time,observation_time,1) # from observation time days before to observation_time - 1  days after the heatwave
+    if return_time_series:
+        time_series = {}
+    
     nb_events = 0
     myfield.composite_mean = np.zeros((len(tau),myfield.var.shape[2],myfield.var.shape[3])) # shape: (days, lat, lon)
     myfield.composite_std = np.zeros((len(tau),myfield.var.shape[2],myfield.var.shape[3]))
+    
     # do statistics over the years
     for y in range(series.shape[0]):
         if A_max[y] >= threshold:
             print(f'A_max[{y}] = {A_max[y]}, Ti[{y}] = {Ti[y]}')
             nb_events += 1
             value = (myfield.var[y])[tau + (Tot_Mon1[6] + Ti[y]) ] # value of the field (over the Earth) around the days when the heatwave is at its maximum
+            if return_time_series:
+                time_series[y] = value
             myfield.composite_mean += value     # This is the raw sum
             myfield.composite_std += value**2   # This is the raw square sum
     print(f'number of events: {nb_events}')
@@ -374,6 +384,10 @@ def CompCompositesThreshold(series, myfield, T, Tot_Mon1, threshold, observation
     myfield.composite_mean /= nb_events
     # t = sqrt(nb_events)*composite_mean/composite_std
     myfield.composite_t = (lambda a, b: np.divide(a, b, out=np.zeros(a.shape), where=b != 0))(np.sqrt(nb_events) * myfield.composite_mean, myfield.composite_std)
+    if return_time_series:
+        return time_series
+    else:
+        return None
     
 def CompComposites(series, myfield, T, Tot_Mon1, return_index, modified):
     # Computes composites conditioned to extremes of field of duration T based on months provided in Tot_Mon1, the return_index is the index of the return times
@@ -739,68 +753,92 @@ def draw_map(m, scale=0.2):
 
 
 
-        
-def create_mask(model,area, data): # careful, this mask works if we load the full Earth. there might be problems if we extract fields from some edge of the map
+# now vectorized :)
+def create_mask(model,area, data, axes='first 2'): # careful, this mask works if we load the full Earth. there might be problems if we extract fields from some edge of the map
     """
     This function allows to extract a subset of data enclosed in the area.
-    The output haves the dimension of the area.
+    The output has the dimension of the area on the axes corresponding to latitued and longitude
     If the area includes the Greenwich meridian, a concatenation is required.
+    
+    If axes == 'last 2', the slicing will be done on the last 2 axes,
+    otherwise on the last two axes
     """
+    
+    if axes == 'first 2' and len(data.shape) > 2:
+        # permute the shape so that the first 2 axes end up being the last 2
+        _data = data.transpose(*range(2,len(data.shape)),0,1)
+        _data = create_mask(model, area, _data, axes='last 2')
+        # permute the axes back to their original condition
+        return _data.transpose(-2, -1, *range(len(data.shape) - 2))
+    
+    
     if model == "ERA5":
         if area == "Scandinavia":
-            return data[25:45,7:53]# reconstructed from Francesco
+            return data[...,25:45,7:53]# reconstructed from Francesco
         elif area == "Scand": # = Norway Sweden
-            return data[25:45,7:30]
+            return data[...,25:45,7:30]
         elif area == "NAtlantic":
-            return np.concatenate((data[25:80, -135:], data[25:80, :60]), axis=1)  # used for plotting
+            return np.concatenate((data[...,25:80, -135:], data[...,25:80, :60]), axis=-1)  # used for plotting
         elif area == "France":
-            return np.concatenate((data[51:63, -4:], data[51:63, :9]), axis=1)  # reconstructed from Francesco
+            return np.concatenate((data[...,51:63, -4:], data[...,51:63, :9]), axis=-1)  # reconstructed from Francesco
         elif area == "France_bis":
-            return np.concatenate((data[52:64, -5:], data[52:64, :9]), axis=1)  # fixing to CESM
+            return np.concatenate((data[...,52:64, -5:], data[...,52:64, :9]), axis=-1)  # fixing to CESM
         elif area == "Russia":  # lat[i]<60 and lat[i]>50: index 9-15
-            return data[37:60, 42:79] 
+            return data[...,37:60, 42:79] 
         elif area == "Poland":  # From stefanon
-            return data[44:60, 18:43] 
+            return data[...,44:60, 18:43]
+        else:
+            print(f'Unknown area {area}')
+            return None
     elif model == "CESM":
         if area == "France":
-            return np.concatenate((data[-51:-41, -3:],data[-51:-41, :6]), axis=1)
+            return np.concatenate((data[...,-51:-41, -3:],data[...,-51:-41, :6]), axis=-1)
         elif area == "Scandinavia":
-            return data[-36:-20, 4:32]
+            return data[...,-36:-20, 4:32]
         elif area == "Scand": # = Norway Sweden
-            return data[-36:-20, 4:18]
+            return data[...,-36:-20, 4:18]
         elif area == "Russia":  # lat[i]<60 and lat[i]>50: index 9-15
-            return data[-48:-29, 25:48]  # lon[i]<55 and lon[i]>35:   index 11-21
+            return data[...,-48:-29, 25:48]  # lon[i]<55 and lon[i]>35:   index 11-21
         elif area == "Poland":  # From Stefanon
-            return data[-48:-35, 11:26]  
+            return data[...,-48:-35, 11:26]
+        else:
+            print(f'Unknown area {area}')
+            return None
     elif model == "Plasim":
         if area == "NW_Europe":
-            return np.concatenate((data[10:16, -1:], data[10:16, :7]), axis=1)  # give by Valerian/Francesco 
+            return np.concatenate((data[...,10:16, -1:], data[...,10:16, :7]), axis=-1)  # give by Valerian/Francesco 
         elif area == "Greenland":
-            return data[2:9, 108:120]
+            return data[...,2:9, 108:120]
         elif area == "Europe":
-            return np.concatenate((data[7:19, -3:], data[7:19, :10]), axis=1)  # give by Valerian/Francesco  
+            return np.concatenate((data[...,7:19, -3:], data[...,7:19, :10]), axis=-1)  # give by Valerian/Francesco  
         elif area == "France":
-            return np.concatenate((data[13:17, -1:], data[13:17, :3]), axis=1)  # give by valerian
+            return np.concatenate((data[...,13:17, -1:], data[...,13:17, :3]), axis=-1)  # give by valerian
         elif area == "Quebec":  # lat[i]<60 and lat[i]>50:      index: 10-13
-            return data[10:16, 98:110]  # lon[i]<180+120 and lon[i]>180+110   index:104-106
+            return data[...,10:16, 98:110]  # lon[i]<180+120 and lon[i]>180+110   index:104-106
         elif area == "USA":  # lat[i]<50 and lat[i]>25:  index: 14-22
-            return data[14:23, 89:109]  # lon[i]<180+125 and lon[i]>180+70:  index 89-108
+            return data[...,14:23, 89:109]  # lon[i]<180+125 and lon[i]>180+70:  index 89-108
         elif area == "US":  # lat[i]<50 and lat[i]>25:  index: 14-22   # < fixing the area of philipinne
-            return data[14:23, 84:104]  # lon[i]<180+125 and lon[i]>180+70:  index 89-108
+            return data[...,14:23, 84:104]  # lon[i]<180+125 and lon[i]>180+70:  index 89-108
         elif area == "Midwest":
-            return data[16:20, 92:99]
+            return data[...,16:20, 92:99]
         elif area == "Alberta":
-            return data[10:15, 85:90]
+            return data[...,10:15, 85:90]
         elif area == "Scandinavia":  # 55<lat<72: index: 6-11
-            return data[6:12, 2:15]  # 5<lon<40 : index 2-14
+            return data[...,6:12, 2:15]  # 5<lon<40 : index 2-14
         elif area == "Scand":  #  = Norway Sweden
-            return data[6:12, 2:8]  # 5<lon<40 : index 2-14
+            return data[...,6:12, 2:8]  # 5<lon<40 : index 2-14
         elif area == "Russia":  # lat[i]<60 and lat[i]>50: index 9-15
-            return data[9:16, 11:22]  # lon[i]<55 and lon[i]>35:   index 11-21
+            return data[...,9:16, 11:22]  # lon[i]<55 and lon[i]>35:   index 11-21
         elif area == "Poland":  # lat[i]<60 and lat[i]>50: index 9-15
-            return data[11:16, 5:12]  # lon[i]<55 and lon[i]>35:   index 11-21
+            return data[...,11:16, 5:12]  # lon[i]<55 and lon[i]>35:   index 11-21
         elif area == 'total':  # return all data, use for total_area function and create surface over continents
             return data
+        else:
+            print(f'Unknown area {area}')
+            return None
+    else:
+        print(f'Unknown model {Model}')
+        return None
 
 def Greenwich(Myarray):
     '''
@@ -1082,6 +1120,8 @@ class Plasim_Field:
         else: # compute integrals
             #print("self.abs_mask = np.zeros((self.var.shape[0],self.var.shape[1]))    # integral over the area")
             self.abs_mask = np.zeros((self.var.shape[0],self.var.shape[1]),  dtype=self.np_precision)    # integral over the area
+            
+            # OLD VERSION TO BE IMPROVED
             for y in range(self.var.shape[0]):
                 for i in range(self.var.shape[1]):
                     self.abs_mask[y,i] = np.sum(np.sum(create_mask(self.Model,input_area,self.var[y,i,:,:])*input_mask))
