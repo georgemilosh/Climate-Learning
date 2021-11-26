@@ -640,14 +640,15 @@ def return_time_fix(D_sorted, modified='no'): # In this function we fix the leng
 
 def a_max_and_ti_postproc(A, length=None):
     """
-    generates unranked set of maximal anomalies per each year and when they occur.
-    In the code A is expected to be loaded from June1 - 1   to August16 + 1 to check the maxima at the boundaries
-    
-    Future reminder: REMOVE HARDCODED NUMBERS!!!!
+    Generates unranked set of maximal anomalies per each year and when they occur.
+    `A` needs to have an extra point at the beginning and end of each year to check if a maximum at the extremes is local or not.    
     """
+    # Probably outdated comment
+    # In the code A is expected to be loaded from June1 - 1   to August16 + 1 to check the maxima at the boundaries
+    
     just_max_index = []
     if length is None:
-        A_summer = A[ :, 1:-1]  # why is this choice made
+        A_summer = A[ :, 1:-1]  # allow to check maxima at the edges
         length = A_summer.shape[1]
     else:
         A_summer = A[:, 1:length-1]
@@ -761,7 +762,7 @@ def create_mask(model,area, data, axes='first 2'): # careful, this mask works if
     If the area includes the Greenwich meridian, a concatenation is required.
     
     If axes == 'last 2', the slicing will be done on the last 2 axes,
-    otherwise on the last two axes
+    otherwise on the first two axes
     """
     
     if axes == 'first 2' and len(data.shape) > 2:
