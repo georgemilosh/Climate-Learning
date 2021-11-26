@@ -846,8 +846,8 @@ def Greenwich(Myarray):
     '''
     # old
     # return np.append(Myarray,np.transpose([Myarray[:,0]]),axis = 1)
-    return np.append(Myarray, Myarray[...,0], axis=-1) # this works for an array of arbitrary shape where the last index is longitude
-
+    return np.append(Myarray, Myarray[...,0:1], axis=-1) # this works for an array of arbitrary shape where the last index is longitude. using 0:1 instead of just 0 allows to have the correct number of dimensions
+    
 def autocorrelation(myseries, maxlag):
     series_pad = np.pad(myseries,((0, 0), (0, maxlag)), 'constant')  # this pads each year with padsize sample time of 0s so that when the array is permuted to be multiplied by itself we don't end up using the previous part of the year
     autocorr = []
@@ -1138,7 +1138,13 @@ class Plasim_Field:
             raise NotImplementedError('if you specify a day, you must also specify a year')
         return Greenwich(self.var[year,day])
     
-    def Set_area_integral(self, input_area, input_mask, containing_folder='Postproc', delta=1):   # Evaluate area integral and (possibly if delta is not 1) coarse grain it in time
+    def Set_area_integral(self, input_area, input_mask, containing_folder='Postproc', delta=1, force_computation=False):
+        '''
+        Evaluate area integral and (possibly if delta is not 1) coarse grain it in time
+        
+        if `force_computation` == True, the integrals are computed in any case.
+        Otherwise, if the arrays with the integrals are found in `containing_folder` they are loaded rather than computed
+        '''
         if delta == 1:
             filename_abs =  f'{containing_folder}/Int_Abs_{self.sampling}_{self.Model}_{input_area}_{self.filename}.npy'
             filename_ano_abs =  f'{containing_folder}/Int_Ano_Abs_{self.sampling}_{self.Model}_{input_area}_{self.filename}.npy'
@@ -1146,19 +1152,21 @@ class Plasim_Field:
             filename_abs =  f'{containing_folder}/Int_Abs_{self.sampling}_{self.Model}_{input_area}_{self.filename}_{delta}.npy'
             filename_ano_abs =  f'{containing_folder}/Int_Ano_Abs_{self.sampling}_{self.Model}_{input_area}_{self.filename}_{delta}.npy'
             
-        if os.path.exists(filename_abs): # load integrals
+        if (not force_computation) and os.path.exists(filename_abs): # load integrals
             self.abs_mask = np.load(filename_abs)
             self.ano_abs_mask = np.load(filename_ano_abs)
             print(f'file {filename_abs} loaded')
             print(f'file {filename_ano_abs} loaded')
         else: # compute integrals
-            #print("self.abs_mask = np.zeros((self.var.shape[0],self.var.shape[1]))    # integral over the area")
-            self.abs_mask = np.zeros((self.var.shape[0],self.var.shape[1]),  dtype=self.np_precision)    # integral over the area
             
-            # OLD VERSION TO BE IMPROVED
-            for y in range(self.var.shape[0]):
-                for i in range(self.var.shape[1]):
-                    self.abs_mask[y,i] = np.sum(np.sum(create_mask(self.Model,input_area,self.var[y,i,:,:])*input_mask))
+            # # OLD VERSION TO BE IMPROVED
+            #print("self.abs_mask = np.zeros((self.var.shape[0],self.var.shape[1]))    # integral over the area")
+            # self.abs_mask = np.zeros((self.var.shape[0],self.var.shape[1]),  dtype=self.np_precision)    # integral over the area
+            # for y in range(self.var.shape[0]):
+            #     for i in range(self.var.shape[1]):
+            #         self.abs_mask[y,i] = np.sum(np.sum(create_mask(self.Model,input_area,self.var[y,i,:,:])*input_mask))
+            
+            self.abs_mask = np.tensordot(create_mask(self.Model,input_area,self.var, axes='last 2'), input_mask)
             
             #print("self.ano_abs_mask = self.abs_mask - np.mean(self.abs_mask,0)")
             self.ano_abs_mask = self.abs_mask - np.mean(self.abs_mask,0)    # Evaluate grid-point climatological mean 
