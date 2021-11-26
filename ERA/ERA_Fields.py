@@ -842,9 +842,11 @@ def create_mask(model,area, data, axes='first 2'): # careful, this mask works if
 
 def Greenwich(Myarray):
     '''
-    Take an array and copy the Greenwhich meridian to make sure we avoid a segment hole
+    Returns `Myarray` with the Greenwich meridian counted twice (start and end of the array): useful for plotting
     '''
-    return np.append(Myarray,np.transpose([Myarray[:,0]]),axis = 1)
+    # old
+    # return np.append(Myarray,np.transpose([Myarray[:,0]]),axis = 1)
+    return np.append(Myarray, Myarray[...,0], axis=-1) # this works for an array of arbitrary shape where the last index is longitude
 
 def autocorrelation(myseries, maxlag):
     series_pad = np.pad(myseries,((0, 0), (0, maxlag)), 'constant')  # this pads each year with padsize sample time of 0s so that when the array is permuted to be multiplied by itself we don't end up using the previous part of the year
@@ -909,7 +911,23 @@ class Field:
         dataset.close()
         
     def Greenwich(self, year, day):  # Take an array and copy the Greenwhich meridian to make sure we avoid a segment hole in basemap
-        return np.append(self.var[year,day,:,:],np.transpose([self.var[year,day,:,0]]),axis = 1)
+        '''
+        Returns `self.var` with the Greenwich meridian counted twice (start and end of the array): useful for plotting
+        
+        Parameters:
+        year: int or 'all' (this last one only if `day` == 'all')
+        day: int or 'all'
+        '''
+        # old
+        # return np.append(self.var[year,day,:,:],np.transpose([self.var[year,day,:,0]]),axis = 1)
+        if day == 'all':
+            if year == 'all':
+                return Greenwich(self.var)
+            return Greenwich(self.var[year])
+        if year == 'all':
+            raise NotImplementedError('if you specify a day, you must also specify a year')
+        return Greenwich(self.var[year,day])
+    
     
     def Set_area_integral(self, input_area, input_mask):   # Evaluate area integral
         series = np.zeros((self.var.shape[0],self.var.shape[1]), dtype=self.np_precision)
@@ -1103,7 +1121,22 @@ class Plasim_Field:
         return local_time, local_var
         
     def Greenwich(self, year, day):  # Take an array and copy the Greenwhich meridian to make sure we avoid a segment hole in basemap
-        return np.append(self.var[year,day,:,:],np.transpose([self.var[year,day,:,0]]),axis = 1)
+        '''
+        Returns `self.var` with the Greenwich meridian counted twice (start and end of the array): useful for plotting
+        
+        Parameters:
+        year: int or 'all' (this last one only if `day` == 'all')
+        day: int or 'all'
+        '''
+        # old
+        # return np.append(self.var[year,day,:,:],np.transpose([self.var[year,day,:,0]]),axis = 1)
+        if day == 'all':
+            if year == 'all':
+                return Greenwich(self.var)
+            return Greenwich(self.var[year])
+        if year == 'all':
+            raise NotImplementedError('if you specify a day, you must also specify a year')
+        return Greenwich(self.var[year,day])
     
     def Set_area_integral(self, input_area, input_mask, containing_folder='Postproc', delta=1):   # Evaluate area integral and (possibly if delta is not 1) coarse grain it in time
         if delta == 1:
