@@ -2,6 +2,7 @@
 # Importation des librairies
 from netCDF4 import Dataset
 import numpy as np
+import warnings
 
 import matplotlib.pyplot as plt
 import pylab as p
@@ -10,17 +11,22 @@ import os
 os.environ['PROJ_LIB'] = '../usr/share/proj' # This one we need to import Basemap 
 #os.environ['PROJ_LIB'] = '/usr/share/proj' # This one we need to import Basemap 
 from mpl_toolkits.basemap import Basemap
-import pickle
-import itertools
 import matplotlib.gridspec as gridspec
 import matplotlib.patheffects as PathEffects
-from sklearn.linear_model import LinearRegression
-from itertools import chain
 from matplotlib.transforms import Bbox
+
+import pickle
+import itertools
+from itertools import chain
+import collections
+from random import randrange
+
 from scipy.signal import argrelextrema
 from scipy.stats import skew, kurtosis
 from scipy import integrate
 from scipy.optimize import curve_fit
+
+from sklearn.linear_model import LinearRegression
 from sklearn.utils import shuffle
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.metrics import mean_squared_error, r2_score
@@ -28,8 +34,8 @@ from sklearn import datasets, linear_model
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import confusion_matrix
 from skimage.transform import resize
-from random import randrange
-import collections
+
+
 
 
 # Definition des fonctions
@@ -663,7 +669,10 @@ def a_max_and_ti_postproc(A, length=None):
         A_summer = A[ :, 1:-1]  # allow to check maxima at the edges
         length = A_summer.shape[1]
     else:
-        A_summer = A[:, 1:length-1]
+        A_summer = A[:, 1:length+1]
+        if A_summer.shape[1] < length:
+            warnings.warn('a_max_and_ti_postproc: adjusting length')
+            length = A_summer.shape[1]
     #print('    verif: we look A(t) over {} index (excepted value={})'.format(len(A_summer[0]), length))
     out_A_max = []
     out_Ti = []
@@ -707,11 +716,11 @@ def a_max_and_ti_postproc(A, length=None):
             a_max = max_value  # if we are not at the boundary do the standard maximum extraction
             ti = max_index
         out_A_max.append(a_max)
-        out_Ti.append(ti)
+        out_Ti.append(ti + 1) # shift ti values by one to compensate the fact that we ignored the first element of A
         out_year_a.append(j)  # the year is somewhat redundant as it is always the same set of years
     #print('    there are {} years where the maximum is not the np.max maximum'.format(
     #    len(year_with_after_non_loc) + len(year_with_before_non_loc)))
-    #print("start_true = ", start_true, ", end_true", end_true)
+    #print("start_true = ", start_true, ", end_true", end_true)    
     return out_A_max, out_Ti, out_year_a
 
 def maximum_inside(data):
