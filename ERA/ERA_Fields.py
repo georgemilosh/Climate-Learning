@@ -344,6 +344,8 @@ def CompCompositesERAThreshold(series, myfield, T, Tot_Mon1, threshold, myfieldm
 def CompExtremes(series, myfield, T, Tot_Mon1, threshold):
     '''
     myfield, threshold are not used
+    
+    REMOVE HARDCODED NUMBERS FOR START AND END MONTHS
     '''
     # Computes composites conditioned to extremes of field of duration T based on months provided in Tot_Mon1, the return_index is the index of the return times
     convseq = np.ones(T)/T
@@ -357,10 +359,12 @@ def CompCompositesThreshold(series, myfield, T, Tot_Mon1, threshold, observation
     '''
     If `return_time_series` is true, then the time series are returned. All other computations are carried out anyways.
     `time_series` is a dictionary of the time series of `myfield` aroud the heatwaves keyed with the year number
+    
+    Assumes the period of interest starts from june 1
     '''
     A_max, Ti, year_a = CompExtremes(series, myfield, T, Tot_Mon1, threshold)
     
-    tau = np.arange(-observation_time,observation_time,1) # from observation time days before to observation_time - 1  days after the heatwave
+    tau = np.arange(-observation_time,observation_time,1) # from observation_time days before to observation_time - 1  days after the heatwave
     if return_time_series:
         time_series = {}
     
@@ -390,7 +394,11 @@ def CompCompositesThreshold(series, myfield, T, Tot_Mon1, threshold, observation
         return None
     
 def CompComposites(series, myfield, T, Tot_Mon1, return_index, modified):
-    # Computes composites conditioned to extremes of field of duration T based on months provided in Tot_Mon1, the return_index is the index of the return times
+    '''
+    Computes composites conditioned to extremes of field of duration T based on months provided in Tot_Mon1, the return_index is the index of the return times
+    
+    REMOVE HARDCODED NUMBERS FOR START AND END MONTHS
+    '''
     convseq = np.ones(T)/T
     A = np.zeros((series.shape[0], Tot_Mon1[9] - Tot_Mon1[6] - T+1))   # When we use convolve (running mean) there is an extra point that we can generate by displacing the window hence 13 instead of 14
     for y in range(series.shape[0]):
@@ -420,7 +428,11 @@ def CompComposites(series, myfield, T, Tot_Mon1, return_index, modified):
     myfield.composite_t = (lambda a, b: np.divide(a, b, out=np.zeros(a.shape), where=b != 0))(np.sqrt(nb_events) * myfield.composite_mean, myfield.composite_std)
     
 def CompCompositesBetween(series, myfield, T, Tot_Mon1, return_index):
-    # Computes composites conditioned to extremes of field of duration T based on months provided in Tot_Mon1, the return_index is the index of the return times
+    '''
+    Computes composites conditioned to extremes of field of duration T based on months provided in Tot_Mon1, the return_index is the index of the return times
+    
+    REMOVE HARDCODED NUMBERS FOR START AND END MONTHS
+    '''
     convseq = np.ones(T)/T
     A = np.zeros((series.shape[0], Tot_Mon1[9] - Tot_Mon1[6] - T+1))   # When we use convolve (running mean) there is an extra point that we can generate by displacing the window hence 13 instead of 14
     for y in range(series.shape[0]):
