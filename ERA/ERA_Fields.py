@@ -133,7 +133,7 @@ def PltAnomalyHist(distrib, numlevels, mycolor, myhatch, mymonths, mylinewidths,
     plt.ylabel('Daily Probability')
     plt.title('MMJAS (running mean) ' + myobjct)
     
-def PltDistHist(myfield, convseq, mycolors, monthhatches, mymonth, mylinewidth, y, Tot_Mon1,area):
+def PltDistHist(myfield, convseq, mycolors, monthhatches, mymonth, mylinewidth, y, Tot_Mon1,area, start_month=5):
     # Plot Distribution for each year and histograms for the anomalies
     field_extract = myfield.abs_area_int[:,:]
     objct = "over "+area
@@ -160,17 +160,17 @@ def PltDistHist(myfield, convseq, mycolors, monthhatches, mymonth, mylinewidth, 
 
     plt.subplot(143)
     for i in range(len(mymonth)):
-        temp = field_extract[:,Tot_Mon1[5+i]-Tot_Mon1[5]:Tot_Mon1[6+i]-Tot_Mon1[5]].reshape(myfield.var.shape[0]*(Tot_Mon1[6+i]-Tot_Mon1[5+i]))
+        temp = field_extract[:,Tot_Mon1[start_month+i]-Tot_Mon1[start_month]:Tot_Mon1[start_month+1+i]-Tot_Mon1[start_month]].reshape(myfield.var.shape[0]*(Tot_Mon1[start_month+1+i]-Tot_Mon1[start_month+i]))
         PltAnomalyHist(temp, 50, mycolors[i], monthhatches[i], mymonth[i], mylinewidth[i], myfield.label, objct)
     plt.legend(loc = 'best')
 
     plt.subplot(144)
     for i in range(len(mymonth)-1): # Here you have to be careful because A(t) is not defined for the september
-        temp = field_conv[:,Tot_Mon1[5+i]-Tot_Mon1[5]:Tot_Mon1[6+i]-Tot_Mon1[5]].reshape(myfield.var.shape[0]*(Tot_Mon1[6+i]-Tot_Mon1[5+i])) # 30 DAYS MAY NOT WORK FOR CESM
+        temp = field_conv[:,Tot_Mon1[start_month+i]-Tot_Mon1[start_month]:Tot_Mon1[start_month+1+i]-Tot_Mon1[start_month]].reshape(myfield.var.shape[0]*(Tot_Mon1[start_month+1+i]-Tot_Mon1[start_month+i])) # 30 DAYS MAY NOT WORK FOR CESM
         PltAnomalyHist(temp, 50, mycolors[i], monthhatches[i], mymonth[i], mylinewidth[i], myfield.label, objct)
     plt.legend(loc = 'best')
     
-def PltReturnsHist(XX_rt, YY_rt, xx_rt, yy_rt, A_max_sorted, Tot_Mon1, area, ax1, Ax):
+def PltReturnsHist(XX_rt, YY_rt, xx_rt, yy_rt, A_max_sorted, Tot_Mon1, area, ax1, Ax, start_month=5, end_month=8):
     # Plot Return times plus the histogram during the 
     ax1.scatter(XX_rt, YY_rt, s=4, color='royalblue', marker='x')
     for i in range(len(xx_rt)):
@@ -184,17 +184,17 @@ def PltReturnsHist(XX_rt, YY_rt, xx_rt, yy_rt, A_max_sorted, Tot_Mon1, area, ax1
     years = []
     for i in range(len(A_max_sorted)):
         day, year = A_max_sorted[i][1]   # heatwaves are already ranked by Phlippine based on 14 day temperature anomalies (Notice that she counts from June 1!)
-        Days.append(day+Tot_Mon1[5])
+        Days.append(day+Tot_Mon1[start_month])
         years.append(year)
     
     # top 1/10 extreme events
-    n, bins, patches = Ax.hist(Days[:len(A_max_sorted)//10], bins = np.arange(Tot_Mon1[5],Tot_Mon1[8]-14),
+    n, bins, patches = Ax.hist(Days[:len(A_max_sorted)//10], bins = np.arange(Tot_Mon1[start_month],Tot_Mon1[end_month]-14),
                                density = True, facecolor='tab:brown', alpha=1, label = 'extreme $r=10$')
     # top 1/4 extreme events
-    Ax.hist(Days[:len(A_max_sorted)//4], bins = np.arange(Tot_Mon1[5],Tot_Mon1[8]-14),
+    Ax.hist(Days[:len(A_max_sorted)//4], bins = np.arange(Tot_Mon1[start_month],Tot_Mon1[end_month]-14),
             density = True, facecolor='tab:orange', alpha=0.7, label = 'extreme $r=4$')
     # all extreme events
-    Ax.hist(Days[:len(A_max_sorted)], bins = np.arange(Tot_Mon1[5],Tot_Mon1[8]-14),
+    Ax.hist(Days[:len(A_max_sorted)], bins = np.arange(Tot_Mon1[start_month],Tot_Mon1[end_month]-14),
             density = True, facecolor='tab:cyan', alpha=0.3, label = 'extreme $r=1$')
     Ax.set_xlabel('Time, binned by {:1.4f}'.format(bins[1]-bins[0]), fontsize=13)
     Ax.set_ylabel('Probability', fontsize=14)
@@ -202,7 +202,7 @@ def PltReturnsHist(XX_rt, YY_rt, xx_rt, yy_rt, A_max_sorted, Tot_Mon1, area, ax1
     Ax.set_title("Events conditioned", fontsize=13)
     Ax.legend(loc = 'best', fontsize=12)
     
-def BootstrapReturnsOnly(myseries, TO, Tot_Mon1, area, ax, Ts, modified='no', write_path='./'):
+def BootstrapReturnsOnly(myseries, TO, Tot_Mon1, area, ax, Ts, modified='no', write_path='./', start_month=6, end_month=9):
     write_path = write_path.rstrip('/')
     
     for T in Ts:
@@ -210,9 +210,9 @@ def BootstrapReturnsOnly(myseries, TO, Tot_Mon1, area, ax, Ts, modified='no', wr
         XX = []
         YY = []
         for j in range(10):
-            A = np.zeros((myseries.shape[0]//10, Tot_Mon1[9] - Tot_Mon1[6] - T+1))   # When we use convolve (running mean) there is an extra point that we can generate by displacing the window hence T-1 instead of T
+            A = np.zeros((myseries.shape[0]//10, Tot_Mon1[end_month] - Tot_Mon1[start_month] - T+1))   # When we use convolve (running mean) there is an extra point that we can generate by displacing the window hence T-1 instead of T
             for y in range(myseries.shape[0]//10):
-                A[y,:] = np.convolve(myseries[100*j+y,Tot_Mon1[6]:(Tot_Mon1[9])],  convseq, mode='valid')
+                A[y,:] = np.convolve(myseries[100*j+y,Tot_Mon1[start_month]:(Tot_Mon1[end_month])],  convseq, mode='valid')
             print(f"{A.shape = }")
             if A.shape[1] > 30: 
                 A_max, Ti, year_a = a_max_and_ti_postproc(A, A.shape[1])
@@ -296,12 +296,12 @@ def PltAutocorrelationFit2(autocorr_mean,colors, linewidths, x1,x2, ax, Model):
     plt.xlabel(r"Lag $\tau$")
 
     
-def CompCompositesERA(series, myfield, T, Tot_Mon1, return_index, myfieldmean, modified='no'):
+def CompCompositesERA(series, myfield, T, Tot_Mon1, return_index, myfieldmean, modified='no', start_month=6, end_month=9):
     # Computes composites conditioned to extremes of field of duration T based on months provided in Tot_Mon1, the return_index is the index of the return times
     convseq = np.ones(T)/T
-    A = np.zeros((series.shape[0], Tot_Mon1[9] - Tot_Mon1[6] - T+1))   # When we use convolve (running mean) there is an extra point that we can generate by displacing the window hence 13 instead of 14
+    A = np.zeros((series.shape[0], Tot_Mon1[end_month] - Tot_Mon1[start_month] - T+1))   # When we use convolve (running mean) there is an extra point that we can generate by displacing the window hence 13 instead of 14
     for y in range(series.shape[0]):
-        A[y,:]=np.convolve(series[y,Tot_Mon1[6]:(Tot_Mon1[9])],  convseq, mode='valid')
+        A[y,:]=np.convolve(series[y,Tot_Mon1[start_month]:(Tot_Mon1[end_month])],  convseq, mode='valid')
     print("A.shape = ",A.shape)
     A_max, Ti, year_a = a_max_and_ti_postproc(A, A.shape[1])
     year_a = range(series.shape[0])
@@ -317,7 +317,7 @@ def CompCompositesERA(series, myfield, T, Tot_Mon1, return_index, myfieldmean, m
         if A_max[y] >= yy_rt[return_index]:
             print("A_max["+str(y)+"] = ",A_max[y], "Ti["+str(y)+"] = ", Ti[y])
             nb_events += 1
-            value = (myfield.detrended[y] - myfieldmean)[tau + (Tot_Mon1[6] + Ti[y]) ]
+            value = (myfield.detrended[y] - myfieldmean)[tau + (Tot_Mon1[start_month] + Ti[y]) ]
             myfield.composite_mean += value     # This is the raw sum
             myfield.composite_std += value**2   # This is the raw square sum
     print("number of events: ",nb_events)
@@ -326,8 +326,8 @@ def CompCompositesERA(series, myfield, T, Tot_Mon1, return_index, myfieldmean, m
     myfield.composite_mean /= nb_events
     myfield.composite_t = (lambda a, b: np.divide(a, b, out=np.zeros(a.shape), where=b != 0))(np.sqrt(nb_events) * myfield.composite_mean, myfield.composite_std)
     
-def CompCompositesERAThreshold(series, myfield, T, Tot_Mon1, threshold, myfieldmean):
-    A_max, Ti, year_a = CompExtremes(series, myfield, T, Tot_Mon1, threshold)
+def CompCompositesERAThreshold(series, myfield, T, Tot_Mon1, threshold, myfieldmean, start_month=6, end_month=9):
+    A_max, Ti, year_a = CompExtremes(series, myfield, T, Tot_Mon1, threshold, start_month=start_month, end_month=end_month)
 
     tau = np.arange(-30,30,1)
     nb_events = 0
@@ -337,7 +337,7 @@ def CompCompositesERAThreshold(series, myfield, T, Tot_Mon1, threshold, myfieldm
         if A_max[y] >= threshold:
             print("A_max["+str(y)+"] = ",A_max[y], "Ti["+str(y)+"] = ", Ti[y])
             nb_events += 1
-            value = (myfield.detrended[y] - myfieldmean)[tau + (Tot_Mon1[6] + Ti[y]) ]
+            value = (myfield.detrended[y] - myfieldmean)[tau + (Tot_Mon1[start_month] + Ti[y]) ]
             myfield.composite_mean += value     # This is the raw sum
             myfield.composite_std += value**2   # This is the raw square sum
     print("number of events: ",nb_events)
@@ -347,28 +347,32 @@ def CompCompositesERAThreshold(series, myfield, T, Tot_Mon1, threshold, myfieldm
     myfield.composite_t = (lambda a, b: np.divide(a, b, out=np.zeros(a.shape), where=b != 0))(np.sqrt(nb_events) * myfield.composite_mean, myfield.composite_std)
     
     
-def CompExtremes(series, myfield, T, Tot_Mon1, threshold):
+def CompExtremes(series, myfield, T, Tot_Mon1, threshold, start_month=6, end_month=9):
     '''
+    !!!!
     myfield, threshold are not used
+    !!!!
     
-    REMOVE HARDCODED NUMBERS FOR START AND END MONTHS
+    The computations are performed between `start_month` (included) and `end_month` (excluded).
+    Month numeration is the standard one, i.e. 1 = January, 6 = June, 12 = December
     '''
     # Computes composites conditioned to extremes of field of duration T based on months provided in Tot_Mon1, the return_index is the index of the return times
     convseq = np.ones(T)/T
-    A = np.zeros((series.shape[0], Tot_Mon1[9] - Tot_Mon1[6] - T+1)) # When we use convolve (running mean) there is an extra point that we can generate by displacing the window hence T - 1 instead of T
+    A = np.zeros((series.shape[0], Tot_Mon1[end_month] - Tot_Mon1[start_month] - T+1)) # When we use convolve (running mean) there is an extra point that we can generate by displacing the window hence T - 1 instead of T
     for y in range(series.shape[0]):
-        A[y,:]=np.convolve(series[y,Tot_Mon1[6]:(Tot_Mon1[9])],  convseq, mode='valid')
+        A[y,:]=np.convolve(series[y,Tot_Mon1[start_month]:(Tot_Mon1[end_month])],  convseq, mode='valid')
     print("A.shape = ",A.shape)
     return a_max_and_ti_postproc(A, A.shape[1])
 
-def CompCompositesThreshold(series, myfield, T, Tot_Mon1, threshold, observation_time=30, return_time_series=False):
+def CompCompositesThreshold(series, myfield, T, Tot_Mon1, threshold, start_month=6, end_month=9, observation_time=30, return_time_series=False):
     '''
     If `return_time_series` is true, then the time series are returned. All other computations are carried out anyways.
     `time_series` is a dictionary of the time series of `myfield` aroud the heatwaves keyed with the year number
     
-    Assumes the period of interest starts from june 1
+    The computations are performed between `start_month` (included) and `end_month` (excluded).
+    Month numeration is the standard one, i.e. 1 = January, 6 = June, 12 = December
     '''
-    A_max, Ti, year_a = CompExtremes(series, myfield, T, Tot_Mon1, threshold)
+    A_max, Ti, year_a = CompExtremes(series, myfield, T, Tot_Mon1, threshold, start_month=start_month, end_month=end_month)
     
     tau = np.arange(-observation_time,observation_time,1) # from observation_time days before to observation_time - 1  days after the heatwave
     if return_time_series:
@@ -383,7 +387,7 @@ def CompCompositesThreshold(series, myfield, T, Tot_Mon1, threshold, observation
         if A_max[y] >= threshold:
             print(f'A_max[{y}] = {A_max[y]}, Ti[{y}] = {Ti[y]}')
             nb_events += 1
-            value = (myfield.var[y])[tau + (Tot_Mon1[6] + Ti[y]) ] # value of the field (over the Earth) around the days when the heatwave is at its maximum
+            value = (myfield.var[y])[tau + (Tot_Mon1[start_month] + Ti[y]) ] # value of the field (over the Earth) around the days when the heatwave is at its maximum
             if return_time_series:
                 time_series[y] = value
             myfield.composite_mean += value     # This is the raw sum
@@ -399,16 +403,17 @@ def CompCompositesThreshold(series, myfield, T, Tot_Mon1, threshold, observation
     else:
         return None
     
-def CompComposites(series, myfield, T, Tot_Mon1, return_index, modified):
+def CompComposites(series, myfield, T, Tot_Mon1, return_index, modified, start_month=6, end_month=9):
     '''
     Computes composites conditioned to extremes of field of duration T based on months provided in Tot_Mon1, the return_index is the index of the return times
     
-    REMOVE HARDCODED NUMBERS FOR START AND END MONTHS
+    The computations are performed between `start_month` (included) and `end_month` (excluded).
+    Month numeration is the standard one, i.e. 1 = January, 6 = June, 12 = December
     '''
     convseq = np.ones(T)/T
-    A = np.zeros((series.shape[0], Tot_Mon1[9] - Tot_Mon1[6] - T+1))   # When we use convolve (running mean) there is an extra point that we can generate by displacing the window hence 13 instead of 14
+    A = np.zeros((series.shape[0], Tot_Mon1[end_month] - Tot_Mon1[start_month] - T+1))   # When we use convolve (running mean) there is an extra point that we can generate by displacing the window hence 13 instead of 14
     for y in range(series.shape[0]):
-        A[y,:]=np.convolve(series[y,Tot_Mon1[6]:(Tot_Mon1[9])],  convseq, mode='valid')
+        A[y,:]=np.convolve(series[y,Tot_Mon1[start_month]:(Tot_Mon1[end_month])],  convseq, mode='valid')
     print("A.shape = ",A.shape)
     A_max, Ti, year_a = a_max_and_ti_postproc(A, A.shape[1])
     year_a = range(series.shape[0])
@@ -424,7 +429,7 @@ def CompComposites(series, myfield, T, Tot_Mon1, return_index, modified):
         if A_max[y] >= yy_rt[return_index]:
             print("A_max["+str(y)+"] = ",A_max[y], "Ti["+str(y)+"] = ", Ti[y])
             nb_events += 1
-            value = (myfield.var[y])[tau + (Tot_Mon1[6] + Ti[y]) ]
+            value = (myfield.var[y])[tau + (Tot_Mon1[start_month] + Ti[y]) ]
             myfield.composite_mean += value     # This is the raw sum
             myfield.composite_std += value**2   # This is the raw square sum
     print("number of events: ",nb_events)
@@ -433,16 +438,17 @@ def CompComposites(series, myfield, T, Tot_Mon1, return_index, modified):
     myfield.composite_mean /= nb_events
     myfield.composite_t = (lambda a, b: np.divide(a, b, out=np.zeros(a.shape), where=b != 0))(np.sqrt(nb_events) * myfield.composite_mean, myfield.composite_std)
     
-def CompCompositesBetween(series, myfield, T, Tot_Mon1, return_index):
+def CompCompositesBetween(series, myfield, T, Tot_Mon1, return_index, start_month=6, end_month=9):
     '''
     Computes composites conditioned to extremes of field of duration T based on months provided in Tot_Mon1, the return_index is the index of the return times
     
-    REMOVE HARDCODED NUMBERS FOR START AND END MONTHS
+    The computations are performed between `start_month` (included) and `end_month` (excluded).
+    Month numeration is the standard one, i.e. 1 = January, 6 = June, 12 = December
     '''
     convseq = np.ones(T)/T
-    A = np.zeros((series.shape[0], Tot_Mon1[9] - Tot_Mon1[6] - T+1))   # When we use convolve (running mean) there is an extra point that we can generate by displacing the window hence 13 instead of 14
+    A = np.zeros((series.shape[0], Tot_Mon1[end_month] - Tot_Mon1[start_month] - T+1))   # When we use convolve (running mean) there is an extra point that we can generate by displacing the window hence 13 instead of 14
     for y in range(series.shape[0]):
-        A[y,:]=np.convolve(series[y,Tot_Mon1[6]:(Tot_Mon1[9])],  convseq, mode='valid')
+        A[y,:]=np.convolve(series[y,Tot_Mon1[start_month]:(Tot_Mon1[end_month])],  convseq, mode='valid')
     print("A.shape = ",A.shape)
     A_max, Ti, year_a = a_max_and_ti_postproc(A, A.shape[1])
     year_a = range(series.shape[0])
@@ -458,7 +464,7 @@ def CompCompositesBetween(series, myfield, T, Tot_Mon1, return_index):
         if yy_rt[return_index[0]] <= A_max[y] < yy_rt[return_index[1]]:
             print("A_max["+str(y)+"] = ",A_max[y], "Ti["+str(y)+"] = ", Ti[y])
             nb_events += 1
-            value = (myfield.var[y])[tau + (Tot_Mon1[6] + Ti[y]) ]
+            value = (myfield.var[y])[tau + (Tot_Mon1[start_month] + Ti[y]) ]
             myfield.composite_mean += value     # This is the raw sum
             myfield.composite_std += value**2   # This is the raw square sum
     print("number of events: ",nb_events)
