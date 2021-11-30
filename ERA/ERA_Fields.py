@@ -1216,8 +1216,8 @@ class Plasim_Field:
         
         return series, anomaly_series
     
-    def PreMixing(self, new_mixing, containing_folder='Postproc', num_years=[], select_group=0): # Permute all years (useful for Machine Learning input), mixes the batches but not the days of a year! num_years - how many years are taken for the analysis
-        if num_years == []:
+    def PreMixing(self, new_mixing, containing_folder='Postproc', num_years=None, select_group=0): # Permute all years (useful for Machine Learning input), mixes the batches but not the days of a year! num_years - how many years are taken for the analysis
+        if num_years is None or years = []:
             num_years = self.years
         #print(type(containing_folder),type(self.sampling), type(self.Model))
         print(containing_folder)
