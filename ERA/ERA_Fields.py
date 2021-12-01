@@ -8,9 +8,7 @@ import matplotlib.pyplot as plt
 import pylab as p
 import sys
 import os
-os.environ['PROJ_LIB'] = '../usr/share/proj' # This one we need to import Basemap 
-#os.environ['PROJ_LIB'] = '/usr/share/proj' # This one we need to import Basemap 
-from mpl_toolkits.basemap import Basemap
+
 import matplotlib.gridspec as gridspec
 import matplotlib.patheffects as PathEffects
 from matplotlib.transforms import Bbox
@@ -34,6 +32,19 @@ from sklearn import datasets, linear_model
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import confusion_matrix
 from skimage.transform import resize
+
+def import_basemap():
+    old_proj_lib = os.environ['PROJ_LIB'] if 'PROJ_LIB' in os.environ else None
+    try:
+        os.environ['PROJ_LIB'] = '../usr/share/proj' # This one we need to import Basemap 
+        from mpl_toolkits.basemap import Basemap
+        return True
+    except (ImportError, FileNotFoundError):
+        # revert to old proj_lib
+        if old_proj_lib is not None:
+            os.environ['PROJ_LIB'] = old_proj_lib
+        warnings.warn('In this environment you cannot import Basemap')
+        return False
 
 
 
@@ -1217,7 +1228,7 @@ class Plasim_Field:
         return series, anomaly_series
     
     def PreMixing(self, new_mixing, containing_folder='Postproc', num_years=None, select_group=0): # Permute all years (useful for Machine Learning input), mixes the batches but not the days of a year! num_years - how many years are taken for the analysis
-        if num_years is None or years = []:
+        if num_years is None or years == []:
             num_years = self.years
         #print(type(containing_folder),type(self.sampling), type(self.Model))
         print(containing_folder)
