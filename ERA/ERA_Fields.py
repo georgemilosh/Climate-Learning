@@ -33,19 +33,53 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import confusion_matrix
 from skimage.transform import resize
 
+
+global plotter
+plotter = None
+
 def import_basemap():
     old_proj_lib = os.environ['PROJ_LIB'] if 'PROJ_LIB' in os.environ else None
     try:
         os.environ['PROJ_LIB'] = '../usr/share/proj' # This one we need to import Basemap 
+        global Basemap
         from mpl_toolkits.basemap import Basemap
+        print('Successfully imported basemap')
         return True
     except (ImportError, FileNotFoundError):
         # revert to old proj_lib
         if old_proj_lib is not None:
             os.environ['PROJ_LIB'] = old_proj_lib
-        warnings.warn('In this environment you cannot import Basemap')
+        print('In this environment you cannot import Basemap')
+        return False
+    
+def import_cartopy():
+    try:
+        global cplt
+        import cartopy_plots as cplt
+        print('Successfully imported cartopy')
+        return True
+    except (ImportError, FileNotFoundError):
+        print('In this environment you cannot import cartopy')
         return False
 
+# set up the plotter:
+def setup_plotter():
+    global plotter
+    if plotter is not None:
+        print(f'Plotter already set to {plotter}')
+        return True
+    print('Trying to import basemap')
+    if import_basemap():
+        plotter = 'basemap'
+        return True
+    print('Trying to import cartopy')
+    if import_cartopy():
+        plotter = 'cartopy'
+        return True
+    print('No valid plotter found')
+    return False
+            
+setup_plotter()
 
 
 
@@ -773,7 +807,18 @@ def a_decrese(in_A_max, in_Ti, in_year_a):
     return D_sorted
 
 
-def draw_map(m, scale=0.2):
+def draw_map(m, scale=0.2, resolution='low', **kwargs):
+    '''
+    Plots a background map.
+    
+    If plotting with basemap additional parameters are ignored
+    
+    If plotting with cartopy `scale` is ignored
+    '''
+    if resolution == 'high':
+        scale = 1
+    if plotter == 'cartopy':
+        return cplt.draw_map(m, resolution, **kwargs)
     # draw a shaded-relief image
     m.shadedrelief(scale=scale)
     
