@@ -522,7 +522,7 @@ def geo_contour(m, ax, Center_map, Lon, Lat, data_contour_value, data_contour_le
     '''
     Plots a contour using two different colormaps for positive and negative anomalies
     
-    Center_map isn't used
+    ax, Center_map, aren't used
     '''
     fmt = '%1.0f'
     c_sign = m.contour(Lon, Lat, data_contour_value,
