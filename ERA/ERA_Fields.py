@@ -1252,7 +1252,7 @@ class Plasim_Field:
         
         return filename
     def EqualMixing(self, A, threshold, new_mixing, containing_folder='Postproc', num_years=1000, select_group=0, delta=1): # Permute all years (useful for Machine Learning input), mix until each batch has the same numbe of years!
-        if str(threshold) != '2.953485': # use new labeling
+        if str(threshold) != '2.953485': # use new labeling # GEORGE: there is indeed a way to remove this awkward statement. This is old threshold for Plasim 1000 years dataset that dates back to the time when I didn't specify threshold in the mixing file. This threshold is obtained if we take 5 percent heatwaves over France. The idea was to default in this case to the old equal mixing and avoid creating a new permutation. What can be done instead is to simply copy the old file and give it the appropriate name given this new system where we have to add a threshold in the filename
             filenamepostfix1 = '_'+str(threshold)
         else:
             filenamepostfix1 = ''
