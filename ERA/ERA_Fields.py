@@ -540,7 +540,7 @@ def geo_contour(m, ax, Center_map, Lon, Lat, data_contour_value, data_contour_le
 
 def geo_contourf(m, ax, Center_map, Lon, Lat, data_colorbar_value, data_colorbar_level, colmap, title_frame, put_colorbar=True):
     '''
-    Center_Map isn't used
+    ax, Center_Map aren't used
     '''
     plt.cla()
     m.contourf(Lon, Lat, data_colorbar_value, levels=data_colorbar_level, cmap=colmap, extend='both', latlon=True)
