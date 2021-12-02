@@ -116,6 +116,7 @@ def significative_data(Data, Data_t_value, T_value, both): # CHANGE THIS FOR TEM
         return Out_taken, Out_not_taken, N_points_taken
     else:
         return Out_taken, N_points_taken
+    
 def significative_data2(Data, Data_t_value, T_value, both): # CHANGE THIS FOR TEMPERATURE SO THAT THE OLD ROUTINE IS USED
     Out_taken = np.empty((np.shape(Data)))
     Out_taken[:] = np.NaN
@@ -133,8 +134,11 @@ def significative_data2(Data, Data_t_value, T_value, both): # CHANGE THIS FOR TE
         return Out_taken, Out_not_taken, N_points_taken
     elif both == False:
         return Out_taken, N_points_taken
+    
 def animate(i, m, Center_map, Nb_frame, Lon, Lat, T_value, data_colorbar_value, data_colorbar_t, data_colorbar_level,
             data_contour_value, data_contour_t, data_contour_level, title_frame, rtime):
+    if plotter == 'cartopy':
+        raise NotImplementedError("Sorry, we're still working on that")
     fmt = '%1.0f'
     temp_sign, ts_taken = significative_data(data_colorbar_value[i], data_colorbar_t[i], T_value, False)
     zg_sign, zg_not, zg_taken = significative_data2(data_contour_value[i], data_contour_t[i], T_value, True)
@@ -524,7 +528,10 @@ def geo_contour(m, ax, Center_map, Lon, Lat, data_contour_value, data_contour_le
     
     ax, Center_map, aren't used
     '''
-    fmt = '%1.0f'
+    if plotter == 'cartopy':
+        return cplt.geo_contour(m, Lon, Lat, data_contour_value,
+                                levels=data_contour_level, cmap1=colmap1, cmap2=colmap2)
+    
     c_sign = m.contour(Lon, Lat, data_contour_value,
                        levels=data_contour_level, cmap=colmap1,linewidths=1, linestyles="dashed",
                        latlon=True, vmin=data_contour_level[0], vmax=0)
@@ -534,14 +541,20 @@ def geo_contour(m, ax, Center_map, Lon, Lat, data_contour_value, data_contour_le
                        levels=data_contour_level, cmap=colmap2,linewidths=1,
                        latlon=True, vmin=0, vmax=data_contour_level[-1])
     
+    # this is confusing
+    fmt = '%1.0f'
     v_sign = data_contour_level[int(len(data_contour_level) / 2)-1], data_contour_level[int(len(data_contour_level) / 2)]
-    if len(c_sign.levels) > len(v_sign):
+    if len(c_sign.levels) > len(v_sign): # len(v_sign) = 2 because it is a 2-uple
         p.clabel(c_sign, v_sign, inline=True,fmt=fmt,fontsize=14)
 
 def geo_contourf(m, ax, Center_map, Lon, Lat, data_colorbar_value, data_colorbar_level, colmap, title_frame, put_colorbar=True):
     '''
     ax, Center_Map aren't used
     '''
+    if plotter == 'cartopy':
+        return cplt.geo_contourf(m, Lon, Lat, data_colorbar_value,
+                                 levels=data_colorbar_level, cmap=colmap, title=title_frame, put_colorbar=put_colorbar)
+    
     plt.cla()
     m.contourf(Lon, Lat, data_colorbar_value, levels=data_colorbar_level, cmap=colmap, extend='both', latlon=True)
     if put_colorbar:
@@ -552,6 +565,12 @@ def geo_contourf(m, ax, Center_map, Lon, Lat, data_colorbar_value, data_colorbar
     plt.title(title_frame, fontsize=20)
     
 def geo_contour_color(m, ax, Center_map, Lon, Lat, T_value, data_contour_value, data_contour_t, data_contour_level, colors, mylinestyles, mylinewidths):
+    '''
+    ax, Center_map not used
+    '''
+    if plotter == 'cartopy':
+        raise NotImplementedError("Sorry, we're still working on that")
+    
     zg_sign, zg_not, zg_taken = significative_data2(data_contour_value, data_contour_t, T_value, True)
     fmt = '%1.0f'
     c_nots = m.contour(Lon, Lat, data_contour_value, levels=data_contour_level[:data_contour_level.shape[0]//2], colors=colors[1], linestyles = mylinestyles[1], linewidths=mylinewidths[1], latlon=True) #negative insignificant anomalies of geopotential
@@ -566,6 +585,9 @@ def geo_contour_color(m, ax, Center_map, Lon, Lat, T_value, data_contour_value, 
     c_sign = m.contour(Lon, Lat, zg_sign, levels=data_contour_level[data_contour_level.shape[0]//2:], colors=colors[3], linestyles = mylinestyles[3],linewidths=mylinewidths[3], latlon=True)   #positive significant anomalies of geopotential
     
 def PltMaxMinValue(m,Lon, Lat, data_contour_value):
+    if plotter == 'cartopy':
+        return cplt.PltMaxMinValue(m, Lon, Lat, data_contour_value)
+        
     coordsmax = np.unravel_index(np.argmin(data_contour_value, axis=None), data_contour_value.shape)
     x, y = m(Lon[coordsmax[0], coordsmax[1]], Lat[coordsmax[0], coordsmax[1]])
     txt = plt.text(x, y, "{:1.0f}".format(np.min(data_contour_value)), color='red')
@@ -580,6 +602,8 @@ def PltMaxMinValue(m,Lon, Lat, data_contour_value):
         
 def anomaly_animate(m, ax, Center_map, Lon, Lat, data_colorbar_value, data_colorbar_level,
             data_contour_value, data_contour_level, colmap, title_frame):
+    if plotter == 'cartopy':
+        raise NotImplementedError("Sorry, we're still working on that")
     fmt = '%1.0f'
     plt.cla()
     m.contourf(Lon, Lat, data_colorbar_value, levels=data_colorbar_level, cmap=colmap, extend='both', latlon=True)
@@ -608,6 +632,8 @@ def anomaly_animate(m, ax, Center_map, Lon, Lat, data_colorbar_value, data_color
     
 def absolute_animate(i, m, ax, Center_map, Nb_frame, Lon, Lat, data_colorbar_value, data_colorbar_level,
             data_contour_value, data_contour_level, colmap, title_frame):
+    if plotter == 'cartopy':
+        raise NotImplementedError("Sorry, we're still working on that")
     fmt = '%1.0f'
     print('i:', i)
     plt.cla()
@@ -640,6 +666,8 @@ def absolute_animate(i, m, ax, Center_map, Nb_frame, Lon, Lat, data_colorbar_val
     
 def anomaly_absolute_animate(m, ax, Center_map, Lon, Lat, data_colorbar_value, data_colorbar_level,
             data_contour_value, data_contour_level, colmap, title_frame):
+    if plotter == 'cartopy':
+        raise NotImplementedError("Sorry, we're still working on that")
     fmt = '%1.0f'
     plt.cla()
     m.contourf(Lon, Lat, data_colorbar_value, levels=data_colorbar_level, cmap=colmap, extend='both', latlon=True)
@@ -1833,6 +1861,8 @@ def Plot2DLogisticRegression(X,Xname,logreg,ax, X_test, Y_test, TP, TN, FP, FN, 
     
 def ShowArea(LON_mask, LAT_mask, MyArea, coords):
     # Show the area based on grid points enclosed in LON_mask LAT_mask
+    if plotter == 'cartopy':
+        raise NotImplementedError("Sorry, we're still working on that")
     plt.rcParams['pcolor.shading'] ='flat'
     coords = [50, 5., 2000000, 2000000]
     fig = plt.figure(figsize=(15, 15), edgecolor='w')

@@ -2,6 +2,11 @@ import cartopy.crs as ccrs
 import cartopy.feature as cfeat
 from cartopy.util import add_cyclic_point as acp
 
+import numpy as np
+
+import matplotlib.pyplot as plt
+import matplotlib.patheffects as PathEffects
+
 data_proj = ccrs.PlateCarree()
 
 def Greenwich(*args):
@@ -39,3 +44,46 @@ def draw_map(m, resolution='low', **kwargs):
         m.add_feature(cfeat.LAKES)
     
     m.gridlines(**kwargs)
+    
+def geo_contourf(m, lon, lat, values, levels=None, cmap='RdBu_r', title=None, put_colorbar=True):
+    '''
+    Contourf plot together with coastlines and meridians
+    '''
+    im = m.contourf(lon, lat, values, transform=data_proj,
+                    levels=levels, cmap=cmap, extend='both')
+    m.coastlines()
+    m.gridlines(draw_labels=True)
+    if put_colorbar:
+        plt.colorbar(im)
+    if title is not None:
+        m.set_title(title, fontsize=20)
+        
+def geo_contour(m, lon, lat, values, levels=None, cmap1='PuRd', cmap2=None):
+    
+    if cmap2 is None: # plot with just one colormap
+        m.contour(lon, lat, values, transform=data_proj,
+                  levels=levels, cmap=cmap1)
+    else: # separate positive and negative data
+        v_neg = values.copy()
+        v_neg[v_neg > 0] = 0
+        m.contour(lon, lat, v_neg, transform=data_proj,
+                  levels=levels, cmap=cmap1, vmin=levels[0], vmax=0)
+        v_pos = values.copy()
+        v_pos[v_pos < 0] = 0
+        m.contour(lon, lat, v_pos, transform=data_proj,
+                  levels=levels, cmap=cmap2, vmin=0, vmax=levels[-1])
+        
+        
+def PltMaxMinValue(m, lon, lat, values):
+    # plot min value
+    coordsmax = tuple(np.unravel_index(np.argmin(values, axis=None), values.shape))
+    x, y = lon[coordsmax], lat[coordsmax]
+    txt = m.text(x, y, f"{np.min(values) :.0f}", transform=data_proj, color='red')
+    txt.set_path_effects([PathEffects.withStroke(linewidth=2, foreground='w')])
+    # plot max value
+    coordsmax = tuple(np.unravel_index(np.argmax(values, axis=None), values.shape))
+    x, y = lon[coordsmax], lat[coordsmax]
+    txt = plt.text(x, y, f"{np.max(values) :.0f}", transform=data_proj, color='blue')
+    txt.set_path_effects([PathEffects.withStroke(linewidth=2, foreground='w')])
+        
+    
