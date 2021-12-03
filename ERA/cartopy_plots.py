@@ -7,6 +7,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as PathEffects
 
+import ERA_Fields as ef
+
 data_proj = ccrs.PlateCarree()
 
 def Greenwich(*args):
@@ -75,9 +77,26 @@ def geo_contour(m, lon, lat, values, levels=None, cmap1='PuRd', cmap2=None):
         
 def geo_contour_color(m, lon, lat, values, t_values, t_threshold, levels,
                       colors=["sienna","chocolate","green","lime"], linestyles=["solid","dashed","dashed","solid"],
-                      linewidths=[1,1,1,1], fmt='%1.0f'):
-    return
-        
+                      linewidths=[1,1,1,1], fmt='%1.0f', fontsize=12):
+    
+    # divide data in significative and non significative:
+    data_sig, data_not_sig, _ = ef.significative_data(values, t_values, t_threshold, both=True, default_value=0)
+    
+    # negative insignificant anomalies
+    i = 1
+    # v_neg = data_not_sig.copy()
+    # v_neg[v_neg > 0] = 0
+    # cn = m.contour(lon, lat, v_neg, transform=data_proj,
+    #                levels=levels, colors=colors[i], linestyles=linestyles[i], linewidths=linewidths[i])
+    # m.clabel(cn, colors=[colors[i]], manual=False, inline=True, fmt=fmt, fontsize=fontsize)
+    # positive insignificant anomalies
+    i = 2
+    v_pos = data_not_sig.copy()
+    v_pos[v_pos < 0] = 0
+    mask = v_pos != 0
+    cp = m.tricontour(lon[mask].flatten(), lat[mask].flatten(), v_pos[mask].flatten(), transform=data_proj,
+                   levels=levels, colors=colors[i], linestyles=linestyles[i], linewidths=linewidths[i])
+    m.clabel(cp, colors=[colors[i]], manual=False, inline=True, fmt=fmt, fontsize=fontsize)
         
 def PltMaxMinValue(m, lon, lat, values):
     # plot min value

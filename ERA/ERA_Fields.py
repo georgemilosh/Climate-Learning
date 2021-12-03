@@ -575,19 +575,23 @@ def geo_contour_color(m, ax, Center_map, Lon, Lat, T_value, data_contour_value, 
     '''
     ax, Center_map not used
     '''
+    fmt = '%1.0f'
+    fontsize = 12
+    
     if plotter == 'cartopy':
-        raise NotImplementedError("Sorry, we're still working on that")
+        return cplt.geo_contour_color(m, Lon, Lat, data_contour_value, data_contour_t, T_value,
+                                      levels=data_contour_level, colors=colors, linestyles=mylinestyles,
+                                      linewidths=mylinewidths, fmt=fmt, fontsize=fontsize)
     
     zg_sign, zg_not, zg_taken = significative_data2(data_contour_value, data_contour_t, T_value, True)
-    fmt = '%1.0f'
     c_nots = m.contour(Lon, Lat, data_contour_value, levels=data_contour_level[:data_contour_level.shape[0]//2], colors=colors[1], linestyles = mylinestyles[1], linewidths=mylinewidths[1], latlon=True) #negative insignificant anomalies of geopotential
     v_sign = data_contour_level[int(len(data_contour_level) / 2)-1], # data_contour_level[int(len(data_contour_level) / 2)]
     if len(c_nots.levels) > len(v_sign):
-        p.clabel(c_nots, v_sign, inline=True,fmt = fmt,fontsize=12)
+        p.clabel(c_nots, v_sign, inline=True,fmt=fmt,fontsize=fontsize)
     c_nots = m.contour(Lon, Lat, data_contour_value, levels=data_contour_level[data_contour_level.shape[0]//2:], colors=colors[2], linestyles = mylinestyles[2],linewidths=mylinewidths[2], latlon=True)  #positive insignificant anomalies of geopotential
     v_sign = data_contour_level[int(len(data_contour_level) / 2)],
     if len(c_nots.levels) > len(v_sign):
-        p.clabel(c_nots, v_sign, inline=True,fmt = fmt,fontsize=12)
+        p.clabel(c_nots, v_sign, inline=True,fmt=fmt,fontsize=fontsize)
     c_sign = m.contour(Lon, Lat, zg_sign, levels=data_contour_level[:data_contour_level.shape[0]//2], colors=colors[0], linestyles = mylinestyles[0],linewidths=mylinewidths[0], latlon=True)  #negative significant anomalies of geopotential
     c_sign = m.contour(Lon, Lat, zg_sign, levels=data_contour_level[data_contour_level.shape[0]//2:], colors=colors[3], linestyles = mylinestyles[3],linewidths=mylinewidths[3], latlon=True)   #positive significant anomalies of geopotential
     
