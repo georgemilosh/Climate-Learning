@@ -78,25 +78,48 @@ def geo_contour(m, lon, lat, values, levels=None, cmap1='PuRd', cmap2=None):
 def geo_contour_color(m, lon, lat, values, t_values, t_threshold, levels,
                       colors=["sienna","chocolate","green","lime"], linestyles=["solid","dashed","dashed","solid"],
                       linewidths=[1,1,1,1], fmt='%1.0f', fontsize=12):
+    '''
+    Plots contour lines divided in four categories: in order (for arguments like `colors`, `linestyles`, ...)
+        significative negative data
+        non-significative negative data
+        non-significative positive data
+        significative positive data
+        
+    Significance is determined by comparing the `t_values`, which is an array of the same shape of `lon`, `lat' and `values`, with `t_threshold`
+    '''
     
     # divide data in significative and non significative:
-    data_sig, data_not_sig, _ = ef.significative_data(values, t_values, t_threshold, both=True, default_value=0)
+    data_sig, _ = ef.significative_data(values, t_values, t_threshold, both=False, default_value=np.NaN)
     
     # negative insignificant anomalies
     i = 1
-    # v_neg = data_not_sig.copy()
-    # v_neg[v_neg > 0] = 0
-    # cn = m.contour(lon, lat, v_neg, transform=data_proj,
-    #                levels=levels, colors=colors[i], linestyles=linestyles[i], linewidths=linewidths[i])
-    # m.clabel(cn, colors=[colors[i]], manual=False, inline=True, fmt=fmt, fontsize=fontsize)
+    v_neg = values.copy()
+    v_neg[v_neg > 0] = 0
+    cn = m.contour(lon, lat, v_neg, transform=data_proj,
+                   levels=levels, colors=colors[i], linestyles=linestyles[i], linewidths=linewidths[i])
+    m.clabel(cn, colors=[colors[i]], manual=False, inline=True, fmt=fmt, fontsize=fontsize)
     # positive insignificant anomalies
     i = 2
-    v_pos = data_not_sig.copy()
+    v_pos = values.copy()
     v_pos[v_pos < 0] = 0
-    mask = v_pos != 0
-    cp = m.tricontour(lon[mask].flatten(), lat[mask].flatten(), v_pos[mask].flatten(), transform=data_proj,
+    cp = m.contour(lon, lat, v_pos, transform=data_proj,
                    levels=levels, colors=colors[i], linestyles=linestyles[i], linewidths=linewidths[i])
     m.clabel(cp, colors=[colors[i]], manual=False, inline=True, fmt=fmt, fontsize=fontsize)
+    
+    # negative significant anomalies
+    i = 0
+    v_neg = data_sig.copy()
+    v_neg[v_neg > 0] = 0
+    cn = m.contour(lon, lat, v_neg, transform=data_proj,
+                   levels=levels, colors=colors[i], linestyles=linestyles[i], linewidths=linewidths[i])
+    # m.clabel(cn, colors=[colors[i]], manual=False, inline=True, fmt=fmt, fontsize=fontsize)
+    # positive significant anomalies
+    i = 3
+    v_pos = data_sig.copy()
+    v_pos[v_pos < 0] = 0
+    cp = m.contour(lon, lat, v_pos, transform=data_proj,
+                   levels=levels, colors=colors[i], linestyles=linestyles[i], linewidths=linewidths[i])
+    # m.clabel(cp, colors=[colors[i]], manual=False, inline=True, fmt=fmt, fontsize=fontsize)
         
 def PltMaxMinValue(m, lon, lat, values):
     # plot min value
