@@ -84,16 +84,17 @@ setup_plotter()
 
 
 # Definition des fonctions
-def significative_data(Data, Data_t_value, T_value, both): # CHANGE THIS FOR TEMPERATURE SO THAT THE OLD ROUTINE IS USED
+def significative_data(Data, Data_t_value, T_value, both, default_value=0): # CHANGE THIS FOR TEMPERATURE SO THAT THE OLD ROUTINE IS USED
     '''
     Filters `Data` depending whether `Data_t_value` exceeds a threshold `T_value`
+    
+    Data that fail the filter conditions are set to `default_value`
     '''
     data = np.array(Data)
     data_t_value = np.array(Data_t_value)
     if data.shape != data_t_value.shape:
         raise ValueError('Shape mismatch')
-    Out_taken = np.zeros_like(data)
-    Out_not_taken = np.zeros_like(data)
+    Out_taken = data.copy()
     
 #     # old function definition   
 #     N_points_taken = 0
@@ -108,32 +109,38 @@ def significative_data(Data, Data_t_value, T_value, both): # CHANGE THIS FOR TEM
     # considerable speed up wrt the old nested for loops
     mask = data_t_value >= T_value
     N_points_taken = np.sum(mask)
-    Out_taken[mask] = data[mask]
+    Out_taken[np.logical_not(mask)] = default_value
     
     if both:
-        inverse_mask = np.logical_not(mask)
-        Out_not_taken[inverse_mask] = data[inverse_mask]
+        Out_not_taken = data.copy()
+        Out_not_taken[mask] = default_value
         return Out_taken, Out_not_taken, N_points_taken
     else:
         return Out_taken, N_points_taken
     
 def significative_data2(Data, Data_t_value, T_value, both): # CHANGE THIS FOR TEMPERATURE SO THAT THE OLD ROUTINE IS USED
-    Out_taken = np.empty((np.shape(Data)))
-    Out_taken[:] = np.NaN
-    Out_not_taken = np.empty((np.shape(Data)))
-    Out_not_taken[:] = np.NaN
-    N_points_taken = 0
-    for la in range(len(Data)):
-        for lo in range(len(Data[la])):
-            if abs(Data_t_value[la, lo]) >= T_value:
-                Out_taken[la, lo] = Data[la, lo]
-                N_points_taken += 1
-            else:
-                Out_not_taken[la, lo] = Data[la, lo]
-    if both == True:
-        return Out_taken, Out_not_taken, N_points_taken
-    elif both == False:
-        return Out_taken, N_points_taken
+    '''
+    Does the same of significative_data, but with `default_value` to np.NaN
+    '''
+    return significative_data(Data, Data_t_value, T_value, both, default_value=np.NaN)
+    # OLD VERSION
+    
+    # Out_taken = np.empty((np.shape(Data)))
+    # Out_taken[:] = np.NaN
+    # Out_not_taken = np.empty((np.shape(Data)))
+    # Out_not_taken[:] = np.NaN
+    # N_points_taken = 0
+    # for la in range(len(Data)):
+    #     for lo in range(len(Data[la])):
+    #         if abs(Data_t_value[la, lo]) >= T_value:
+    #             Out_taken[la, lo] = Data[la, lo]
+    #             N_points_taken += 1
+    #         else:
+    #             Out_not_taken[la, lo] = Data[la, lo]
+    # if both == True:
+    #     return Out_taken, Out_not_taken, N_points_taken
+    # elif both == False:
+    #     return Out_taken, N_points_taken
     
 def animate(i, m, Center_map, Nb_frame, Lon, Lat, T_value, data_colorbar_value, data_colorbar_t, data_colorbar_level,
             data_contour_value, data_contour_t, data_contour_level, title_frame, rtime):

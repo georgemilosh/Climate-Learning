@@ -73,6 +73,11 @@ def geo_contour(m, lon, lat, values, levels=None, cmap1='PuRd', cmap2=None):
         m.contour(lon, lat, v_pos, transform=data_proj,
                   levels=levels, cmap=cmap2, vmin=0, vmax=levels[-1])
         
+def geo_contour_color(m, lon, lat, values, t_values, t_threshold, levels,
+                      colors=["sienna","chocolate","green","lime"], linestyles=["solid","dashed","dashed","solid"],
+                      linewidths=[1,1,1,1], fmt='%1.0f'):
+    return
+        
         
 def PltMaxMinValue(m, lon, lat, values):
     # plot min value
