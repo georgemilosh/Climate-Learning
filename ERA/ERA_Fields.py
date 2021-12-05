@@ -144,6 +144,11 @@ def significative_data2(Data, Data_t_value, T_value, both): # CHANGE THIS FOR TE
     
 def animate(i, m, Center_map, Nb_frame, Lon, Lat, T_value, data_colorbar_value, data_colorbar_t, data_colorbar_level,
             data_contour_value, data_contour_t, data_contour_level, title_frame, rtime):
+    '''
+    Center_map not used
+    
+    Plots at day `i` the contourf of the sigificant temperature and contour of the geopotential separating significant and non significant anomalies
+    '''
     if plotter == 'cartopy':
         raise NotImplementedError("Sorry, we're still working on that")
     fmt = '%1.0f'
@@ -172,7 +177,7 @@ def animate(i, m, Center_map, Nb_frame, Lon, Lat, T_value, data_colorbar_value, 
     c_sign = m.contour(Lon, Lat, zg_sign, levels=data_contour_level[:data_contour_level.shape[0]//2], colors="red", linestyles = "solid",linewidths=1, latlon=True)  #negative significant anomalies of geopotential
     c_sign = m.contour(Lon, Lat, zg_sign, levels=data_contour_level[data_contour_level.shape[0]//2:], colors="blue",linewidths=1, latlon=True)   #positive significant anomalies of geopotential
     
-    plt.title(title_frame + ', r = ' + str(rtime) + ', day: ' + str((i - Nb_frame//2)), fontsize=20)
+    plt.title(f'{title_frame}, r = {rtime}, day: {(i - Nb_frame//2)}', fontsize=20)
 
     
 def PltAnomalyHist(distrib, numlevels, mycolor, myhatch, mymonths, mylinewidths, myfieldlabel, myobjct): # Plot histogram of an anomaly based on a data series
@@ -1870,10 +1875,17 @@ def Plot2DLogisticRegression(X,Xname,logreg,ax, X_test, Y_test, TP, TN, FP, FN, 
     ax.set_xlabel(Xname[0])
     ax.set_ylabel(Xname[1])
     
-def ShowArea(LON_mask, LAT_mask, MyArea, coords):
-    # Show the area based on grid points enclosed in LON_mask LAT_mask
+def ShowArea(LON_mask, LAT_mask, MyArea, coords=[-7,15,40,60], **kwargs):
+    '''
+    Show the area based on grid points enclosed in LON_mask LAT_mask
+    
+    `coords` is ignored in the Basemap version, showing only the region over France
+    **kwargs are passed to cartopy_plots.ShowArea
+    '''
+    
     if plotter == 'cartopy':
-        raise NotImplementedError("Sorry, we're still working on that")
+        return cplt.ShowArea(LON_mask, LAT_mask, MyArea, coords, **kwargs)
+    
     plt.rcParams['pcolor.shading'] ='flat'
     coords = [50, 5., 2000000, 2000000]
     fig = plt.figure(figsize=(15, 15), edgecolor='w')

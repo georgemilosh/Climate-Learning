@@ -34,6 +34,12 @@ def draw_map(m, resolution='low', **kwargs):
     '''
     Plots a background map using cartopy.
     Additional arguments are passed to the cartopy function gridlines
+    
+    Parameters:
+    -----------
+        m: cartopy axis
+        resolution: either 'low' or 'high'
+        **kwargs: arguments passed to cartopy.gridlines
     '''
     if 'draw_labels' not in kwargs:
         kwargs['draw_labels'] = True
@@ -44,12 +50,24 @@ def draw_map(m, resolution='low', **kwargs):
         m.add_feature(cfeat.LAND)
         m.add_feature(cfeat.OCEAN)
         m.add_feature(cfeat.LAKES)
-    
+    else:
+        raise ValueError(f'Unknown value {resolution = }')
     m.gridlines(**kwargs)
     
 def geo_contourf(m, lon, lat, values, levels=None, cmap='RdBu_r', title=None, put_colorbar=True):
     '''
     Contourf plot together with coastlines and meridians
+    
+    Parameters:
+    -----------
+        m: cartopy axis
+        lon: 2D longidute array
+        lat: 2D latitude array
+        values: 2D field array
+        levels: contour levels for the field values
+        cmap: colormap
+        title: plot title
+        put_colorbar: whether to show a colorbar
     '''
     im = m.contourf(lon, lat, values, transform=data_proj,
                     levels=levels, cmap=cmap, extend='both')
@@ -61,7 +79,19 @@ def geo_contourf(m, lon, lat, values, levels=None, cmap='RdBu_r', title=None, pu
         m.set_title(title, fontsize=20)
         
 def geo_contour(m, lon, lat, values, levels=None, cmap1='PuRd', cmap2=None):
+    '''
+    Plots a contour plot with the possbility of having two different colormaps for positive and negative data
     
+    Parameters:
+    -----------
+        m: cartopy axis
+        lon: 2D longidute array
+        lat: 2D latitude array
+        values: 2D field array
+        levels: contour levels for the field values
+        cmap1: principal colormap
+        cmap2: if provided negative values will be plotted with `cmap1` and positive ones with `cmap2`
+    '''
     if cmap2 is None: # plot with just one colormap
         m.contour(lon, lat, values, transform=data_proj,
                   levels=levels, cmap=cmap1)
@@ -79,13 +109,31 @@ def geo_contour_color(m, lon, lat, values, t_values, t_threshold, levels,
                       colors=["sienna","chocolate","green","lime"], linestyles=["solid","dashed","dashed","solid"],
                       linewidths=[1,1,1,1], fmt='%1.0f', fontsize=12):
     '''
-    Plots contour lines divided in four categories: in order (for arguments like `colors`, `linestyles`, ...)
+    Plots contour lines divided in four categories: in order
         significative negative data
         non-significative negative data
         non-significative positive data
         significative positive data
         
     Significance is determined by comparing the `t_values`, which is an array of the same shape of `lon`, `lat' and `values`, with `t_threshold`
+    
+    Parameters:
+    -----------
+        m: cartopy axis
+        lon: 2D longidute array
+        lat: 2D latitude array
+        values: 2D field array
+        t_values: 2D array of the t_field (significance)
+        t_threshold: float, t values above the threshold are considered significant
+        levels: contour levels for the field values
+        
+        fmt: fmt of the inline contour labels
+        fontsize: fontsize of the inline contour labels
+        
+    For the following see above for the order of the items in the lists
+        colors
+        linestyles
+        linewidths
     '''
     
     # divide data in significative and non significative:
@@ -121,16 +169,64 @@ def geo_contour_color(m, lon, lat, values, t_values, t_threshold, levels,
                    levels=levels, colors=colors[i], linestyles=linestyles[i], linewidths=linewidths[i])
     # m.clabel(cp, colors=[colors[i]], manual=False, inline=True, fmt=fmt, fontsize=fontsize)
         
-def PltMaxMinValue(m, lon, lat, values):
+def PltMaxMinValue(m, lon, lat, values, colors=['red','blue']):
+    '''
+    Writes on the plot the maximum and minimum values of a field.
+    
+    Parameters:
+    -----------
+        m: cartopy axis
+        lon: 2D longidute array
+        lat: 2D latitude array
+        values: 2D field array
+        colors: the two colors of the text, respectively for the min and max values
+    '''
     # plot min value
     coordsmax = tuple(np.unravel_index(np.argmin(values, axis=None), values.shape))
     x, y = lon[coordsmax], lat[coordsmax]
-    txt = m.text(x, y, f"{np.min(values) :.0f}", transform=data_proj, color='red')
+    txt = m.text(x, y, f"{np.min(values) :.0f}", transform=data_proj, color=colors[0])
     txt.set_path_effects([PathEffects.withStroke(linewidth=2, foreground='w')])
     # plot max value
     coordsmax = tuple(np.unravel_index(np.argmax(values, axis=None), values.shape))
     x, y = lon[coordsmax], lat[coordsmax]
-    txt = plt.text(x, y, f"{np.max(values) :.0f}", transform=data_proj, color='blue')
+    txt = plt.text(x, y, f"{np.max(values) :.0f}", transform=data_proj, color=colors[1])
     txt.set_path_effects([PathEffects.withStroke(linewidth=2, foreground='w')])
         
+        
+
+def ShowArea(lon_mask, lat_mask, area_mask, coords=[-7,15,40,60], **kwargs):
+    '''
+    Shows the grid points, colored with respect to the area of the cell
     
+    Parameters:
+    ----------- 
+        lon_mask: 2D array of longitude grid points
+        lat_mask: 2D array of same shape as lon_mask with the latitudes
+        area_mask: 2D array of same shape as lon_mask with the area of the grid cells
+        coords: limits of the plot in the format [min_lon, max_lon, min_lat, max_lat]
+
+        **kwargs:
+            projection: default ccrs.PlateCarree()
+            figsize: default (15,15)
+            draw_labels: whether to show lat and lon labels, default True
+            show_grid: whether to display the grid connecting data points, default True
+    '''
+    # extract additional arguments
+    projection = kwargs.pop('projection', ccrs.PlateCarree())
+    figsize = kwargs.pop('figsize', (15,15))
+    draw_labels = kwargs.pop('draw_labels', True)
+    show_grid = kwargs.pop('show_grid', True)
+    
+    fig = plt.figure(figsize=figsize)
+    m = plt.axes(projection=projection)
+    m.set_extent(coords, crs=ccrs.PlateCarree())
+    m.coastlines()
+    m.gridlines(draw_labels=draw_labels)
+    if show_grid
+        m.pcolormesh(LON_mask, LAT_mask, np.ones_like(LON_mask), transform=data_proj,
+                     alpha=0.5, cmap='Greys', edgecolors='grey')
+    
+    im = m.scatter(LON_mask, LAT_mask, c=ef.create_mask(Model,area,cell_area), transform=data_proj,
+                   s=500, alpha = .35, cmap='RdBu_r')
+    plt.title("Area of a grid cell")
+    plt.colorbar(im)
