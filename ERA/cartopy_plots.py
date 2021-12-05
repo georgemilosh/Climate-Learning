@@ -222,11 +222,22 @@ def ShowArea(lon_mask, lat_mask, area_mask, coords=[-7,15,40,60], **kwargs):
     m.set_extent(coords, crs=ccrs.PlateCarree())
     m.coastlines()
     m.gridlines(draw_labels=draw_labels)
-    if show_grid
-        m.pcolormesh(LON_mask, LAT_mask, np.ones_like(LON_mask), transform=data_proj,
+    if show_grid:
+        # make longitude monotonically increasing
+        _lon_mask = lon_mask.copy()
+        modify = False
+        for i in range(lon_mask.shape[1] - 1):
+            if lon_mask[0,i] > lon_mask[0,i+1]:
+                modify = True
+                break
+        if modify:
+            _lon_mask[:,:i+1] -= 360
+        print(_lon_mask)
+        
+        m.pcolormesh(_lon_mask, lat_mask, np.ones_like(lon_mask), transform=data_proj,
                      alpha=0.5, cmap='Greys', edgecolors='grey')
     
-    im = m.scatter(LON_mask, LAT_mask, c=ef.create_mask(Model,area,cell_area), transform=data_proj,
+    im = m.scatter(lon_mask, lat_mask, c=area_mask, transform=data_proj,
                    s=500, alpha = .35, cmap='RdBu_r')
     plt.title("Area of a grid cell")
     plt.colorbar(im)
