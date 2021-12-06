@@ -4,6 +4,7 @@ from cartopy.util import add_cyclic_point as acp
 
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as PathEffects
+from matplotlib.animation import FuncAnimation, PillowWriter
 
 import numpy as np
 import warnings
@@ -57,7 +58,7 @@ def draw_map(m, background='stock_img', **kwargs):
         m.coastlines()
     m.gridlines(**kwargs)
     
-def geo_contourf(m, lon, lat, values, levels=None, cmap='RdBu_r', title=None, put_colorbar=True):
+def geo_contourf(m, lon, lat, values, levels=None, cmap='RdBu_r', title=None, put_colorbar=True, draw_coastlines=True, draw_gridlines=True):
     '''
     Contourf plot together with coastlines and meridians
     
@@ -71,15 +72,21 @@ def geo_contourf(m, lon, lat, values, levels=None, cmap='RdBu_r', title=None, pu
         cmap: colormap
         title: plot title
         put_colorbar: whether to show a colorbar
+        draw_coastlines: whether to draw the coastlines
+        draw_gridlines: whether to draw the gridlines
     '''
     im = m.contourf(lon, lat, values, transform=data_proj,
                     levels=levels, cmap=cmap, extend='both')
-    m.coastlines()
-    m.gridlines(draw_labels=True)
+    if draw_coastlines:
+        m.coastlines()
+    if draw_gridlines:
+        m.gridlines(draw_labels=True)
     if put_colorbar:
         plt.colorbar(im)
     if title is not None:
         m.set_title(title, fontsize=20)
+        
+    return im
         
 def geo_contour(m, lon, lat, values, levels=None, cmap1='PuRd', cmap2=None):
     '''
@@ -96,17 +103,19 @@ def geo_contour(m, lon, lat, values, levels=None, cmap1='PuRd', cmap2=None):
         cmap2: if provided negative values will be plotted with `cmap1` and positive ones with `cmap2`
     '''
     if cmap2 is None: # plot with just one colormap
-        m.contour(lon, lat, values, transform=data_proj,
-                  levels=levels, cmap=cmap1)
+        im = m.contour(lon, lat, values, transform=data_proj,
+                       levels=levels, cmap=cmap1)
+        return im
     else: # separate positive and negative data
         v_neg = values.copy()
         v_neg[v_neg > 0] = 0
-        m.contour(lon, lat, v_neg, transform=data_proj,
-                  levels=levels, cmap=cmap1, vmin=levels[0], vmax=0)
+        imn = m.contour(lon, lat, v_neg, transform=data_proj,
+                        levels=levels, cmap=cmap1, vmin=levels[0], vmax=0)
         v_pos = values.copy()
         v_pos[v_pos < 0] = 0
-        m.contour(lon, lat, v_pos, transform=data_proj,
-                  levels=levels, cmap=cmap2, vmin=0, vmax=levels[-1])
+        imp = m.contour(lon, lat, v_pos, transform=data_proj,
+                        levels=levels, cmap=cmap2, vmin=0, vmax=levels[-1])
+        return imn, imp
         
 def geo_contour_color(m, lon, lat, values, t_values, t_threshold, levels,
                       colors=["sienna","chocolate","green","lime"], linestyles=["solid","dashed","dashed","solid"],
@@ -148,29 +157,31 @@ def geo_contour_color(m, lon, lat, values, t_values, t_threshold, levels,
     v_neg[v_neg > 0] = 0
     cn = m.contour(lon, lat, v_neg, transform=data_proj,
                    levels=levels, colors=colors[i], linestyles=linestyles[i], linewidths=linewidths[i])
-    m.clabel(cn, colors=[colors[i]], manual=False, inline=True, fmt=fmt, fontsize=fontsize)
+    cnl = m.clabel(cn, colors=[colors[i]], manual=False, inline=True, fmt=fmt, fontsize=fontsize)
     # positive insignificant anomalies
     i = 2
     v_pos = values.copy()
     v_pos[v_pos < 0] = 0
     cp = m.contour(lon, lat, v_pos, transform=data_proj,
                    levels=levels, colors=colors[i], linestyles=linestyles[i], linewidths=linewidths[i])
-    m.clabel(cp, colors=[colors[i]], manual=False, inline=True, fmt=fmt, fontsize=fontsize)
+    cpl = m.clabel(cp, colors=[colors[i]], manual=False, inline=True, fmt=fmt, fontsize=fontsize)
     
     # negative significant anomalies
     i = 0
     v_neg = data_sig.copy()
     v_neg[v_neg > 0] = 0
-    cn = m.contour(lon, lat, v_neg, transform=data_proj,
-                   levels=levels, colors=colors[i], linestyles=linestyles[i], linewidths=linewidths[i])
+    cns = m.contour(lon, lat, v_neg, transform=data_proj,
+                    levels=levels, colors=colors[i], linestyles=linestyles[i], linewidths=linewidths[i])
     # m.clabel(cn, colors=[colors[i]], manual=False, inline=True, fmt=fmt, fontsize=fontsize)
     # positive significant anomalies
     i = 3
     v_pos = data_sig.copy()
     v_pos[v_pos < 0] = 0
-    cp = m.contour(lon, lat, v_pos, transform=data_proj,
-                   levels=levels, colors=colors[i], linestyles=linestyles[i], linewidths=linewidths[i])
+    cps = m.contour(lon, lat, v_pos, transform=data_proj,
+                    levels=levels, colors=colors[i], linestyles=linestyles[i], linewidths=linewidths[i])
     # m.clabel(cp, colors=[colors[i]], manual=False, inline=True, fmt=fmt, fontsize=fontsize)
+    
+    return cn, cnl, cp, cpl, cns, cps
         
 def PltMaxMinValue(m, lon, lat, values, colors=['red','blue']):
     '''
@@ -187,15 +198,15 @@ def PltMaxMinValue(m, lon, lat, values, colors=['red','blue']):
     # plot min value
     coordsmax = tuple(np.unravel_index(np.argmin(values, axis=None), values.shape))
     x, y = lon[coordsmax], lat[coordsmax]
-    txt = m.text(x, y, f"{np.min(values) :.0f}", transform=data_proj, color=colors[0])
-    txt.set_path_effects([PathEffects.withStroke(linewidth=2, foreground='w')])
+    txtn = m.text(x, y, f"{np.min(values) :.0f}", transform=data_proj, color=colors[0])
+    txtn.set_path_effects([PathEffects.withStroke(linewidth=2, foreground='w')])
     # plot max value
     coordsmax = tuple(np.unravel_index(np.argmax(values, axis=None), values.shape))
     x, y = lon[coordsmax], lat[coordsmax]
-    txt = plt.text(x, y, f"{np.max(values) :.0f}", transform=data_proj, color=colors[1])
-    txt.set_path_effects([PathEffects.withStroke(linewidth=2, foreground='w')])
+    txtp = plt.text(x, y, f"{np.max(values) :.0f}", transform=data_proj, color=colors[1])
+    txtp.set_path_effects([PathEffects.withStroke(linewidth=2, foreground='w')])
         
-        
+    return txtn, txtp
 
 def ShowArea(lon_mask, lat_mask, field_mask, coords=[-7,15,40,60], **kwargs):
     '''
@@ -249,3 +260,11 @@ def ShowArea(lon_mask, lat_mask, field_mask, coords=[-7,15,40,60], **kwargs):
                    s=500, alpha = .35, cmap='RdBu_r')
     plt.title(title)
     plt.colorbar(im)
+    
+    return fig, m
+
+
+###### animations #######
+def save_animation(ani, name, fps=1, progress_callback=lambda i, n: print(i), **kwargs):
+    writer = PillowWriter(fps=fps)
+    ani.save(name, writer=writer, progress_callback=progress_callback, **kwargs)
