@@ -2,10 +2,11 @@ import cartopy.crs as ccrs
 import cartopy.feature as cfeat
 from cartopy.util import add_cyclic_point as acp
 
-import numpy as np
-
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as PathEffects
+
+import numpy as np
+import warnings
 
 import ERA_Fields as ef
 
@@ -30,7 +31,7 @@ def Greenwich(*args):
     args[0][...,-1] = 360 # fix the longitude
     return args
 
-def draw_map(m, resolution='low', **kwargs):
+def draw_map(m, background='stock_img', **kwargs):
     '''
     Plots a background map using cartopy.
     Additional arguments are passed to the cartopy function gridlines
@@ -44,14 +45,16 @@ def draw_map(m, resolution='low', **kwargs):
     if 'draw_labels' not in kwargs:
         kwargs['draw_labels'] = True
 
-    if resolution == 'low':
+    if background == 'stock_img':
         m.stock_img()
-    elif resolution == 'high':
+    elif background == 'land-sea':
         m.add_feature(cfeat.LAND)
         m.add_feature(cfeat.OCEAN)
         m.add_feature(cfeat.LAKES)
     else:
-        raise ValueError(f'Unknown value {resolution = }')
+        if background != 'coastlines':
+            warning.warn(f"Unrecognized option {background = }, using 'coastlines' instead")
+        m.coastlines()
     m.gridlines(**kwargs)
     
 def geo_contourf(m, lon, lat, values, levels=None, cmap='RdBu_r', title=None, put_colorbar=True):
@@ -194,34 +197,39 @@ def PltMaxMinValue(m, lon, lat, values, colors=['red','blue']):
         
         
 
-def ShowArea(lon_mask, lat_mask, area_mask, coords=[-7,15,40,60], **kwargs):
+def ShowArea(lon_mask, lat_mask, field_mask, coords=[-7,15,40,60], **kwargs):
     '''
-    Shows the grid points, colored with respect to the area of the cell
+    Shows the grid points, colored with respect to a given field, for instance the area of the cell
     
     Parameters:
     ----------- 
         lon_mask: 2D array of longitude grid points
         lat_mask: 2D array of same shape as lon_mask with the latitudes
-        area_mask: 2D array of same shape as lon_mask with the area of the grid cells
+        field_mask: 2D field (e.g. area of the grid cells) array of same shape as lon_mask
         coords: limits of the plot in the format [min_lon, max_lon, min_lat, max_lat]
 
         **kwargs:
             projection: default ccrs.PlateCarree()
+            background: 'coastlines' (default), 'stock_img' or 'land-sea'
             figsize: default (15,15)
             draw_labels: whether to show lat and lon labels, default True
             show_grid: whether to display the grid connecting data points, default True
+            title: default 'Area of a grid cell'
     '''
     # extract additional arguments
     projection = kwargs.pop('projection', ccrs.PlateCarree())
+    background = kwargs.pop('background', 'coastlines')
     figsize = kwargs.pop('figsize', (15,15))
     draw_labels = kwargs.pop('draw_labels', True)
     show_grid = kwargs.pop('show_grid', True)
+    title = kwargs.pop('title', 'Area of a grid cell')
     
     fig = plt.figure(figsize=figsize)
     m = plt.axes(projection=projection)
     m.set_extent(coords, crs=ccrs.PlateCarree())
-    m.coastlines()
-    m.gridlines(draw_labels=draw_labels)
+    
+    draw_map(m, background, draw_labels=draw_labels)
+    
     if show_grid:
         # make longitude monotonically increasing
         _lon_mask = lon_mask.copy()
@@ -232,12 +240,12 @@ def ShowArea(lon_mask, lat_mask, area_mask, coords=[-7,15,40,60], **kwargs):
                 break
         if modify:
             _lon_mask[:,:i+1] -= 360
-        print(_lon_mask)
+        # print(_lon_mask)
         
         m.pcolormesh(_lon_mask, lat_mask, np.ones_like(lon_mask), transform=data_proj,
-                     alpha=0.5, cmap='Greys', edgecolors='grey')
+                     alpha=0.35, cmap='Greys', edgecolors='grey')
     
-    im = m.scatter(lon_mask, lat_mask, c=area_mask, transform=data_proj,
+    im = m.scatter(lon_mask, lat_mask, c=field_mask, transform=data_proj,
                    s=500, alpha = .35, cmap='RdBu_r')
-    plt.title("Area of a grid cell")
+    plt.title(title)
     plt.colorbar(im)

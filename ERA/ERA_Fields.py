@@ -851,7 +851,7 @@ def a_decrese(in_A_max, in_Ti, in_year_a):
     return D_sorted
 
 
-def draw_map(m, scale=0.2, resolution='low', **kwargs):
+def draw_map(m, scale=0.2, background='stock_img', **kwargs):
     '''
     Plots a background map.
     
@@ -859,10 +859,8 @@ def draw_map(m, scale=0.2, resolution='low', **kwargs):
     
     If plotting with cartopy `scale` is ignored
     '''
-    if resolution == 'high':
-        scale = 1
     if plotter == 'cartopy':
-        return cplt.draw_map(m, resolution, **kwargs)
+        return cplt.draw_map(m, background, **kwargs)
     # draw a shaded-relief image
     m.shadedrelief(scale=scale)
     
