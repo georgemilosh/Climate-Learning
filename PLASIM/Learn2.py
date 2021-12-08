@@ -18,6 +18,7 @@ from imblearn.pipeline import Pipeline
 from operator import mul
 from functools import reduce
 
+########## NEURAL NETWORK DEFINITION ###########
 
 def custom_CNN(model_input_dim): # This CNN I took from https://www.tensorflow.org/tutorials/images/cnn
     model = models.Sequential()
@@ -51,16 +52,18 @@ def probability_model(inputs,input_model): # This function is used to apply soft
     return keras.Model(inputs, outputs)
 
 
+
+########## DATA PREPROCESSING ##############
+
 def PrepareData(creation = None):  # if we do not specify creation it automacially creates new folder. If we specify the creation, it should correspond to the folder we are running the file from
 
     sampling='' #'3hrs' # This chooses whether we want say daily sampling or 3 hour one. Notice that the corresponding NetCDF files are kept in different places
     percent = 1 # 5  # Percent of the anomalies that will be treated as heat waves 
 
     timesperday = 8 # 3 hour long periods in case we choose this sampling
+    T = 14
     if sampling == '3hrs':
-        T = 14*timesperday
-    else:
-        T = 14
+        T *= timesperday
 
     tau = 0 #-5  # lag
     usepipelines = False # This variable used to have the following meaning: if True => Dataset.from_tensor_slices will be used. This is a more advanced method but it takes more RAM and there is a possiblity for memory leaks when repeating training for cross-validation. Now it is used to pass extra parameters from the function PrepareData()
@@ -92,21 +95,21 @@ def PrepareData(creation = None):  # if we do not specify creation it automacial
         NUM_EPOCHS = 10
     else:
         NUM_EPOCHS = 40 #1000 #20 #200 #50 # number of epochs the training involves
-    saveweightseveryblaepoch = 1 # If set to 0 the model will not save weights as it is being trained, otherwise this number will tell us how many epochs it weights until saving
+    saveweightseveryblaepoch = 1 # If set to 0 the model will not save weights as it is being trained, otherwise this number will tell us how many epochs it waits until saving
     if saveweightseveryblaepoch > 0:
         ckpt = 'ckpt'
     else:
         cktp = ''
     
 
-    checkpoint_name_root = myscratch+'training/stack_CNN_equalmixed_'+ckpt+'_'+thefield+'France_'+'_with_zg500_t2mmrsoFrance_'+sampling+'_22by128_u'+str(undersampling_factor)+'o'+str(oversampling_factor)+'_LONG'+str(num_years)+'yrs_'+'_per_'+str(percent)+'_tau_'
+    checkpoint_name_root = f'{myscratch}training/stack_CNN_equalmixed_{ckpt}_{thefield}France__with_zg500_t2mmrsoFrance_{sampling}_22by128_u{undersampling_factor}o{oversampling_factor}_LONG{num_years}yrs__per_{percent}_tau_'
     checkpoint_name = checkpoint_name_root+str(tau) # current filename, we also need filename of the previous tau for transfer learning (previous tau is obtained by adding to tau an integer)
     checkpoint_name_previous = checkpoint_name_root+str(tau+5) # THIS HAS TO BE CHANGED IF THE STEP IN TAU IS DIFFERENT!!
 
     print("creation = ", creation)
     if creation == None: # If we are not running from the same directory (in other words, if we are running for the first time). Otherwise nothing needs to be copied. We just need to follow the same procedures to load the data as were done when the model was trained. Basically the parameter is not None (I choose the folder itself as a parameter always) if we need to load the model and the corresponding data to run some tests or make plots) The alrnative is to load the data by hand but then spatial care has to be made that the same operations are performed to the data, as the ones that were performed when the model was trained. 
         if os.path.exists(checkpoint_name): # Create the directory
-            print('folder '+checkpoint_name+' exists. Should I overwrite?')
+            print(f'folder {checkpoint_name} exists. Should I overwrite?')
             if input(" write Y to overwrite, else the execution will stop: ") != "Y":
                 sys.exit("User has aborted the program")
         else:
@@ -136,11 +139,10 @@ def PrepareData(creation = None):  # if we do not specify creation it automacial
 
 
     print([percent, T, Model, area, undersampling_factor, lat_from, lat_to, lon_from, lon_to, thefield])
-
+    
+    Months1 = [0, 0, 0, 0, 0, 0, 30, 30, 30, 30, 30, 0, 0, 0] # number of days per month with two leading 0s so that index 5 corresponds to May
     if sampling == '3hrs': # The dataset will be large
-        Months1 = [0, 0, 0, 0, 0, 0, timesperday*30, timesperday*30, timesperday*30, timesperday*30, timesperday*30, 0, 0, 0]
-    else: # if sampling == 'daily'
-        Months1 = [0, 0, 0, 0, 0, 0, 30, 30, 30, 30, 30, 0, 0, 0] 
+        Months1 = list(np.array(Months1)*timesperday)
     Tot_Mon1 = list(itertools.accumulate(Months1))
 
     time_start = Tot_Mon1[6]
@@ -300,13 +302,17 @@ def PrepareData(creation = None):  # if we do not specify creation it automacial
                                 
     return X, list_extremes, thefield, sampling, percent, usepipelines, undersampling_factor, new_mixing,  saveweightseveryblaepoch, NUM_EPOCHS, BATCH_SIZE, checkpoint_name, fullmetrics
 
+
+
+######## TRAIN THE NETWORK #########
+
 if __name__ == '__main__':
     print("====== running Learn.py ====== ")  
-    print("tf.__version__ = ",tf.__version__)
+    print(f"{tf.__version__ = }")
     if int(tf.__version__[0]) < 2:
-        print("tf.test.is_gpu_available() = ", tf.test.is_gpu_available())
+        print(f"{tf.test.is_gpu_available() = }")
     else:
-        print("tf.config.list_physical_devices('GPU') = ", tf.config.list_physical_devices('GPU'))
+        print(f"{tf.config.list_physical_devices('GPU') = }")
 
     start = time.time()
 
