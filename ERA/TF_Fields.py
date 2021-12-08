@@ -95,7 +95,7 @@ class CustomLoss(tf.keras.metrics.Metric):
 
   def update_state(self, y_true, y_pred, sample_weight=None):
     #_ = self.m.update_state(tf.cast(y_true, 'int32'), y_pred)
-    _ = self.m.update_state(y_true, y_pred+self.r)
+    _ = self.m.update_state(y_true, y_pred+self.r) # the idea is to add the weight factor inside the logit so that we effectively change the probabilities
     self.my_metric.assign(self.m.result())
     
   def result(self):
