@@ -84,13 +84,23 @@ setup_plotter()
 
 
 # Definition des fonctions
-def significative_data(Data, Data_t_value, T_value, both, default_value=0): # CHANGE THIS FOR TEMPERATURE SO THAT THE OLD ROUTINE IS USED
+def significative_data(Data, Data_t_value=None, T_value=None, both=False, default_value=0): # CHANGE THIS FOR TEMPERATURE SO THAT THE OLD ROUTINE IS USED
     '''
     Filters `Data` depending whether `Data_t_value` exceeds a threshold `T_value`
     
-    Data that fail the filter conditions are set to `default_value`
+    Data that fail the filter conditions are set to `default_value`.
+    If `Data_t_value` or `T_value` are None, all of `Data` is considered significant
     '''
+    
     data = np.array(Data)
+    
+    if Data_t_value is None or T_value is None:
+        warnings.warn('Assuming all data are significant')
+        if both:
+            return data, np.ones_like(data)*default_value, np.product(data.shape)
+        else:
+            return data, np.product(data.shape)
+        
     data_t_value = np.array(Data_t_value)
     if data.shape != data_t_value.shape:
         raise ValueError('Shape mismatch')
@@ -150,7 +160,7 @@ def animate(i, m, Center_map, Nb_frame, Lon, Lat, T_value, data_colorbar_value, 
     Plots at day `i` the contourf of the sigificant temperature and contour of the geopotential separating significant and non significant anomalies
     '''
     if plotter == 'cartopy':
-        raise NotImplementedError("Sorry, we're still working on that")
+        raise NotImplementedError("Use cartopy_plots.animate")
     fmt = '%1.0f'
     temp_sign, ts_taken = significative_data(data_colorbar_value[i], data_colorbar_t[i], T_value, False)
     zg_sign, zg_not, zg_taken = significative_data2(data_contour_value[i], data_contour_t[i], T_value, True)
@@ -619,7 +629,7 @@ def PltMaxMinValue(m,Lon, Lat, data_contour_value):
 def anomaly_animate(m, ax, Center_map, Lon, Lat, data_colorbar_value, data_colorbar_level,
             data_contour_value, data_contour_level, colmap, title_frame):
     if plotter == 'cartopy':
-        raise NotImplementedError("Sorry, we're still working on that")
+        raise NotImplementedError("Use cartopy_plots.animate")
     fmt = '%1.0f'
     plt.cla()
     m.contourf(Lon, Lat, data_colorbar_value, levels=data_colorbar_level, cmap=colmap, extend='both', latlon=True)
@@ -649,7 +659,7 @@ def anomaly_animate(m, ax, Center_map, Lon, Lat, data_colorbar_value, data_color
 def absolute_animate(i, m, ax, Center_map, Nb_frame, Lon, Lat, data_colorbar_value, data_colorbar_level,
             data_contour_value, data_contour_level, colmap, title_frame):
     if plotter == 'cartopy':
-        raise NotImplementedError("Sorry, we're still working on that")
+        raise NotImplementedError("Use cartopy_plots.animate")
     fmt = '%1.0f'
     print('i:', i)
     plt.cla()
@@ -683,7 +693,7 @@ def absolute_animate(i, m, ax, Center_map, Nb_frame, Lon, Lat, data_colorbar_val
 def anomaly_absolute_animate(m, ax, Center_map, Lon, Lat, data_colorbar_value, data_colorbar_level,
             data_contour_value, data_contour_level, colmap, title_frame):
     if plotter == 'cartopy':
-        raise NotImplementedError("Sorry, we're still working on that")
+        raise NotImplementedError("Use cartopy_plots.animate")
     fmt = '%1.0f'
     plt.cla()
     m.contourf(Lon, Lat, data_colorbar_value, levels=data_colorbar_level, cmap=colmap, extend='both', latlon=True)
