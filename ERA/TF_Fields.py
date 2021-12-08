@@ -5,13 +5,127 @@ import tensorflow as tf
 #tf.compat.v1.enable_eager_execution()
 from tensorflow import keras
 from tensorflow.keras import regularizers
-from tensorflow.keras.layers import Dense, Activation, Flatten, Conv2D, SeparableConv2D, MaxPooling2D, BatchNormalization, Dropout, SpatialDropout2D, Input, concatenate, Softmax, Reshape, Add # Vallerian's approach
+from tensorflow.keras.layers import Dense, Activation, Flatten, Conv2D, SeparableConv2D, MaxPooling2D, BatchNormalization, Dropout, SpatialDropout2D, Input, concatenate, Softmax, Reshape, Add, Conv2DTranspose, LeakyReLU # Vallerian's approach
 from tensorflow.keras.models import Sequential, Model
 from tensorflow.keras import datasets, layers, models # from https://www.tensorflow.org/tutorials/images/cnn
+from tensorflow.keras import backend as K
 
+class Sampling(tf.keras.layers.Layer):  # Normal distribution sampling for the encoder output of the variational autoencoder
+    """Uses (z_mean, z_log_var) to sample z, the vector encoding a digit."""
 
-
+    def call(self, inputs):
+        z_mean, z_log_var = inputs
+        batch = tf.shape(z_mean)[0]
+        dim = tf.shape(z_mean)[1]
+        epsilon = tf.keras.backend.random_normal(shape=(batch, dim))
+        return z_mean + tf.exp(0.5 * z_log_var) * epsilon
     
+class VAE(tf.keras.Model): # Class of variational autoencoder
+    def __init__(self, encoder, decoder, k1=1, k2=1, **kwargs):
+        super(VAE, self).__init__(**kwargs)
+        self.encoder = encoder
+        self.decoder = decoder
+        self.k1 = k1
+        self.k2 = k2
+        self.total_loss_tracker = tf.keras.metrics.Mean(name="total_loss")
+        self.reconstruction_loss_tracker = tf.keras.metrics.Mean(
+            name="reconstruction_loss"
+        )
+        self.kl_loss_tracker = tf.keras.metrics.Mean(name="kl_loss")
+
+    @property
+    def metrics(self):
+        return [
+            self.total_loss_tracker,
+            self.reconstruction_loss_tracker,
+            self.kl_loss_tracker,
+        ]
+    def call(self, inputs):
+        _, _, z =  self.encoder(inputs)
+        return self.decoder(z)
+
+    def train_step(self, data):
+        with tf.GradientTape() as tape:
+            z_mean, z_log_var, z = self.encoder(data)
+            reconstruction = self.decoder(z)
+            reconstruction_loss = self.k1*tf.reduce_mean(
+                tf.reduce_sum(
+                    tf.keras.losses.binary_crossentropy(data, reconstruction), axis=(1, 2)
+                )
+            )
+            kl_loss = -0.5 * (1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var))
+            kl_loss = self.k2*tf.reduce_mean(tf.reduce_sum(kl_loss, axis=1))
+            total_loss = reconstruction_loss + kl_loss
+        grads = tape.gradient(total_loss, self.trainable_weights)
+        self.optimizer.apply_gradients(zip(grads, self.trainable_weights))
+        self.total_loss_tracker.update_state(total_loss)
+        self.reconstruction_loss_tracker.update_state(reconstruction_loss)
+        self.kl_loss_tracker.update_state(kl_loss)
+        return {
+            "loss": self.total_loss_tracker.result(),
+            "reconstruction_loss": self.reconstruction_loss_tracker.result(),
+            "kl_loss": self.kl_loss_tracker.result(),
+        }
+    
+def build_encoder(input_dim, output_dim, conv_filters, conv_kernel_size, conv_strides, conv_padding, use_batch_norm = False, use_dropout = False):
+    # Number of Conv layers
+    n_layers = len(conv_filters)
+    encoder_inputs = tf.keras.Input(shape=input_dim, name ='encoder input')
+    x = encoder_inputs
+    # Add convolutional layers
+    for i in range(n_layers):
+        print(i)
+        x = Conv2D(filters = conv_filters[i], 
+                kernel_size = conv_kernel_size[i],
+                strides = conv_strides[i], 
+                padding = conv_padding[i],
+                name = 'encoder_conv_' + str(i))(x)
+
+        if use_batch_norm:
+            x = BatchNormalization()(x)
+
+        x = LeakyReLU()(x)
+
+        if use_dropout:
+            x = Dropout(rate=0.25)(x)
+
+    shape_before_flattening = K.int_shape(x)[1:] 
+    print("shape_before_flattening = ", shape_before_flattening)
+    x = tf.keras.layers.Flatten()(x)
+    z_mean = tf.keras.layers.Dense(output_dim, name="z_mean")(x)
+    z_log_var = tf.keras.layers.Dense(output_dim, name="z_log_var")(x)
+    z = Sampling()([z_mean, z_log_var])
+    encoder_outputs = [z_mean, z_log_var, z]
+    encoder = tf.keras.Model(encoder_inputs, encoder_outputs, name="encoder")
+    encoder.summary()
+    return encoder_inputs, encoder_outputs,  shape_before_flattening, encoder
+
+def build_decoder(input_dim, shape_before_flattening, conv_filters, conv_kernel_size, 
+                          conv_strides,conv_padding):
+    # Number of Conv layers
+    n_layers = len(conv_filters)
+    decoder_inputs = tf.keras.Input(shape=input_dim)
+    
+    x = tf.keras.layers.Dense(tf.math.reduce_prod(shape_before_flattening), activation="relu")(decoder_inputs)
+    x = tf.keras.layers.Reshape(shape_before_flattening)(x)
+
+    # Add convolutional layers
+    for i in range(n_layers):
+        x = Conv2DTranspose(filters = conv_filters[i], 
+                            kernel_size = conv_kernel_size[i],
+                            strides = conv_strides[i], 
+                            padding = conv_padding[i],
+                            name = 'decoder_conv_' + str(i))(x)
+        # Adding a sigmoid layer at the end to restrict the outputs 
+        # between 0 and 1
+        if i < n_layers - 1:
+            x = LeakyReLU()(x)
+        else:
+            x = Activation('sigmoid')(x)
+    decoder_outputs = x
+    decoder = tf.keras.Model(decoder_inputs, decoder_outputs, name="decoder")
+
+    return decoder_inputs, decoder_outputs, decoder   
     
 class MCCMetric(tf.keras.metrics.Metric): # This function is designed to produce confusion matrix during training each epoch
     """

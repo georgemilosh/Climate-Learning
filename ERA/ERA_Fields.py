@@ -1234,6 +1234,8 @@ class Plasim_Field:
             print("self.time.shape = ",self.time.shape)
             print(np.min(np.diff(self.time))," < np.diff(self.time) < ",np.max(np.diff(self.time)))
             dataset.close()
+            
+            
         
     def load_month(self, folder,century,year,month):   # Load individual months CAREFUL: parameters are defined from 1 to 12 not from 0 to 11!!!
         nb_zeros_m = 2-len(str(month))  #we need to adjust the name of the file we are addressing
