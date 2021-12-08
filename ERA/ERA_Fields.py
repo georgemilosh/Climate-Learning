@@ -1318,7 +1318,7 @@ class Plasim_Field:
         if num_years is None: #or self.years == []: # as it stands it is not working right now, only modify when you start working with machine learning routines
             num_years = self.years
         #print(type(containing_folder),type(self.sampling), type(self.Model))
-        print(containing_folder)
+        print("containing_folder = ", containing_folder, " , self.sampling = ", self.sampling, " , self.Model = ", self.Model)
         filename = containing_folder+'/PreMixing_'+self.sampling+'_'+self.Model+'.npy'
         if ((new_mixing) or (not os.path.exists(filename))): # if we order new mixing or the mixing file doesn't exist
             mixing = np.random.permutation(self.var.shape[0])
