@@ -303,7 +303,7 @@ def save_animation(ani, name, fps=1, progress_callback=lambda i, n: print(f'\b\b
     writer = PillowWriter(fps=fps)
     ani.save(name, writer=writer, progress_callback=progress_callback, **kwargs)
     
-def animate(tau, lon, lat, temp, zg, temp_t_values=None, zg_t_values=None, t_threshold=None,
+def animate(tau, lon, lat, temp=None, zg=None, temp_t_values=None, zg_t_values=None, t_threshold=None,
             temp_levels=None, zg_levels=None, frame_title='', greenwich=False, masker=None, weight_mask=None, **kwargs):
     '''
     Returns an animation of temperature and geopotential profiles. It is also possible to have a side plot with the evolution of the temperature in a given region.
@@ -313,8 +313,8 @@ def animate(tau, lon, lat, temp, zg, temp_t_values=None, zg_t_values=None, t_thr
         tau: 1D array with the days
         lon: 2D longitude array
         lat: 2D latitude array
-        temp: 3D temperature array (with shape (len(tau), *lon.shape))
-        zg: 3D geopotential array
+        temp: 3D temperature array (with shape (len(tau), *lon.shape)) that will be plotted as a contourf. If not provided it isn't plotted
+        zg: 3D geopotential array with the same shape as `temp` wich will be plotted as a contour. If not provided it isn't plotted
         
         temp_t_values: 3D array of the significance of the temperature. Optional, if not provided all temperature data are considered significant
         zg_t_values: 3D array of the significance of the geopotential. Optional, if not provided all geopotential data are considered significant
@@ -376,21 +376,25 @@ def animate(tau, lon, lat, temp, zg, temp_t_values=None, zg_t_values=None, t_thr
     fig = plt.figure(figsize=figsize)
     m = fig.add_subplot(1,nrows,1,projection=projection)
     m.set_extent(extent, crs=data_proj)
-    geo_contourf(m, lon, lat, temp[0], levels=temp_levels, cmap=temp_cmap, put_colorbar=True, draw_coastlines=False, draw_gridlines=False, greenwich=greenwich)
+    if temp is not None:
+        geo_contourf(m, lon, lat, temp[0], levels=temp_levels, cmap=temp_cmap, put_colorbar=True, draw_coastlines=False, draw_gridlines=False, greenwich=greenwich)
     
     if masker is not None:
+        # create side plot
         ax = fig.add_subplot(1,2,2)
         ax.set_xlabel('day')
         ax.set_ylabel('temperature')
         ax.set_xlim(tau[0], tau[-1])
         
+        # draw thresholds
         ax.hlines([0], *ax.get_xlim(), linestyle='dashed', color='grey')
         if temp_threshold is not None:
             ax.hlines([temp_threshold], *ax.get_xlim(), linestyle='solid', color='red')
         
+        # compute mask
         lon_mask = masker(lon)
         lat_mask = masker(lat)
-        
+        # make the lengitude monotonically increasing
         _lon_mask = lon_mask.copy()
         modify = False
         for i in range(lon_mask.shape[1] - 1):
@@ -399,7 +403,8 @@ def animate(tau, lon, lat, temp, zg, temp_t_values=None, zg_t_values=None, t_thr
                 break
         if modify:
             _lon_mask[:,:i+1] -= 360
-            
+        
+        # This way we plot always just the last two points
         temp_ints = deque(maxlen=2)
         days = deque(maxlen=2)
     
@@ -408,20 +413,23 @@ def animate(tau, lon, lat, temp, zg, temp_t_values=None, zg_t_values=None, t_thr
         m.coastlines()
         m.gridlines(draw_labels=draw_grid_labels)
         # plot significant temperature
-        geo_contourf(m, lon, lat, temp_sign[i], levels=temp_levels, put_colorbar=False,
-                          draw_coastlines=False, draw_gridlines=False, greenwich=greenwich)
+        if temp_sign is not None:
+            geo_contourf(m, lon, lat, temp_sign[i], levels=temp_levels, put_colorbar=False,
+                         draw_coastlines=False, draw_gridlines=False, greenwich=greenwich)
         # plot geopotential
-        geo_contour_color(m, lon, lat, zg[i], zg_t_values[i], t_threshold, levels=zg_levels,
-                          colors=zg_colors, linestyles=zg_linestyles, linewidths=zg_linewidths,
-                          draw_contour_labels=draw_zg_labels, fmt=zg_label_fmt, fontsize=zg_label_fontsize,
-                          greenwich=greenwich)
-        # plot max and min values of the geopotential
-        PltMaxMinValue(m, lon, lat, zg[i])
-        m.set_title(f'{frame_title} day {tau[i]}')
+        if zg is not None:
+            geo_contour_color(m, lon, lat, zg[i], zg_t_values[i], t_threshold, levels=zg_levels,
+                              colors=zg_colors, linestyles=zg_linestyles, linewidths=zg_linewidths,
+                              draw_contour_labels=draw_zg_labels, fmt=zg_label_fmt, fontsize=zg_label_fontsize,
+                              greenwich=greenwich)
+            # plot max and min values of the geopotential
+            PltMaxMinValue(m, lon, lat, zg[i])
+            m.set_title(f'{frame_title} day {tau[i]}')
         
+        # plot mask over the region of interest
         if masker is not None:
             m.pcolormesh(_lon_mask, lat_mask, np.ones_like(lon_mask), transform=data_proj, alpha=0.35, cmap='Greys', edgecolors='grey')
-            
+            # plot temperature on the side plot
             temp_ints.append(np.sum(masker(temp[i])*weight_mask))
             days.append(tau[i])
             ax.plot(days, temp_ints, color='black')

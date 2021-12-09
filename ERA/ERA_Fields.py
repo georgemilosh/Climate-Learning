@@ -91,6 +91,11 @@ def significative_data(Data, Data_t_value=None, T_value=None, both=False, defaul
     Data that fail the filter conditions are set to `default_value`.
     If `Data_t_value` or `T_value` are None, all of `Data` is considered significant
     '''
+    if Data is None:
+        if both:
+            return None, 0, 0
+        else:
+            return None, 0
     
     data = np.array(Data)
     
