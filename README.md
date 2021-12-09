@@ -10,9 +10,12 @@ The functions and classes we define can be used for estimation of heat wave occu
 
 ## Machine Learning
 We use neural networks to compute committor functions
-```
-import tensorflow as tf
-```
+
 
 ## Rare event algorithm
 
+## User guide
+
+```
+import tensorflow as tf
+```
