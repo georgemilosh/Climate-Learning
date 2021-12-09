@@ -1226,7 +1226,7 @@ class Plasim_Field:
             
         else:
             dataset = Dataset(folder+self.filename+'.nc')
-            self.time = np.asarray(dataset.variables['time'][:]).reshape(self.years,-1)
+            self.time = np.asarray(dataset.variables['time']).reshape(self.years,-1)
             print('Loaded time array')
             if (self.name == 'zg') or (self.name == 'ua') or (self.name == 'va'): # we need to take out dimension that is useless (created by extracting a level)
                 self.var = np.asarray(dataset.variables[self.name][:,0,self.lat_start:self.lat_end,self.lon_start:self.lon_end],  dtype=self.np_precision)
@@ -1593,12 +1593,12 @@ def ExtractAreaWithMask(mylocal,Model,area): # extract land sea mask and multipl
     dataset = Dataset(mylocal+'Data_Plasim_inter/CONTROL_gparea.nc')
     cell_area = dataset.variables["cell_area"][:]
     dataset.close()
-    mask_ocean = np.array(lsm)
-    mask_area = np.array(create_mask(Model,area, lsm))
+    # mask_ocean = np.array(lsm) # unused
+    # mask_area = np.array(create_mask(Model,area, lsm)) # unused
 
 
     mask = create_mask(Model,area,cell_area)*create_mask(Model,area,lsm)
-    mask = mask/np.sum(np.sum(mask))  # Here I combine both grid-point area times the mask into a normalized mask
+    mask = mask/np.sum(mask)  # Here I combine both grid-point area times the mask into a normalized mask
     return mask, cell_area, lsm
 
 def TryLocalSource(mylocal):

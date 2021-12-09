@@ -138,7 +138,7 @@ def PrepareData(creation = None):  # if we do not specify creation it automacial
     lon_to =    [128, 64]
 
 
-    print([percent, T, Model, area, undersampling_factor, lat_from, lat_to, lon_from, lon_to, thefield])
+    print(f'{percent = }, {T = }, {Model = }, {area = }, {undersampling_factor = }, {lat_from = }, {lat_to = }, {lon_from = }, {lon_to = }, {thefield = }')
     
     Months1 = [0, 0, 0, 0, 0, 0, 30, 30, 30, 30, 30, 0, 0, 0] # number of days per month with two leading 0s so that index 5 corresponds to May
     if sampling == '3hrs': # The dataset will be large
@@ -155,13 +155,11 @@ def PrepareData(creation = None):  # if we do not specify creation it automacial
         prefix = 'ANO_LONG_'
         file_prefix = ''
 
-    t2m = Plasim_Field('tas',prefix+'tas','Temperature', Model, lat_start, lat_end, lon_start, lon_end,'single',sampling)
-    zg500 = Plasim_Field('zg',prefix+'zg500','500 mbar Geopotential', Model, lat_start, lat_end, lon_start, lon_end,'single',sampling)
-    mrso = Plasim_Field('mrso',prefix+'mrso','soil moisture', Model, lat_start, lat_end, lon_start, lon_end,'single',sampling)
+    t2m = Plasim_Field('tas',prefix+'tas','Temperature', Model, lat_start, lat_end, lon_start, lon_end,'single',sampling, myprecision='single', years=8000)
+    zg500 = Plasim_Field('zg',prefix+'zg500','500 mbar Geopotential', Model, lat_start, lat_end, lon_start, lon_end,'single',sampling, myprecision='single', years=8000)
+    mrso = Plasim_Field('mrso',prefix+'mrso','soil moisture', Model, lat_start, lat_end, lon_start, lon_end,'single',sampling, myprecision='single', years=8000)
     
-    t2m.years=8000
-    zg500.years=8000
-    mrso.years=8000
+    
     
     t2m.load_field(mylocal+file_prefix+'Data_Plasim_LONG/')  # load the data
     zg500.load_field(mylocal+file_prefix+'Data_Plasim_LONG/')
@@ -169,7 +167,7 @@ def PrepareData(creation = None):  # if we do not specify creation it automacial
     
     LON = t2m.LON
     LAT = t2m.LAT
-    print(t2m.var.dtype,t2m.var.dtype,t2m.var.dtype)
+    print(t2m.var.dtype,zg500.var.dtype,mrso.var.dtype)
 
     mask, cell_area, lsm = ExtractAreaWithMask(mylocal,Model,area) # extract land sea mask and multiply it by cell area
     print(mask)
@@ -187,10 +185,11 @@ def PrepareData(creation = None):  # if we do not specify creation it automacial
     filter_lon_to =  [128, 3] 
 
     for myiter in range(len(filter_lat_from)): # seting values to 1 in the desired domain
-            filter_mask[filter_lat_from[myiter]:filter_lat_to[myiter],filter_lon_from[myiter]:filter_lon_to[myiter]] = 1
+        filter_mask[filter_lat_from[myiter]:filter_lat_to[myiter],filter_lon_from[myiter]:filter_lon_to[myiter]] = 1
                 
     mrso.var = mrso.var*filter_mask # applying the filter to set to zero all values outside the domain
     # ==== Premixing =====
+    print('==== PreMixing ====')
     if creation == None: # If we are not running from the same directory
         filename_mixing = t2m.PreMixing(new_mixing, 'PostprocLONG',num_years)  # perform mixing (mix batches and years but not days of the same year!)  # NEW MIXING MEANS ALSO NEW UNDERSAMPLING!
         shutil.copy(filename_mixing, checkpoint_name) # move the permutation file that was used to mix 
@@ -200,13 +199,14 @@ def PrepareData(creation = None):  # if we do not specify creation it automacial
         filename_mixing = t2m.PreMixing(new_mixing,creation,num_years) # load from the folder that we are calling this file from   # NEW MIXING MEANS ALSO NEW UNDERSAMPLING!
         zg500.PreMixing(False,creation,num_years) # IT IS IMPORTANT THAT ALL SUBSEQUENT FIELDS BE MIXED (SHUFFLED) THE SAME WAY, otherwise no synchronization!
         mrso.PreMixing(False,creation,num_years)
-    print("t2m.var.shape = ", t2m.var.shape)
-    print("time_end = ", time_end, " ,time_start = ", time_start, " ,T = ", T)
+    print(f"{t2m.var.shape = }")
+    print(f"{time_end = } ,{time_start = } ,{T = }")
     
     A, A_reshape, threshold, list_extremes, convseq =  t2m.ComputeTimeAverage(time_start,time_end,T,tau, percent)
-    print("threshold = ",threshold)
+    print(f"{threshold = }")
     # ==== Equal mixing =====
     #   it ensures that there is equal number of heatwaves (or nearly equal) per what we call batch (century if we are dealing with 1000 years of data). This way the skill fluctuates less per ``batch''. This is not the same definition of batch we find in machine learning!
+    print('==== EqualMixing ====')
     if creation == None: # If we are not running from the same directory
         filename_mixing = t2m.EqualMixing(A, threshold, new_mixing, 'PostprocLONG',num_years)
         shutil.copy(filename_mixing, checkpoint_name) # move the permutation file that was used to mix 
@@ -220,13 +220,13 @@ def PrepareData(creation = None):  # if we do not specify creation it automacial
     
     A, A_reshape, threshold, list_extremes, convseq =  t2m.ComputeTimeAverage(time_start,time_end,T,tau, percent)
     
-    print("threshold = ",threshold)
+    print(f"{threshold = }")
     print(A.dtype)
     
     # ==== Just to be safe temperature filter is applied after the computation of A(t)
     t2m.var = t2m.var*filter_mask # applying the filter to set to zero all values outside the domain
 
-    # Below we reshape into time by flattened array, these are only need if we require them for training the network
+    # Below we reshape into time by flattened array, these are only needed if we require them for training the network
     t2m.abs_area_int_reshape = t2m.ReshapeInto1Dseries(area, mask, Tot_Mon1[6], Tot_Mon1[9], T, tau)
     mrso.abs_area_int_reshape = mrso.ReshapeInto1Dseries(area, mask, Tot_Mon1[6], Tot_Mon1[9], T, tau)
     print("mrso.abs_area_int_reshape.shape = ", mrso.abs_area_int_reshape.shape)
