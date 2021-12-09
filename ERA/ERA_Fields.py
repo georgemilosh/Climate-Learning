@@ -1191,7 +1191,7 @@ class Field:
     
 class Plasim_Field:
     def __init__(self, name, filename, label, Model, lat_start=0, lat_end=241, lon_start=0, lon_end=480,
-                 myprecision='double', mysampling=''):
+                 myprecision='double', mysampling='', years=1000):
         self.name = name    # Name inside the .nc file
         self.filename = filename # Name of the .nc file 
         self.label = label  # Label to be displayed on the graph
@@ -1201,7 +1201,7 @@ class Plasim_Field:
         self.lon_start = lon_start
         self.lon_end = lon_end
         self.Model = Model
-        self.years = 1000
+        self.years = years
         self.sampling = mysampling # This string is used to distinguish daily vs 3 hr sampling, which is going to be important when we compute area integrals. The idea is that if we have already computed daily we must change the name for the new 3 hrs sampling file, otherwise the daily file will be loaded (see the routine Set_area_integral)
         if myprecision == 'double':
             self.np_precision = np.float64
@@ -1211,9 +1211,10 @@ class Plasim_Field:
             self.np_precision_complex = np.complex64
         
     def load_field(self, folder):   # Load the file from the database
+        print(f'Loading field {self.name}')
         if self.sampling == '3hrs':
             self.var = np.zeros((self.years,1200,self.lat_end-self.lat_start,self.lon_end-self.lon_start), dtype=self.np_precision)
-            for b in range(1,11):
+            for b in range(1, self.years//100 + 1):
                 print("b = ",b)
                 for y in range(1,101):
                     for m in range(5,10):
@@ -1226,17 +1227,18 @@ class Plasim_Field:
         else:
             dataset = Dataset(folder+self.filename+'.nc')
             self.time = np.asarray(dataset.variables['time'][:]).reshape(self.years,-1)
+            print('Loaded time array')
             if (self.name == 'zg') or (self.name == 'ua') or (self.name == 'va'): # we need to take out dimension that is useless (created by extracting a level)
                 self.var = np.asarray(dataset.variables[self.name][:,0,self.lat_start:self.lat_end,self.lon_start:self.lon_end],  dtype=self.np_precision)
             else:
                 self.var = np.asarray(dataset.variables[self.name][:,self.lat_start:self.lat_end,self.lon_start:self.lon_end],  dtype=self.np_precision)
-            print("input var.shape = ",self.var.shape)
+            print(f"input {self.var.shape = }")
             self.var = self.var.reshape(self.years, self.var.shape[0]//self.years, self.var.shape[1], self.var.shape[2])
             self.lon = dataset.variables["lon"][self.lon_start:self.lon_end]
             self.lat = dataset.variables["lat"][self.lat_start:self.lat_end]
             self.LON, self.LAT = np.meshgrid(self.lon, self.lat)
-            print("output var.shape = ",self.var.shape)
-            print("self.time.shape = ",self.time.shape)
+            print(f"output {self.var.shape = }")
+            print(f"{self.time.shape = }")
             print(np.min(np.diff(self.time))," < np.diff(self.time) < ",np.max(np.diff(self.time)))
             dataset.close()
             
