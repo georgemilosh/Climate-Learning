@@ -16,6 +16,7 @@ We use neural networks to compute committor functions
 
 
 ## Rare event algorithm
+Because the events are rare we pursue importance sampling that can be achieved by geneological algorithms or other types of algorithms
 
 ## User guide
 
