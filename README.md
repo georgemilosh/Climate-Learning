@@ -7,7 +7,7 @@ This repository includes various routines used to Analyze various climate models
 - CESM (High complexity)
 - ERA Reanalysis (observational)
 The functions and classes we define can be used for estimation of heat wave occurances 
-![Heat waves in Scandinavia modelled by CESM](CESM/IMages/Scandinavia_3.5.png)
+![Heat waves in Scandinavia modelled by CESM](/CESM/IMages/Scandinavia_3.5.png)
 ## Rare events
 We are interested in predicting rare eevents such as heat waves or cold spells etc. We use climate models because the data is scarce and we are intersted in large scale long duration events
 
