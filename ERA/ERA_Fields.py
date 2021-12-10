@@ -1515,7 +1515,10 @@ class Plasim_Field:
             print('First execute: self.abs_area_int, self.ano_area_int = self.Set_area_integral(area, mask)')
         return series
     
-    def ReshapeInto2Dseries(self,time_start,time_end,lat_from,lat_to,lon_from,lon_to,T,tau, dim=1): # This function reshapes the the time series of the grid into a flat array useful for feeding this to a flat layer of a neural network 
+    def ReshapeInto2Dseries(self,time_start,time_end,lat_from,lat_to,lon_from,lon_to,T,tau, dim=1): 
+        '''
+        Reshapes the time series of the grid into a flat array useful for feeding this to a flat layer of a neural network
+        '''
         selfvarshape = self.var[:,(time_start+tau):(time_end+tau - T+1),lat_from:lat_to,lon_from:lon_to].shape
         temp = self.var[:,(time_start+tau):(time_end+tau - T+1),lat_from:lat_to,lon_from:lon_to].reshape((selfvarshape[0]*selfvarshape[1],selfvarshape[2],selfvarshape[3]))
         if dim == 1: # if we intend for the spatial dimension of the output to be 1D
@@ -1618,7 +1621,7 @@ def ExtractAreaWithMask(mylocal,Model,area): # extract land sea mask and multipl
 def TryLocalSource(mylocal):
     folder = mylocal
     addresswithoutlocal = folder[7:]
-    print("adresswithoutlocal = ", addresswithoutlocal)
+    print(f"{adresswithoutlocal = }")
     mylocal = '/ClimateDynamics/MediumSpace/ClimateLearningFR/' # This is a hard overwrite to prevent looking in other folders and slow down say scratch. If something doesn't work in backward compatibility, remove it
     folder = mylocal+addresswithoutlocal
     print("Trying source: ", mylocal) # We assume the input has the form: '/local/gmiloshe/PLASIM/'+''+'Data_Plasim/'
