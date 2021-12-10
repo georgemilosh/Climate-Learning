@@ -1333,42 +1333,55 @@ class Plasim_Field:
         
         return series, anomaly_series
     
-    def PreMixing(self, new_mixing, containing_folder='Postproc', num_years=None, select_group=0): # Permute all years (useful for Machine Learning input), mixes the batches but not the days of a year! num_years - how many years are taken for the analysis
-        if num_years is None: #or self.years == []: # as it stands it is not working right now, only modify when you start working with machine learning routines
+    def PreMixing(self, new_mixing, containing_folder='Postproc', num_years=None, select_group=0):
+        ''''
+        Randomly permute all years (useful for Machine Learning input), mixes the batches but not the days of a year! num_years - how many years are taken for the analysis
+        
+        WARNING: modifies the object attributes, e.g. self.var
+        '''
+        if num_years is None: 
             num_years = self.years
         #print(type(containing_folder),type(self.sampling), type(self.Model))
-        print("containing_folder = ", containing_folder, " , self.sampling = ", self.sampling, " , self.Model = ", self.Model)
-        filename = containing_folder+'/PreMixing_'+self.sampling+'_'+self.Model+'.npy'
+        print(f"{containing_folder = }, {self.sampling = }, {self.Model = }")
+        filename = f'{containing_folder}/PreMixing_{self.sampling}_{self.Model}.npy'
         if ((new_mixing) or (not os.path.exists(filename))): # if we order new mixing or the mixing file doesn't exist
             mixing = np.random.permutation(self.var.shape[0])
             np.save(filename, mixing)
-            print('saved file ' + filename)
+            print(f'saved file {filename}')
         else:
             mixing = np.load(filename)
-            print('file ' + filename + ' loaded')
-        print("mixing.shape = ", mixing.shape)
+            print(f'file {filename} loaded')
+        
+        print(f"{mixing.shape = }")
         mixing = mixing[num_years*select_group:num_years*(select_group+1)] # This will select the right number of years
-        print("mixing.shape = ", mixing.shape)
-        self.var = self.var[mixing,:,:,:]  # This will apply permutation on all years
-        print('mixed self.var.shape = ',self.var.shape)
+        print(f"Selected group {select_group}: {mixing.shape = }")
+        self.var = self.var[mixing,...]  # This will apply permutation on all years
+        print(f'mixed {self.var.shape = }')
         if hasattr(self, 'abs_mask'):
-            print('mixed self.abs_mask.shape = ',self.abs_mask.shape)
-            self.abs_mask = self.abs_mask[mixing,:]
+            self.abs_mask = self.abs_mask[mixing,...]
+            print(f'mixed {self.abs_mask.shape = }')
         if hasattr(self, 'ano_abs_mask'):
-            print('mixed self.ano_abs_mask.shape = ',self.ano_abs_mask.shape)
-            self.ano_abs_mask = self.ano_abs_mask[mixing,:]
+            self.ano_abs_mask = self.ano_abs_mask[mixing,...]
+            print(f'mixed {self.ano_abs_mask.shape = }')
         if hasattr(self, 'abs_area_int'):
-            print('mixed self.abs_area_int.shape = ',self.abs_area_int.shape)
-            self.abs_area_int = self.abs_area_int[mixing,:]
+            self.abs_area_int = self.abs_area_int[mixing,...]
+            print(f'mixed {self.abs_area_int.shape = }')
         if hasattr(self, 'ano_area_int'):
-            print('mixed self.ano_area_int.shape = ',self.ano_area_int.shape)
-            self.ano_area_int = self.ano_area_int[mixing,:]
+            self.ano_area_int = self.ano_area_int[mixing,...]
+            print(f'mixed {self.ano_area_int.shape = }')
+            
             
         self.new_mixing = new_mixing
-        #self.time = self.time[mixing,:]   <- This we can't use because I don't load time in 3hrs sampling case
+        #self.time = self.time[mixing,...]   <- This we can't use because I don't load time in 3hrs sampling case
         
         return filename
-    def EqualMixing(self, A, threshold, new_mixing, containing_folder='Postproc', num_years=1000, select_group=0, delta=1): # Permute all years (useful for Machine Learning input), mix until each batch has the same numbe of years!
+    
+    
+    def EqualMixing(self, A, threshold, new_mixing, containing_folder='Postproc', num_years=1000, select_group=0, delta=1): 
+        '''
+        Permute all years (useful for Machine Learning input), mix until each batch has the same number of heatwave days!
+        '''
+        
         if str(threshold) != '2.953485': # use new labeling # GEORGE: there is indeed a way to remove this awkward statement. This is old threshold for Plasim 1000 years dataset that dates back to the time when I didn't specify threshold in the mixing file. This threshold is obtained if we take 5 percent heatwaves over France. The idea was to default in this case to the old equal mixing and avoid creating a new permutation. What can be done instead is to simply copy the old file and give it the appropriate name given this new system where we have to add a threshold in the filename
             filenamepostfix1 = '_'+str(threshold)
         else:
@@ -1385,7 +1398,8 @@ class Plasim_Field:
             filenamepostfix4 = ''
         else:
             filenamepostfix4 = '_'+str(delta)
-        filename = containing_folder+'/EqualMixing_'+self.sampling+'_'+self.Model+filenamepostfix1+filenamepostfix2+filenamepostfix3+filenamepostfix4+'.npy'
+        filename = f'{containing_folder}/EqualMixing_{self.sampling}_{self.Model}{filenamepostfix1}{filenamepostfix2}{filenamepostfix3}{filenamepostfix4}.npy'
+        
         if ((new_mixing) or (not os.path.exists(filename))): # if we order new mixing or the mixing file doesn't exist
             mixed_event_per_year = np.sum((A>=threshold),1)
             mixing = np.arange(A.shape[0])
@@ -1394,8 +1408,8 @@ class Plasim_Field:
             #number_per_century=np.sum(mixed_event_per_year.reshape((10,-1)),1)#/ (A.shape[1]*A.shape[0]//10)
             #norm_per_century=number_per_century/np.sum(number_per_century)
             #entropy_per_iteration = -np.sum(norm_per_century*np.log(norm_per_century))
-            print("number_per_century = ", number_per_century)
-            print("entropy_per_iteration = ", entropy_per_iteration, " normalization = ", np.sum(number_per_century))
+            print(f"{number_per_century = }")
+            print(f"{entropy_per_iteration = }, normalization = {np.sum(number_per_century)}")
 
             for myiter in range(10000000):
                 #print("========")
@@ -1422,7 +1436,7 @@ class Plasim_Field:
                         print(oldmixing)
                         print(mixing)
                         print(([item for item, count in collections.Counter(mixing).items() if count > 1]))
-                    print("myiter = ", myiter, " , entropy ", entropy_per_iteration_prime," > ", entropy_per_iteration, " , #/century = ",np.sum(number_per_century), " duplicate# = " , mixingdublicatenumber)
+                    print(f"{myiter = }, entropy = {entropy_per_iteration_prime} > {entropy_per_iteration} , #/century = {np.sum(number_per_century)} duplicate# = {mixingdublicatenumber}")
                     entropy_per_iteration = entropy_per_iteration_prime
                 #else:
                     #print(entropy_per_iteration_prime," <= ", entropy_per_iteration, " => Keep old!")
@@ -1436,28 +1450,28 @@ class Plasim_Field:
             number_per_century=np.sum(mixed_event_per_year[mixing].reshape((10,-1)),1)#/ (A.shape[1]*A.shape[0]//10)
             norm_per_century=number_per_century/np.sum(number_per_century)
             entropy_per_iteration_prime=-np.sum(norm_per_century*np.log(norm_per_century))
-            print("final number_per_century = ", number_per_century)
-            print("final entropy_per_iteration = ", entropy_per_iteration, ", final sum = ", np.sum(number_per_century))
+            print(f"final {number_per_century = }")
+            print(f"final {entropy_per_iteration = }, final sum = {np.sum(number_per_century)}")
             np.save(filename, mixing)
-            print('saved file ' + filename)
+            print(f'saved file {filename}')
         else:
             mixing = np.load(filename)
-            print('file ' + filename + ' loaded')
+            print(f'file {filename} loaded')
             
-        self.var = self.var[mixing,:,:,:]  # This will apply permutation on all years
-        print('mixed self.var.shape = ',self.var.shape)
+        self.var = self.var[mixing,...]  # This will apply permutation on all years
+        print(f'mixed {self.var.shape = }')
         if hasattr(self, 'abs_mask'):
-            print('mixed self.abs_mask.shape = ',self.abs_mask.shape)
-            self.abs_mask = self.abs_mask[mixing,:]
+            self.abs_mask = self.abs_mask[mixing,...]
+            print(f'mixed {self.abs_mask.shape = }')
         if hasattr(self, 'ano_abs_mask'):
-            print('mixed self.ano_abs_mask.shape = ',self.ano_abs_mask.shape)
-            self.ano_abs_mask = self.ano_abs_mask[mixing,:]
+            self.ano_abs_mask = self.ano_abs_mask[mixing,...]
+            print(f'mixed {self.ano_abs_mask.shape = }')
         if hasattr(self, 'abs_area_int'):
-            print('mixed self.abs_area_int.shape = ',self.abs_area_int.shape)
-            self.abs_area_int = self.abs_area_int[mixing,:]
+            self.abs_area_int = self.abs_area_int[mixing,...]
+            print(f'mixed {self.abs_area_int.shape = }')
         if hasattr(self, 'ano_area_int'):
-            print('mixed self.ano_area_int.shape = ',self.ano_area_int.shape)
-            self.ano_area_int = self.ano_area_int[mixing,:]
+            self.ano_area_int = self.ano_area_int[mixing,...]
+            print(f'mixed {self.ano_area_int.shape = }')
             
         self.new_equalmixing = new_mixing
         #self.time = self.time[mixing,:]   <- This we can't use because I don't load time in 3hrs sampling case
@@ -1501,7 +1515,10 @@ class Plasim_Field:
             print('First execute: self.abs_area_int, self.ano_area_int = self.Set_area_integral(area, mask)')
         return series
     
-    def ReshapeInto2Dseries(self,time_start,time_end,lat_from,lat_to,lon_from,lon_to,T,tau, dim=1): # This function reshapes the the time series of the grid into a flat array useful for feeding this to a flat layer of a neural network 
+    def ReshapeInto2Dseries(self,time_start,time_end,lat_from,lat_to,lon_from,lon_to,T,tau, dim=1): 
+        '''
+        Reshapes the time series of the grid into a flat array useful for feeding this to a flat layer of a neural network
+        '''
         selfvarshape = self.var[:,(time_start+tau):(time_end+tau - T+1),lat_from:lat_to,lon_from:lon_to].shape
         temp = self.var[:,(time_start+tau):(time_end+tau - T+1),lat_from:lat_to,lon_from:lon_to].reshape((selfvarshape[0]*selfvarshape[1],selfvarshape[2],selfvarshape[3]))
         if dim == 1: # if we intend for the spatial dimension of the output to be 1D
@@ -1604,7 +1621,7 @@ def ExtractAreaWithMask(mylocal,Model,area): # extract land sea mask and multipl
 def TryLocalSource(mylocal):
     folder = mylocal
     addresswithoutlocal = folder[7:]
-    print("adresswithoutlocal = ", addresswithoutlocal)
+    print(f"{adresswithoutlocal = }")
     mylocal = '/ClimateDynamics/MediumSpace/ClimateLearningFR/' # This is a hard overwrite to prevent looking in other folders and slow down say scratch. If something doesn't work in backward compatibility, remove it
     folder = mylocal+addresswithoutlocal
     print("Trying source: ", mylocal) # We assume the input has the form: '/local/gmiloshe/PLASIM/'+''+'Data_Plasim/'
