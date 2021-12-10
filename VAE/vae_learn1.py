@@ -19,14 +19,14 @@ def PrepareParameters(creation):
     print("==Preparing Parameters==")
     WEIGHTS_FOLDER = './models/'
     
-    RESCALE_TYPE = 'normalize'#'rescale' #'nomralize'
-    Z_DIM = 6#2 #16 #64 #200 # Dimension of the latent vector (z)
+    RESCALE_TYPE = 'normalize' #'rescale' #'nomralize'
+    Z_DIM = 8 #16 #64 #256 # Dimension of the latent vector (z)
     BATCH_SIZE = 128#512
     LEARNING_RATE = 1e-3#5e-4# 1e-3#5e-6
     N_EPOCHS = 20#600#200
     NUM_IMAGES = 4000 # number of years that variational autoencoder sees
-    K1 = 1#100
-    K2 = 1
+    K1 = 0.999 # 1#100
+    K2 = 0.001 #1
     
     data_path='../../gmiloshe/PLASIM/'
     
@@ -38,7 +38,7 @@ def PrepareParameters(creation):
     lat_end = 24
     Months1 = [0, 0, 0, 0, 0, 0, 30, 30, 30, 30, 30, 0, 0, 0] 
     Tot_Mon1 = list(itertools.accumulate(Months1))
-    checkpoint_name = WEIGHTS_FOLDER+Model+'_'+RESCALE_TYPE+'_k1_'+str(K1)+'_k2_'+str(K2)+'_LR_'+str(LEARNING_RATE)+'_ZDIM_'+str(Z_DIM)
+    checkpoint_name = WEIGHTS_FOLDER+Model+'_batchnorm_dropout__'+RESCALE_TYPE+'_k1_'+str(K1)+'_k2_'+str(K2)+'_LR_'+str(LEARNING_RATE)+'_ZDIM_'+str(Z_DIM)
     return WEIGHTS_FOLDER, RESCALE_TYPE, Z_DIM, BATCH_SIZE, LEARNING_RATE, N_EPOCHS, NUM_IMAGES, K1, K2, checkpoint_name, data_path, Model, lon_start, lon_end, lat_start, lat_end, Tot_Mon1
     
 def CreateFolder(creation,checkpoint_name):
@@ -70,7 +70,7 @@ def LoadData(creation, Model, lat_start, lat_end, lon_start, lon_end, NUM_IMAGES
     zg500 = ef.Plasim_Field('zg','ANO_LONG_zg500','500 mbar Geopotential', Model, lat_start, lat_end, lon_start, lon_end,'single','')
     
     if creation == None:
-        zg500.years = NUM_IMAGES  
+        zg500.years = NUM_IMAGES # Currently this feature doesn't work because .years was not supposed to be used like this. It was supposed to always coincide with the known dimension of the *.nc dataset 
     else: # if we are running this to plot reconstruction rather than for training we don't need to load all the images which takes too much time
         zg500.years = NUM_IMAGES//10
     
@@ -115,7 +115,7 @@ def ConstructVAE(INPUT_DIM, Z_DIM, checkpoint_name, N_EPOCHS, myinput, K1, K2):
                                                 conv_filters = [32, 64, 64, 64],
                                                 conv_kernel_size = [3,3,3,3],
                                                 conv_strides = [2,2,2,1],
-                                                conv_padding = ["same","same","same","valid"], use_batch_norm=False, use_dropout=False)
+                                                conv_padding = ["same","same","same","valid"], use_batch_norm=True, use_dropout=True)
     encoder.summary()
     print("==Building decoder==")      
     # Decoder
