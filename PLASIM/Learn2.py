@@ -1,7 +1,7 @@
 # George Miloshevich 2021
 # Train a neural network
 
-# Importation des librairies
+# Import librairies
 import os as os
 import sys
 sys.path.insert(1, '../ERA')
@@ -307,7 +307,7 @@ def PrepareData(creation = None):  # if we do not specify creation it automacial
 ######## TRAIN THE NETWORK #########
 
 if __name__ == '__main__':
-    print("====== running Learn.py ====== ")  
+    print(f"====== running {__file__} ====== ")  
     print(f"{tf.__version__ = }")
     if int(tf.__version__[0]) < 2:
         print(f"{tf.test.is_gpu_available() = }")
@@ -327,8 +327,8 @@ if __name__ == '__main__':
     end = time.time()
 
     # Getting % usage of virtual_memory ( 3rd field)
-    print('RAM memory used:', psutil.virtual_memory()[3])
-    print("Reading time = ",end - start)
+    print(f'RAM memory used: {psutil.virtual_memory()[3]}')
+    print(f'Reading time = {end - start}')
     start = time.time()
 
     mylabels = np.array(list_extremes)
@@ -349,7 +349,8 @@ if __name__ == '__main__':
             print( "'val_CustomLoss' not in history.keys()")
             sys.exit("Aborting the program!")
 
-
+    
+    # do the training 10 times to with 10-fold cross validation
     my_MCC = np.zeros(10,)
     my_entropy = np.zeros(10,)
     my_skill = np.zeros(10,)
@@ -362,7 +363,7 @@ if __name__ == '__main__':
         print("===============================")
         print("cross validation i = ", str(i))
         test_indices, train_indices, train_true_labels_indices, train_false_labels_indices, filename_permutation = TrainTestSplitIndices(i,X, mylabels, 1, sampling, new_mixing, thefield, percent) # 1 implies undersampling_rate=1 indicating that we supress the manual undersampling
-        print("# events in the train sample after TrainTestSp;litIndices: ",  len(train_indices))
+        print("# events in the train sample after TrainTestSplitIndices: ",  len(train_indices))
         print("original proportion of positive events in the train sample: ",  np.sum(mylabels[train_indices])/len(train_indices))
         
         oversampling_strategy = oversampling_factor/(100/percent-1)
@@ -392,9 +393,13 @@ if __name__ == '__main__':
         
         print("====Dimensions of the data before entering the neural net===")
         print("dimension of the train set is X[train_indices].shape = ", X_train.shape)
+        
+        # normalize the data with pointwise mean and std
         X_mean = np.mean(X_train,0)
         X_std = np.std(X_train,0)
-        X_std[X_std==0] = 1 # If there is no variance we shouldn't divide by zero
+        
+        print(f'{np.sum(X_std < 1e-5)/np.product(X_std.shape)*100}\% of the data have std below 1e-5')
+        X_std[X_std==0] = 1 # If there is no variance we shouldn't divide by zero ### hmmm: this may create discontinuities
 
         X_test = (X[test_indices]-X_mean)/X_std
         Y_test = mylabels[test_indices]
@@ -406,20 +411,20 @@ if __name__ == '__main__':
         print("Y_train.shape = ", Y_train.shape)
         print("Y_test.shape = ", Y_test.shape)
          
-        print("Train set: # of true labels = ", np.sum(Y_train), " ,# of false labels = ", Y_train.shape[0] - np.sum(Y_train))
-        print("Train set: effective sampling rate for rare events is ", np.sum(Y_train)/Y_train.shape[0])
+        print(f"Train set: # of true labels = {np.sum(Y_train)}, # of false labels = {Y_train.shape[0] - np.sum(Y_train)}")
+        print(f"Train set: effective sampling rate for rare events is {np.sum(Y_train)/Y_train.shape[0]}")
         
-        np.save(checkpoint_name+'/batch_'+str(i)+'_X_mean', X_mean) # this values must be saved if the neural network is to be tested again, by reloading some other data
-        np.save(checkpoint_name+'/batch_'+str(i)+'_X_std', X_std)
+        np.save(f'{checkpoint_name}/batch_{i}_X_mean', X_mean) # this values must be saved if the neural network is to be tested again, by reloading some other data
+        np.save(f'{checkpoint_name}/batch_{i}_X_std', X_std)
         
         if tau < 0: # engagge transfer learning
-            print("opt_checkpoint: ", opt_checkpoint, " ,loading model: ", checkpoint_name_previous)
-            model = (tf.keras.models.load_model(checkpoint_name_previous+'/batch_'+str(i), compile=False)) # if we just want to train
+            print(f"opt_checkpoint: {opt_checkpoint} ,loading model: {checkpoint_name_previous}")
+            model = (tf.keras.models.load_model(f'{checkpoint_name_previous}/batch_{i}', compile=False)) # if we just want to train
 
             nb_zeros_c = 4-len(str(opt_checkpoint))
             cp_checkpoint_name = '/cp-'+nb_zeros_c*'0'+str(opt_checkpoint)+'.ckpt'
-            print("loading weights from ",checkpoint_name_previous+'/batch_'+str(i)+cp_checkpoint_name)
-            model.load_weights(checkpoint_name_previous+'/batch_'+str(i)+cp_checkpoint_name)
+            print(f'loading weights from {checkpoint_name_previous}/batch_{i}{cp_checkpoint_name}')
+            model.load_weights(f'{checkpoint_name_previous}/batch_{i}{cp_checkpoint_name}')
         else:
             model_input_dim = X.shape[1:] 
             model = custom_CNN(model_input_dim) 
@@ -452,8 +457,8 @@ if __name__ == '__main__':
 
         my_history=model.fit(X_train, Y_train, batch_size=BATCH_SIZE, validation_data=(X_test,Y_test), shuffle=True, callbacks=[cp_callback], epochs=NUM_EPOCHS,verbose=2, class_weight=None)
 
-        model.save(checkpoint_name+'/batch_'+str(i))
-        np.save(checkpoint_name+'/batch_'+str(i)+'_history.npy',my_history.history)
+        model.save(f'{checkpoint_name}/batch_{i}')
+        np.save(f'{checkpoint_name}/batch_{i}_history.npy',my_history.history)
         
         my_probability_model=(tf.keras.Sequential([ # softmax output to make a prediction
               model,
@@ -469,11 +474,11 @@ if __name__ == '__main__':
 
         # Getting % usage of virtual_memory ( 3rd field)
 
-    np.save(checkpoint_name+'/RAM_stats.npy', my_memory)
+    np.save(f'{checkpoint_name}/RAM_stats.npy', my_memory)
 
     end = time.time()
-    print("files saved in ", checkpoint_name)
-    print("Learning time = ",end - start)
+    print(f'files saved in  {checkpoint_name}')
+    print(f'Learning time = {end - start}')
 
 
 
