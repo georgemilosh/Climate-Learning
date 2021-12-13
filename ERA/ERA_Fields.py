@@ -895,84 +895,173 @@ def draw_map(m, scale=0.2, background='stock_img', **kwargs):
 
 
 # now vectorized :)
-def create_mask(model,area, data, axes='first 2'): # careful, this mask works if we load the full Earth. there might be problems if we extract fields from some edge of the map
+def create_mask(model,area, data, axes='first 2', return_full_mask=False): # careful, this mask works if we load the full Earth. there might be problems if we extract fields from some edge of the map
     """
     This function allows to extract a subset of data enclosed in the area.
     The output has the dimension of the area on the axes corresponding to latitued and longitude
     If the area includes the Greenwich meridian, a concatenation is required.
     
-    If axes == 'last 2', the slicing will be done on the last 2 axes,
+    If `axes` == 'last 2', the slicing will be done on the last 2 axes,
     otherwise on the first two axes
+    
+    If `return_full_mask` == True, the function returns an array with the same shape of `data`, True over the `area` and False elsewhere
+    Otherwise the return will be `data` restricted to `area`
     """
     
     if axes == 'first 2' and len(data.shape) > 2:
         # permute the shape so that the first 2 axes end up being the last 2
         _data = data.transpose(*range(2,len(data.shape)),0,1)
-        _data = create_mask(model, area, _data, axes='last 2')
+        _data = create_mask(model, area, _data, axes='last 2', return_full_mask=return_full_mask)
         # permute the axes back to their original condition
         return _data.transpose(-2, -1, *range(len(data.shape) - 2))
     
+    if return_full_mask:
+        mask = np.zeros_like(data, dtype=bool)
     
     if model == "ERA5":
         if area == "Scandinavia":
+            if return_full_mask:
+                mask[...,25:45,7:53] = True
+                return mask
             return data[...,25:45,7:53]# reconstructed from Francesco
         elif area == "Scand": # = Norway Sweden
+            if return_full_mask:
+                mask[...,25:45,7:30] = True
+                return mask
             return data[...,25:45,7:30]
         elif area == "NAtlantic":
+            if return_full_mask:
+                mask[...,25:80, -135:] = True
+                mask[...,25:80, :60] = True
+                return mask
             return np.concatenate((data[...,25:80, -135:], data[...,25:80, :60]), axis=-1)  # used for plotting
         elif area == "France":
+            if return_full_mask:
+                mask[...,51:63, -4:] = True
+                mask[...,51:63, :9] = True
+                return mask
             return np.concatenate((data[...,51:63, -4:], data[...,51:63, :9]), axis=-1)  # reconstructed from Francesco
         elif area == "France_bis":
+            if return_full_mask:
+                mask[...,52:64, -5:] = True
+                mask[...,52:64, :9] = True
+                return mask
             return np.concatenate((data[...,52:64, -5:], data[...,52:64, :9]), axis=-1)  # fixing to CESM
         elif area == "Russia":  # lat[i]<60 and lat[i]>50: index 9-15
+            if return_full_mask:
+                mask[...,37:60, 42:79] = True
+                return mask
             return data[...,37:60, 42:79] 
         elif area == "Poland":  # From stefanon
+            if return_full_mask:
+                mask[...,44:60, 18:43] = True
+                return mask
             return data[...,44:60, 18:43]
         else:
             print(f'Unknown area {area}')
             return None
     elif model == "CESM":
         if area == "France":
+            if return_full_mask:
+                mask[...,-51:-41, -3:] = True
+                mask[...,-51:-41, :6] = True
+                return mask
             return np.concatenate((data[...,-51:-41, -3:],data[...,-51:-41, :6]), axis=-1)
         elif area == "Scandinavia":
+            if return_full_mask:
+                mask[...,-36:-20, 4:32] = True
+                return mask
             return data[...,-36:-20, 4:32]
         elif area == "Scand": # = Norway Sweden
+            if return_full_mask:
+                mask[...,-36:-20, 4:18] = True
+                return mask
             return data[...,-36:-20, 4:18]
         elif area == "Russia":  # lat[i]<60 and lat[i]>50: index 9-15
+            if return_full_mask:
+                mask[...,-48:-29, 25:48] = True
+                return mask
             return data[...,-48:-29, 25:48]  # lon[i]<55 and lon[i]>35:   index 11-21
         elif area == "Poland":  # From Stefanon
+            if return_full_mask:
+                mask[...,-48:-35, 11:26] = True
+                return mask
             return data[...,-48:-35, 11:26]
         else:
             print(f'Unknown area {area}')
             return None
     elif model == "Plasim":
         if area == "NW_Europe":
+            if return_full_mask:
+                mask[...,10:16, -1:] = True
+                mask[...,10:16, :7] = True
+                return mask
             return np.concatenate((data[...,10:16, -1:], data[...,10:16, :7]), axis=-1)  # give by Valerian/Francesco 
         elif area == "Greenland":
+            if return_full_mask:
+                mask[...,2:9, 108:120] = True
+                return mask
             return data[...,2:9, 108:120]
         elif area == "Europe":
+            if return_full_mask:
+                mask[...,7:19, -3:] = True
+                mask[...,7:19, :10] = True
+                return mask
             return np.concatenate((data[...,7:19, -3:], data[...,7:19, :10]), axis=-1)  # give by Valerian/Francesco  
         elif area == "France":
+            if return_full_mask:
+                mask[...,13:17, -1:] = True
+                mask[...,13:17, :3] = True
+                return mask
             return np.concatenate((data[...,13:17, -1:], data[...,13:17, :3]), axis=-1)  # give by valerian
         elif area == "Quebec":  # lat[i]<60 and lat[i]>50:      index: 10-13
+            if return_full_mask:
+                mask[...,10:16, 98:110] = True
+                return mask
             return data[...,10:16, 98:110]  # lon[i]<180+120 and lon[i]>180+110   index:104-106
         elif area == "USA":  # lat[i]<50 and lat[i]>25:  index: 14-22
+            if return_full_mask:
+                mask[...,14:23, 89:109] = True
+                return mask
             return data[...,14:23, 89:109]  # lon[i]<180+125 and lon[i]>180+70:  index 89-108
         elif area == "US":  # lat[i]<50 and lat[i]>25:  index: 14-22   # < fixing the area of philipinne
+            if return_full_mask:
+                mask[...,14:23, 84:104] = True
+                return mask
             return data[...,14:23, 84:104]  # lon[i]<180+125 and lon[i]>180+70:  index 89-108
         elif area == "Midwest":
+            if return_full_mask:
+                mask[...,16:20, 92:99] = True
+                return mask
             return data[...,16:20, 92:99]
         elif area == "Alberta":
+            if return_full_mask:
+                mask[...,10:15, 85:90] = True
+                return mask
             return data[...,10:15, 85:90]
         elif area == "Scandinavia":  # 55<lat<72: index: 6-11
+            if return_full_mask:
+                mask[...,6:12, 2:15] = True
+                return mask
             return data[...,6:12, 2:15]  # 5<lon<40 : index 2-14
         elif area == "Scand":  #  = Norway Sweden
+            if return_full_mask:
+                mask[...,6:12, 2:8] = True
+                return mask
             return data[...,6:12, 2:8]  # 5<lon<40 : index 2-14
         elif area == "Russia":  # lat[i]<60 and lat[i]>50: index 9-15
+            if return_full_mask:
+                mask[...,9:16, 11:22] = True
+                return mask
             return data[...,9:16, 11:22]  # lon[i]<55 and lon[i]>35:   index 11-21
         elif area == "Poland":  # lat[i]<60 and lat[i]>50: index 9-15
+            if return_full_mask:
+                mask[...,11:16, 5:12] = True
+                return mask
             return data[...,11:16, 5:12]  # lon[i]<55 and lon[i]>35:   index 11-21
         elif area == 'total':  # return all data, use for total_area function and create surface over continents
+            if return_full_mask:
+                return np.ones_like(data, dtype=bool)
             return data
         else:
             print(f'Unknown area {area}')
@@ -1201,7 +1290,7 @@ class Plasim_Field:
         self.lon_start = lon_start
         self.lon_end = lon_end
         self.Model = Model
-        self.years = years
+        self.years = years # years must be the correct number of years in the dataset
         self.sampling = mysampling # This string is used to distinguish daily vs 3 hr sampling, which is going to be important when we compute area integrals. The idea is that if we have already computed daily we must change the name for the new 3 hrs sampling file, otherwise the daily file will be loaded (see the routine Set_area_integral)
         if myprecision == 'double':
             self.np_precision = np.float64
