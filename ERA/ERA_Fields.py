@@ -1621,7 +1621,7 @@ def ExtractAreaWithMask(mylocal,Model,area): # extract land sea mask and multipl
 def TryLocalSource(mylocal):
     folder = mylocal
     addresswithoutlocal = folder[7:]
-    print(f"{adresswithoutlocal = }")
+    print(f"{addresswithoutlocal = }")
     mylocal = '/ClimateDynamics/MediumSpace/ClimateLearningFR/' # This is a hard overwrite to prevent looking in other folders and slow down say scratch. If something doesn't work in backward compatibility, remove it
     folder = mylocal+addresswithoutlocal
     print("Trying source: ", mylocal) # We assume the input has the form: '/local/gmiloshe/PLASIM/'+''+'Data_Plasim/'
