@@ -3,6 +3,7 @@
 
 # Import librairies
 import os as os
+from pathlib import Path
 import sys
 sys.path.insert(1, '../ERA')
 from ERA_Fields import* # general routines
@@ -55,25 +56,50 @@ def probability_model(inputs,input_model): # This function is used to apply soft
 
 ########## SETUP LOGGER AND COPY SOURCE FILES #########
 
-def init():
+def move_to_folder(folder):
+    '''
+    Copies this file and its dependencies to a given folder.
+    '''
+    folder = Path(folder).resolve()
+    ERA_folder = folder / 'ERA'
+
+    if os.path.exists(ERA_folder):
+        raise FileExistsError(f'Cannot copy scripts to {folder}: you already have some there')
+    ERA_folder.mkdir(parents=True,exist_ok=True)
+
+    # copy this file
+    path_to_here = Path(__file__).resolve() # path to this file
+    shutil.copy(path_to_here, folder)
+
+    # copy other files in the same directory as this one
+    path_to_here = path_to_here.parent
+    shutil.copy(path_to_here / 'config', folder)
+
+    # copy files in ../ERA/
+    path_to_here = path_to_here.parent / 'ERA'
+    shutil.copy(path_to_here / 'cartopy_plots.py', ERA_folder)
+    shutil.copy(path_to_here / 'ERA_Fields.py', ERA_folder)
+    shutil.copy(path_to_here / 'TF_fields.py', ERA_folder)
+
+    print(f'Now you can go to {folder} and run the learning from there')
+    
     
 
 ########## DATA PREPROCESSING ##############
 
-def LoadData(num_years=8000, T=14):
+def LoadData(num_years=8000, sampling='', T=14, Model='Plasim', , area='France', lon_start=0, lon_end=128, lat_start=0, lat_end=22, local_path='/local/gmiloshe/PLASIM/',):
+    '''
     
-    sampling='' #'3hrs' # This chooses whether we want say daily sampling or 3 hour one. Notice that the corresponding NetCDF files are kept in different places
+    '''
     
     timesperday = 8 # 3 hour long periods in case we choose this sampling
     if sampling == '3hrs':
         T *= timesperday
         
-    Model = 'Plasim'
-    area = 'France'
-    lon_start = 0
-    lon_end = 128
-    lat_start = 0 # latitudes start from 90 degrees North Pole
-    lat_end = 22
+    
+    
+     # latitudes start from 90 degrees North Pole
+    
     
     #myscratch='/scratch/gmiloshe/PLASIM/'  # where files used to be
     mylocal='/local/gmiloshe/PLASIM/' #'/local/gmiloshe/PLASIM/'      # where we keep large datasets that need to be loaded
