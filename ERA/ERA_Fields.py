@@ -1226,11 +1226,11 @@ class Plasim_Field:
             
         else:
             dataset = Dataset(folder+self.filename+'.nc')
-            self.time = np.asarray(dataset.variables['time']).reshape(self.years,-1)
+            self.time = np.asarray(dataset.variables['time']).reshape(self.years,-1) # CHANGE TO XARRAY
             print('Loaded time array')
             if (self.name == 'zg') or (self.name == 'ua') or (self.name == 'va'): # we need to take out dimension that is useless (created by extracting a level)
                 self.var = np.asarray(dataset.variables[self.name][:,0,self.lat_start:self.lat_end,self.lon_start:self.lon_end],  dtype=self.np_precision)
-            else:
+            else: 
                 self.var = np.asarray(dataset.variables[self.name][:,self.lat_start:self.lat_end,self.lon_start:self.lon_end],  dtype=self.np_precision)
             print(f"input {self.var.shape = }")
             self.var = self.var.reshape(self.years, self.var.shape[0]//self.years, self.var.shape[1], self.var.shape[2])
