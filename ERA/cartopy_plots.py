@@ -258,6 +258,11 @@ def ShowArea(lon_mask, lat_mask, field_mask, coords=[-7,15,40,60], **kwargs):
             draw_labels: whether to show lat and lon labels, default True
             show_grid: whether to display the grid connecting data points, default True
             title: default 'Area of a grid cell'
+            
+    Returns:
+    --------
+        fig: Figure
+        m: cartopy axis
     '''
     # extract additional arguments
     projection = kwargs.pop('projection', ccrs.PlateCarree())
