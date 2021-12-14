@@ -1,5 +1,6 @@
 # George Miloshevich 2021
 # Importation des librairies
+from pathlib import Path
 from netCDF4 import Dataset
 import numpy as np
 import warnings
@@ -1412,6 +1413,11 @@ class Plasim_Field:
                         A[y,:]=np.convolve(obj[y,:],  convseq, mode='valid')
                     obj = A
             # if not keep the definitions of the objects
+
+            # create containing folder if it doesn't exist
+            if not os.path.exists(containing_folder):
+                containing_folder = Path(containing_folder).resolve()
+                containing_folder.mkdir(parents=True,exist_ok=True)
 
             np.save(filename_abs,self.abs_mask)
             np.save(filename_ano_abs,self.ano_abs_mask)

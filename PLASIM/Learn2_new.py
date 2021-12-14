@@ -5,9 +5,11 @@
 import os as os
 from pathlib import Path
 import sys
-sys.path.insert(1, '../ERA')
-from ERA_Fields import* # general routines
-from TF_Fields import* # tensorflow routines 
+path_to_ERA = Path(__file__).resolve().parent.parent / 'ERA' # when absolute path, so you can run the script from another folder (outside plasim)
+sys.path.insert(1, str(path_to_ERA))
+# sys.path.insert(1, '../ERA/')
+import ERA_Fields as ef # general routines
+import TF_Fields as tff # tensorflow routines 
 import time
 import shutil
 import gc
@@ -19,26 +21,30 @@ from imblearn.pipeline import Pipeline
 from operator import mul
 from functools import reduce
 
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import layers, models
+
 ########## NEURAL NETWORK DEFINITION ###########
 
 def custom_CNN(model_input_dim): # This CNN I took from https://www.tensorflow.org/tutorials/images/cnn
     model = models.Sequential()
     model.add(layers.Conv2D(32, (3, 3), input_shape=model_input_dim))
-    model.add(BatchNormalization())
-    model.add(Activation("relu"))
-    model.add(SpatialDropout2D(0.2))
+    model.add(layers.BatchNormalization())
+    model.add(layers.Activation("relu"))
+    model.add(layers.SpatialDropout2D(0.2))
     model.add(layers.MaxPooling2D((2, 2)))
 
     model.add(layers.Conv2D(64, (3, 3)))
-    model.add(BatchNormalization())
-    model.add(Activation("relu"))
-    model.add(SpatialDropout2D(0.2))
+    model.add(layers.BatchNormalization())
+    model.add(layers.Activation("relu"))
+    model.add(layers.SpatialDropout2D(0.2))
     model.add(layers.MaxPooling2D((2, 2)))
 
     model.add(layers.Conv2D(64, (3, 3)))
-    model.add(BatchNormalization())
-    model.add(Activation("relu"))
-    model.add(SpatialDropout2D(0.2))
+    model.add(layers.BatchNormalization())
+    model.add(layers.Activation("relu"))
+    model.add(layers.SpatialDropout2D(0.2))
 
     model.add(layers.Flatten())
     model.add(layers.Dense(64, activation='relu'))
@@ -54,7 +60,7 @@ def probability_model(inputs,input_model): # This function is used to apply soft
 
 
 
-########## SETUP LOGGER AND COPY SOURCE FILES #########
+########## COPY SOURCE FILES #########
 
 def move_to_folder(folder):
     '''
@@ -81,30 +87,78 @@ def move_to_folder(folder):
     shutil.copy(path_to_here / 'ERA_Fields.py', ERA_folder)
     shutil.copy(path_to_here / 'TF_fields.py', ERA_folder)
 
+    # copy additional files
+    # History.py
+    # Metrics.py
+    # Recalc_Tau_Metrics.py
+    # Recalc_History.py
+
     print(f'Now you can go to {folder} and run the learning from there')
     
     
 
 ########## DATA PREPROCESSING ##############
 
-def LoadData(num_years=8000, sampling='', T=14, Model='Plasim', , area='France', lon_start=0, lon_end=128, lat_start=0, lat_end=22, local_path='/local/gmiloshe/PLASIM/',):
+fields_infos = {
+    't2m': {
+        'name': 'tas',
+        'filename_suffix': 'tas',
+        'label': 'Temperature',
+    },
+    'zg200': {
+        'name': 'zg',
+        'filename_suffix': 'zg200',
+        'label': '200 mbar Geopotential',
+    },
+    'zg300': {
+        'name': 'zg',
+        'filename_suffix': 'zg300',
+        'label': '300 mbar Geopotential',
+    },
+    'zg500': {
+        'name': 'zg',
+        'filename_suffix': 'zg500',
+        'label': '500 mbar Geopotential',
+    },
+    'zg850': {
+        'name': 'zg',
+        'filename_suffix': 'zg850',
+        'label': '850 mbar Geopotential',
+    },
+    'mrso': {
+        'name': 'mrso',
+        'filename_suffix': 'mrso',
+        'label': 'Soil Moisture',
+    },
+}
+
+def load_data(num_years=8000, sampling='', Model='Plasim', area='France',
+              lon_start=0, lon_end=128, lat_start=0, lat_end=22, mylocal='/local/gmiloshe/PLASIM/',fields=['t2m','zg500','mrso_filtered']):
     '''
-    
+    Loads the data.
+
+    Parameters:
+    -----------
+        num_years: number of years of te dataset
+        sampling: '' (dayly) or '3hrs'
+        Model: 'Plasim', 'CESM', ...
+        area: region of interest, e.g. 'France'
+        lon_start, lon_end, lat_start, lat_end: longitude and latitude extremes of the data expressed in indices (model specific)
+        mylocal: path the the data storage. For speed it is better if it is a local path.
+        fields: list of field to be loaded. Add '_filtered' to the name to have the velues of the field outside `area` set to zero.
+
+    Returns:
+    --------
+        _fields: dictionary of ERA_Fields.Plasim_Field objects
+
+
+    TO IMPROVE:
+        possibility to load less years from a dataset
     '''
     
     timesperday = 8 # 3 hour long periods in case we choose this sampling
     if sampling == '3hrs':
         T *= timesperday
-        
-    
-    
-     # latitudes start from 90 degrees North Pole
-    
-    
-    #myscratch='/scratch/gmiloshe/PLASIM/'  # where files used to be
-    mylocal='/local/gmiloshe/PLASIM/' #'/local/gmiloshe/PLASIM/'      # where we keep large datasets that need to be loaded
-    myscratch=TryLocalSource(mylocal)        # Check if the data is not there and can be found in some other source
-    
     
     Months1 = [0, 0, 0, 0, 0, 0, 30, 30, 30, 30, 30, 0, 0, 0] # number of days per month with two leading 0s so that index 5 corresponds to May
     if sampling == '3hrs': # The dataset will be large
@@ -114,6 +168,9 @@ def LoadData(num_years=8000, sampling='', T=14, Model='Plasim', , area='France',
     time_start = Tot_Mon1[6]
     time_end = Tot_Mon1[9] #+(Tot_Mon1[10]-Tot_Mon1[9])//2   # uncomment this if we are to use full summer (including the portion with september due to T days window)
 
+    mask, cell_area, lsm = ExtractAreaWithMask(mylocal,Model,area) # extract land-sea mask and multiply it by cell area
+
+    # TO IMPROVE: add possibility to choose dataset
     if sampling == '3hrs': 
         prefix = ''
         file_prefix = '../Climate/'
@@ -121,39 +178,34 @@ def LoadData(num_years=8000, sampling='', T=14, Model='Plasim', , area='France',
         prefix = 'ANO_LONG_'
         file_prefix = ''
 
-    t2m = Plasim_Field('tas',prefix+'tas','Temperature', Model, lat_start, lat_end, lon_start, lon_end,'single',sampling, years=num_years)
-    zg500 = Plasim_Field('zg',prefix+'zg500','500 mbar Geopotential', Model, lat_start, lat_end, lon_start, lon_end,'single',sampling, years=num_years)
-    mrso = Plasim_Field('mrso',prefix+'mrso','soil moisture', Model, lat_start, lat_end, lon_start, lon_end,'single',sampling, years=num_years)
-    
-    
-    t2m.load_field(mylocal+file_prefix+'Data_Plasim_LONG/')  # load the data
-    zg500.load_field(mylocal+file_prefix+'Data_Plasim_LONG/')
-    mrso.load_field(mylocal+file_prefix+'Data_Plasim_LONG/')
-    
-    LON = t2m.LON
-    LAT = t2m.LAT
-    print(t2m.var.dtype,zg500.var.dtype,mrso.var.dtype)
+    # load the fields
+    _fields = {}
+    for field_name in fields:
+        do_filter = False
+        if field_name.endswith('_filtered'):
+            field_name = field_name.rsplit('_', 1)[0] # remove '_filtered'
+            do_filter = True
+        if field_name not in fields_infos:
+            raise KeyError(f'Unknown field {field_name}')
+        # create the field object
+        field = ef.Plasim_Field(fields_infos[field_name]['name'],
+                                prefix+fields_infos[field_name]['filename_suffix'],
+                                fields_infos[field_name]['label'],
+                                Model=Model, 
+                                lat_start=lat_start, lat_end=lat_end, lon_start=lon_start, lon_end=lon_end,
+                                myprecision='single', mysampling=sampling, years=num_years)
+        # load the data
+        field.load_data(mylocal+file_prefix+'Data_Plasim_LONG/') # TO IMPROVE: add possibility to choose dataset
+        # Set area integral
+        field.abs_area_int, field.ano_area_int = field.Set_area_integral(area,mask,'Postproc')
+        # filter
+        if do_filter: # set to zero all values outside `area`
+            filter_mask = ef.create_mask(Model, area, field.var, axes='last 2', return_full_mask=True)
+            field.var *= filter_mask
 
-    mask, cell_area, lsm = ExtractAreaWithMask(mylocal,Model,area) # extract land sea mask and multiply it by cell area
-    print(mask)
-
-    t2m.abs_area_int, t2m.ano_area_int = t2m.Set_area_integral(area,mask,'PostprocLONG')
-    zg500.abs_area_int, zg500.ano_area_int = zg500.Set_area_integral(area,mask,'PostprocLONG') 
-    mrso.abs_area_int, mrso.ano_area_int = mrso.Set_area_integral(area,mask,'PostprocLONG')
+        _fields[field_name] = field  
     
-    # ===Below we filter out just the area of France for mrso====
-    filter_mask = np.zeros((t2m.var.shape[2],t2m.var.shape[3])) # a mask which sets to zero all values
-    filter_lat_from = [13, 13]  # defining the domain of 1's
-    filter_lat_to = [17, 17] 
-    filter_lon_from = [-1, 0] 
-    filter_lon_to =  [128, 3] 
-
-    for myiter in range(len(filter_lat_from)): # seting values to 1 in the desired domain
-        filter_mask[filter_lat_from[myiter]:filter_lat_to[myiter],filter_lon_from[myiter]:filter_lon_to[myiter]] = 1
-                
-    mrso.var = mrso.var*filter_mask # applying the filter to set to zero all values outside the domain
-    
-    return t2m, zg500, mrso
+    return _fields
     
 
 def Mix(percent, num_years=8000, creation=None, checkpoint_name=None):
