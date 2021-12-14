@@ -1300,7 +1300,12 @@ class Plasim_Field:
             self.np_precision = np.float32
             self.np_precision_complex = np.complex64
         
-    def load_field(self, folder, year_list=None):   # Load the file from the database
+    def load_field(self, folder, year_list=None):
+        '''
+        Load the file from the database stored in `folder`
+        
+        `year_list` allows to load only a subset of data. If not provided all years are loaded
+        '''
         print(f'Loading field {self.name}')
         if self.sampling == '3hrs':
             self.var = np.zeros((self.years,1200,self.lat_end-self.lat_start,self.lon_end-self.lon_start), dtype=self.np_precision)
@@ -1337,7 +1342,10 @@ class Plasim_Field:
                     self.var = [np.asarray(dataset.variables[self.name][y*units_per_year:(y+1)*units_per_year,self.lat_start:self.lat_end,self.lon_start:self.lon_end],  dtype=self.np_precision) for y in year_list]
                     self.var = np.concatenate(self.var, axis=0)
             print(f"input {self.var.shape = }")
-            self.var = self.var.reshape(self.years, self.var.shape[0]//self.years, self.var.shape[1], self.var.shape[2])
+            if year_list is None:
+                self.var = self.var.reshape(self.years, self.var.shape[0]//self.years, *self.var.shape[1:])
+            else:
+                self.var = self.var.reshape(len(year_list), units_per_year, *self.var.shape[1:])
             self.lon = dataset.variables["lon"][self.lon_start:self.lon_end]
             self.lat = dataset.variables["lat"][self.lat_start:self.lat_end]
             self.LON, self.LAT = np.meshgrid(self.lon, self.lat)
