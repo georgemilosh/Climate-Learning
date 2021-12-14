@@ -1300,7 +1300,7 @@ class Plasim_Field:
             self.np_precision = np.float32
             self.np_precision_complex = np.complex64
         
-    def load_field(self, folder):   # Load the file from the database
+    def load_field(self, folder, year_list=None):   # Load the file from the database
         print(f'Loading field {self.name}')
         if self.sampling == '3hrs':
             self.var = np.zeros((self.years,1200,self.lat_end-self.lat_start,self.lon_end-self.lon_start), dtype=self.np_precision)
@@ -1316,12 +1316,26 @@ class Plasim_Field:
             
         else:
             dataset = Dataset(folder+self.filename+'.nc')
-            self.time = np.asarray(dataset.variables['time']).reshape(self.years,-1) # CHANGE TO XARRAY
+            if year_list is None: # load all years
+                self.time = np.asarray(dataset.variables['time']).reshape(self.years,-1) # CHANGE TO XARRAY
+            else:
+                units_per_year = dataset.variables['time'].shape[0]//self.years
+                if dataset.variables['time'].shape[0] != self.years*units_per_year:
+                    raise ValueError(f"{self.filename} doesn't have {self.years} years") 
+                self.time = np.concatenate([dataset.variables['time'][y*units_per_year:(y+1)*units_per_year,...] for y in year_list], axis=0).reshape(len(year_list),-1)
             print('Loaded time array')
             if (self.name == 'zg') or (self.name == 'ua') or (self.name == 'va'): # we need to take out dimension that is useless (created by extracting a level)
-                self.var = np.asarray(dataset.variables[self.name][:,0,self.lat_start:self.lat_end,self.lon_start:self.lon_end],  dtype=self.np_precision)
+                if year_list is None:
+                    self.var = np.asarray(dataset.variables[self.name][:,0,self.lat_start:self.lat_end,self.lon_start:self.lon_end],  dtype=self.np_precision)
+                else:
+                    self.var = [np.asarray(dataset.variables[self.name][y*units_per_year:(y+1)*units_per_year,0,self.lat_start:self.lat_end,self.lon_start:self.lon_end],  dtype=self.np_precision) for y in year_list]
+                    self.var = np.concatenate(self.var, axis=0)
             else: 
-                self.var = np.asarray(dataset.variables[self.name][:,self.lat_start:self.lat_end,self.lon_start:self.lon_end],  dtype=self.np_precision)
+                if year_list is None:
+                    self.var = np.asarray(dataset.variables[self.name][:,self.lat_start:self.lat_end,self.lon_start:self.lon_end],  dtype=self.np_precision)
+                else:
+                    self.var = [np.asarray(dataset.variables[self.name][y*units_per_year:(y+1)*units_per_year,self.lat_start:self.lat_end,self.lon_start:self.lon_end],  dtype=self.np_precision) for y in year_list]
+                    self.var = np.concatenate(self.var, axis=0)
             print(f"input {self.var.shape = }")
             self.var = self.var.reshape(self.years, self.var.shape[0]//self.years, self.var.shape[1], self.var.shape[2])
             self.lon = dataset.variables["lon"][self.lon_start:self.lon_end]
