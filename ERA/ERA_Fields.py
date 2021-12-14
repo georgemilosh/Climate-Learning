@@ -1,5 +1,6 @@
 # George Miloshevich 2021
 # Importation des librairies
+from pathlib import Path
 from netCDF4 import Dataset
 import numpy as np
 import warnings
@@ -1067,7 +1068,7 @@ def create_mask(model,area, data, axes='first 2', return_full_mask=False): # car
             print(f'Unknown area {area}')
             return None
     else:
-        print(f'Unknown model {Model}')
+        print(f'Unknown model {model}')
         return None
 
 def Greenwich(Myarray):
@@ -1412,6 +1413,11 @@ class Plasim_Field:
                         A[y,:]=np.convolve(obj[y,:],  convseq, mode='valid')
                     obj = A
             # if not keep the definitions of the objects
+
+            # create containing folder if it doesn't exist
+            if not os.path.exists(containing_folder):
+                containing_folder = Path(containing_folder).resolve()
+                containing_folder.mkdir(parents=True,exist_ok=True)
 
             np.save(filename_abs,self.abs_mask)
             np.save(filename_ano_abs,self.ano_abs_mask)
@@ -1843,7 +1849,7 @@ def TrainTestSampleIndices(i,Xshape, labels, undersampling_factor, sampling='', 
 
     test_indices = np.array(range(lower,upper))  # extract the test set which is between the lower and the upper bound
     # next we select the train set which is below the lower bound and above the uppder bound
-    train_indices = np.array(list(range(lower))+list(range(upper,X.shape[0])))  # The indices of the train set (relative to the original set)
+    train_indices = np.array(list(range(lower))+list(range(upper,Xshape[0])))  # The indices of the train set (relative to the original set)
     train_labels_indices = (labels[train_indices])                               # Array of labels of the train set (relative to the train set)
     train_true_labels_indices = (train_indices[(train_labels_indices)])               # The array of the indices of the true labels in the train set
     train_false_labels_indices = (train_indices[(~train_labels_indices)])             # The array indices of the false labels in the train set
