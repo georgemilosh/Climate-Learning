@@ -5,6 +5,8 @@
 import os as os
 from pathlib import Path
 import sys
+import warnings
+
 path_to_ERA = Path(__file__).resolve().parent.parent / 'ERA' # when absolute path, so you can run the script from another folder (outside plasim)
 sys.path.insert(1, str(path_to_ERA))
 # sys.path.insert(1, '../ERA/')
@@ -14,6 +16,7 @@ import time
 import shutil
 import gc
 import psutil
+
 from imblearn.over_sampling import RandomOverSampler
 from imblearn.under_sampling import RandomUnderSampler
 from imblearn.combine import SMOTEENN
@@ -132,17 +135,19 @@ fields_infos = {
     },
 }
 
-def load_data(num_years=8000, sampling='', Model='Plasim', area='France',
+def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', area='France', filter_area='France',
               lon_start=0, lon_end=128, lat_start=0, lat_end=22, mylocal='/local/gmiloshe/PLASIM/',fields=['t2m','zg500','mrso_filtered']):
     '''
     Loads the data.
 
     Parameters:
     -----------
-        num_years: number of years of te dataset
+        dataset_years: number of years of te dataset, 8000 or 1000
+        year_list: list of years to load from the dataset
         sampling: '' (dayly) or '3hrs'
         Model: 'Plasim', 'CESM', ...
         area: region of interest, e.g. 'France'
+        filter_area: area over which to keep filtered fields
         lon_start, lon_end, lat_start, lat_end: longitude and latitude extremes of the data expressed in indices (model specific)
         mylocal: path the the data storage. For speed it is better if it is a local path.
         fields: list of field to be loaded. Add '_filtered' to the name to have the velues of the field outside `area` set to zero.
@@ -155,52 +160,48 @@ def load_data(num_years=8000, sampling='', Model='Plasim', area='France',
     TO IMPROVE:
         possibility to load less years from a dataset
     '''
-    
-    timesperday = 8 # 3 hour long periods in case we choose this sampling
-    if sampling == '3hrs':
-        T *= timesperday
-    
-    Months1 = [0, 0, 0, 0, 0, 0, 30, 30, 30, 30, 30, 0, 0, 0] # number of days per month with two leading 0s so that index 5 corresponds to May
-    if sampling == '3hrs': # The dataset will be large
-        Months1 = list(np.array(Months1)*timesperday)
-    Tot_Mon1 = list(itertools.accumulate(Months1))
 
-    time_start = Tot_Mon1[6]
-    time_end = Tot_Mon1[9] #+(Tot_Mon1[10]-Tot_Mon1[9])//2   # uncomment this if we are to use full summer (including the portion with september due to T days window)
+    if area != filter_area:
+        warnings.warn(f'Fields will be filtered on a different area ({filter_area}) than the region of interest ({area})')
 
-    mask, cell_area, lsm = ExtractAreaWithMask(mylocal,Model,area) # extract land-sea mask and multiply it by cell area
+    if dataset_years == 1000:
+        dataset_suffix = ''
+    elif dataset_years == 8000:
+        dataset_suffix = '_LONG'
+    else:
+        raise ValueError('Invalid number of dataset years')
+   
 
-    # TO IMPROVE: add possibility to choose dataset
+    mask, cell_area, lsm = ef.ExtractAreaWithMask(mylocal,Model,area) # extract land-sea mask and multiply it by cell area
+
     if sampling == '3hrs': 
         prefix = ''
-        file_prefix = '../Climate/'
+        file_suffix = f'../Climate/Data_Plasim{dataset_suffix}/'
     else:
-        prefix = 'ANO_LONG_'
-        file_prefix = ''
+        prefix = f'ANO{dataset_suffix}_'
+        file_suffix = f'Data_Plasim{dataset_suffix}/'
 
     # load the fields
     _fields = {}
     for field_name in fields:
         do_filter = False
-        if field_name.endswith('_filtered'):
+        if field_name.endswith('_filtered'): # TO IMPROVE: if you have to filter the data load just the interesting part
             field_name = field_name.rsplit('_', 1)[0] # remove '_filtered'
             do_filter = True
         if field_name not in fields_infos:
             raise KeyError(f'Unknown field {field_name}')
+        f_infos = fields_infos[field_name]
         # create the field object
-        field = ef.Plasim_Field(fields_infos[field_name]['name'],
-                                prefix+fields_infos[field_name]['filename_suffix'],
-                                fields_infos[field_name]['label'],
-                                Model=Model, 
-                                lat_start=lat_start, lat_end=lat_end, lon_start=lon_start, lon_end=lon_end,
-                                myprecision='single', mysampling=sampling, years=num_years)
+        field = ef.Plasim_Field(f_infos['name'], prefix+f_infos['filename_suffix'], f_infos['label'],
+                                Model=Model, lat_start=lat_start, lat_end=lat_end, lon_start=lon_start, lon_end=lon_end,
+                                myprecision='single', mysampling=sampling, years=dataset_years)
         # load the data
-        field.load_data(mylocal+file_prefix+'Data_Plasim_LONG/') # TO IMPROVE: add possibility to choose dataset
+        field.load_data(mylocal+file_suffix, year_list=year_list)
         # Set area integral
         field.abs_area_int, field.ano_area_int = field.Set_area_integral(area,mask,'Postproc')
         # filter
-        if do_filter: # set to zero all values outside `area`
-            filter_mask = ef.create_mask(Model, area, field.var, axes='last 2', return_full_mask=True)
+        if do_filter: # set to zero all values outside `filter_area`
+            filter_mask = ef.create_mask(Model, filter_area, field.var, axes='last 2', return_full_mask=True)
             field.var *= filter_mask
 
         _fields[field_name] = field  
