@@ -1291,7 +1291,7 @@ class Plasim_Field:
         self.lon_start = lon_start
         self.lon_end = lon_end
         self.Model = Model
-        self.years = years # years must be the correct number of years in the dataset
+        self.years = years # years must be the correct number of years in the dataset # GM: There is probably a way to just read the years from *.nc
         self.sampling = mysampling # This string is used to distinguish daily vs 3 hr sampling, which is going to be important when we compute area integrals. The idea is that if we have already computed daily we must change the name for the new 3 hrs sampling file, otherwise the daily file will be loaded (see the routine Set_area_integral)
         if myprecision == 'double':
             self.np_precision = np.float64

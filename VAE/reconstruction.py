@@ -36,7 +36,7 @@ print("checkpoint_name = ", checkpoint_name)
 print("loading module from ", checkpoint_name+'/Funs.py')
 foo = module_from_file("foo", checkpoint_name+'/Funs.py')
 print("==Reading data==")
-X, vae, Z_DIM, N_EPOCHS, INITIAL_EPOCH, BATCH_SIZE, LEARNING_RATE, checkpoint_path, checkpoint_name, myinput, history = foo.PrepareDataAndVAE(checkpoint_name)
+X, vae, Z_DIM, N_EPOCHS, INITIAL_EPOCH, BATCH_SIZE, LEARNING_RATE, checkpoint_path, checkpoint_name, myinput, history = foo.PrepareDataAndVAE(checkpoint_name, DIFFERENT_YEARS=range(500))
 
 print("X.shape = ", X.shape, " , np.max(X) = ", np.max(X), " , np.min (X) = ", np.min(X), " , np.mean(X[:,5,5,0]) = ", np.mean(X[:,5,5,0]), " , np.std(X[:,5,5,0]) = ", np.std(X[:,5,5,0]))
 
