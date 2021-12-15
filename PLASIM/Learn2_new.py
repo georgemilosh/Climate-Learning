@@ -9,6 +9,7 @@ import warnings
 import time
 import shutil
 import gc
+from numpy.random.mtrand import permutation
 import psutil
 import numpy as np
 
@@ -255,6 +256,134 @@ def roll_X(X, axis='lon', steps=0):
     else:
         raise ValueError(f'Unknown valur for axis: {axis}')
     return np.roll(X,steps,axis=axis)
+
+####### MIXING ########
+
+def invert_permutation(permutation):
+    '''
+    Inverts a permutation.
+    e.g.:
+        a = np.array([3,4,2,5])
+        p = np.random.permutation(np.arange(4))
+        a_permuted = a[p]
+        p_inverse = invert_permutation(p)
+
+        `a` and `a_permuted[p_inverse]` will be equal
+
+    Parameters:
+    -----------
+        permutation: 1D array that must be a permutation of an array of the kind `np.arange(n)` with `n` integer
+    '''
+    return np.argsort(permutation)
+
+def compose_permutations(permutations):
+    '''
+    Composes a series of permutations
+    e.g.:
+        a = np.array([3,4,2,5])
+        p1 = np.random.permutation(np.arange(4))
+        p2 = np.random.permutation(np.arange(4))
+        p_composed = compose_permutations([p1,p2])
+        a_permuted1 = a[p1]
+        a_permuted2 = a_permuted1[p2]
+        a_permuted_c = a[p_composed]
+
+        `a_permuted_c` and `a_permuted2` will be equal
+
+    Parameters:
+    -----------
+        permutations: list of 1D arrays that must be a permutation of an array of the kind `np.arange(n)` with `n` integer and the same for every permutation
+    '''
+    l = len(permutations[0])
+    for p in permutations[1:]:
+        if len(p) != l:
+            raise ValueError('All permutations must have the same length')
+    ps = permutations[::-1]
+    p = ps[0]
+    for _p in ps[1:]:
+        p = _p[p]
+    return p
+    
+
+def shuffle_years(X, permutation=None, seed=0, apply=False):
+    '''
+    Permutes `X` along the first axis
+
+    Parameters:
+    -----------
+        X: array with the data to permute
+        permutation: None or 1D array that must be a permutation of an array of `np.arange(X.shape[0])`
+        seed: int, if `permutation` is None, then it is computed using the provided seed.
+        apply: bool, if True the function returns the permuted data, otherwise the permutation is returned
+    '''
+    if permutation is None:
+        if seed is not None:
+            np.random.seed(seed)
+            permutation = np.random.permutation(X.shape[0])
+    if len(permutation) != X.shape[0]:
+        raise ValueError(f'Shape mismatch between X ({X.shape[0] = }) and permutation ({len(permutation) = })')
+    if apply:
+        return X[permutation,...]
+    return permutation
+
+def balance_folds(weights, nfolds=10):
+    '''
+    Returns a permutation that, once applied to `weights` would make the consecutive `nfolds` pieces of equal length have their sum the most similar to each other.
+
+    Parameters:
+    -----------
+        weights: 1D array
+        nfolds: int, must be a divisor of `len(weights)`
+
+    Returns:
+    --------
+        permutation: permutation of `np.arange(len(weights))`
+    '''
+    class Fold():
+        def __init__(self, target_length, target_sum, name=None):
+            self.indexs = []
+            self.length = target_length
+            self.target_sum = target_sum
+            self.sum = 0
+            self.hunger = np.infty
+            self.name = name
+        
+        def add(self, a):
+            self.indexs.append(a[1])
+            self.sum += a[0]
+            if self.length == len(self.indexs):
+                print(f'fold {self.name} done!')
+                return True
+            self.hunger = (self.target_sum - self.sum)/(self.length - len(self.indexs))
+            return False
+
+    fold_length = len(weights)//nfolds
+    if len(weights) != fold_length*nfolds:
+        raise ValueError(f'Cannot make {nfolds} folds of equal lenght out of {len(weights)} years of data')
+    target_sum = np.sum(weights)/nfolds
+
+
+    folds = [Fold(fold_length, target_sum, name=i) for i in range(nfolds)]
+    permutation = []
+
+    ws = [(a,i) for i,a in enumerate(weights)]
+    ws.sort()
+    ws = ws[::-1]
+        
+    for a in ws:
+        # determine the hungriest fold
+        j = np.argmax([f.hunger for f in folds])
+        if folds[j].add(a):
+            f = folds.pop(j)
+            permutation += f.indexs
+
+    if len(permutation) != len(weights):
+        raise ValueError('balance_folds: Something went wrong during balancing: either missing or duplicated data')
+
+    return permutation
+
+    
+
 
 
 def Mix(percent, num_years=8000, creation=None, checkpoint_name=None):
