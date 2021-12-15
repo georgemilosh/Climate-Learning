@@ -108,32 +108,20 @@ fields_infos = {
         'filename_suffix': 'tas',
         'label': 'Temperature',
     },
-    'zg200': {
-        'name': 'zg',
-        'filename_suffix': 'zg200',
-        'label': '200 mbar Geopotential',
-    },
-    'zg300': {
-        'name': 'zg',
-        'filename_suffix': 'zg300',
-        'label': '300 mbar Geopotential',
-    },
-    'zg500': {
-        'name': 'zg',
-        'filename_suffix': 'zg500',
-        'label': '500 mbar Geopotential',
-    },
-    'zg850': {
-        'name': 'zg',
-        'filename_suffix': 'zg850',
-        'label': '850 mbar Geopotential',
-    },
     'mrso': {
         'name': 'mrso',
         'filename_suffix': 'mrso',
         'label': 'Soil Moisture',
     },
 }
+
+for h in [200,300,500,850]:
+    fields_infos[f'zg{h}'] = {
+        'name': 'zg',
+        'filename_suffix': f'zg{h}',
+        'label': f'{h} mbar Geopotential',
+    }
+
 
 def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', area='France', filter_area='France',
               lon_start=0, lon_end=128, lat_start=0, lat_end=22, mylocal='/local/gmiloshe/PLASIM/',fields=['t2m','zg500','mrso_filtered']):
@@ -207,6 +195,34 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
         _fields[field_name] = field  
     
     return _fields
+
+
+def assign_labels(field, time_start, time_end, T=14, percent=5, threshold=None):
+    '''
+    Given a field of anomalies it computes the `T` days forward convolution of the integrated anomaly and assigns label 1 to anomalies above a given `threshold`.
+    If `threshold` is not provided, then it is computed from `percent`, namely to identify the `percent` most extreme anomalies.
+
+    Returns:
+    --------
+        labels: 2D array with shape (years, days) and values 0 or 1
+    '''
+    A, A_flattened, threshold =  field.ComputeTimeAverage(time_start, time_end, T=T, percent=percent, threshold=threshold)[:3]
+    return np.array(A >= threshold, dtype=int)
+
+def make_X(fields, time_start, time_end, T=14, tau=0):
+    '''
+    Cuts the fields in time and stacks them. The original fields are not modified
+
+    Returns:
+    --------
+        X: array with shape (years, days, lat, lon, field)
+    '''
+    # stack the fields
+    X = np.array([field.var[:, time_start+tau:time_end+tau-T+1, ...] for field in fields.values()])
+    # now transpose the array so the field index becomes the last
+    X = X.transpose(*range(1,len(X.shape)), 0)
+    return X
+
     
 
 def Mix(percent, num_years=8000, creation=None, checkpoint_name=None):
@@ -257,22 +273,6 @@ def Mix(percent, num_years=8000, creation=None, checkpoint_name=None):
 
     print("t2m.var.shape = ", t2m.var.shape)
 
-
-def StackFields(t2m, zg500, mrso, time_start, time_end, lat_from, lat_to, lon_from, lon_to):
-    Xs = [t2m.ReshapeInto2Dseries(time_start, time_end,lat_from1,lat_to1,lon_from1,lon_to1,T,tau,dim=2) for lat_from1,lat_to1, lon_from1, lon_to1 in zip(lat_from,lat_to,lon_from,lon_to)] # here we extract the portion of the globe
-    X = np.concatenate(Xs, axis=2) # concatenate over lomgitude
-    
-
-    ## Without Graining:
-    Xs = [zg500.ReshapeInto2Dseries(time_start, time_end,lat_from1,lat_to1,lon_from1,lon_to1,T,tau,dim=2) for lat_from1,lat_to1, lon_from1, lon_to1 in zip(lat_from,lat_to,lon_from,lon_to)] # here we extract the portion of the globe
-    X= np.concatenate([X[:,:,:,np.newaxis], np.concatenate(Xs, axis=2)[:,:,:,np.newaxis]], axis=3)
-    
-
-    
-    Xs = [mrso.ReshapeInto2Dseries(time_start, time_end,lat_from1,lat_to1,lon_from1,lon_to1,T,tau,dim=2) for lat_from1,lat_to1, lon_from1, lon_to1 in zip(lat_from,lat_to,lon_from,lon_to)] # here we extract the portion of the globe
-    X= np.concatenate([X, np.concatenate(Xs, axis=2)[:,:,:,np.newaxis]], axis=3)
-    
-    return X
     
     
 
