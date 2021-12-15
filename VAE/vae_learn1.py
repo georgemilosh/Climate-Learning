@@ -19,14 +19,15 @@ def PrepareParameters(creation):
     print("==Preparing Parameters==")
     WEIGHTS_FOLDER = './models/'
     
-    RESCALE_TYPE = 'normalize' #'rescale' #'nomralize'
-    Z_DIM = 8 #16 #64 #256 # Dimension of the latent vector (z)
+    RESCALE_TYPE = 'rescale' #'nomralize'
+    Z_DIM = 16 #8 #256 # Dimension of the latent vector (z)
     BATCH_SIZE = 128#512
     LEARNING_RATE = 1e-3#5e-4# 1e-3#5e-6
     N_EPOCHS = 20#600#200
-    NUM_IMAGES = 4000 # number of years that variational autoencoder sees
-    K1 = 0.999 # 1#100
-    K2 = 0.001 #1
+    SET_YEARS = range(8000) # the set of years that variational autoencoder sees
+    SET_YEARS_LABEL = 'range(8000)'
+    K1 = 0.9 # 1#100
+    K2 = 0.1 #1
     
     data_path='../../gmiloshe/PLASIM/'
     
@@ -38,8 +39,8 @@ def PrepareParameters(creation):
     lat_end = 24
     Months1 = [0, 0, 0, 0, 0, 0, 30, 30, 30, 30, 30, 0, 0, 0] 
     Tot_Mon1 = list(itertools.accumulate(Months1))
-    checkpoint_name = WEIGHTS_FOLDER+Model+'_batchnorm_dropout__'+RESCALE_TYPE+'_k1_'+str(K1)+'_k2_'+str(K2)+'_LR_'+str(LEARNING_RATE)+'_ZDIM_'+str(Z_DIM)
-    return WEIGHTS_FOLDER, RESCALE_TYPE, Z_DIM, BATCH_SIZE, LEARNING_RATE, N_EPOCHS, NUM_IMAGES, K1, K2, checkpoint_name, data_path, Model, lon_start, lon_end, lat_start, lat_end, Tot_Mon1
+    checkpoint_name = WEIGHTS_FOLDER+Model+'_btchnrmdrpt_yrs-'+SET_YEARS_LABEL+'_'+RESCALE_TYPE+'_k1_'+str(K1)+'_k2_'+str(K2)+'_LR_'+str(LEARNING_RATE)+'_ZDIM_'+str(Z_DIM)
+    return WEIGHTS_FOLDER, RESCALE_TYPE, Z_DIM, BATCH_SIZE, LEARNING_RATE, N_EPOCHS, SET_YEARS, K1, K2, checkpoint_name, data_path, Model, lon_start, lon_end, lat_start, lat_end, Tot_Mon1
     
 def CreateFolder(creation,checkpoint_name):
     myinput = "Y" # default input
@@ -60,21 +61,21 @@ def CreateFolder(creation,checkpoint_name):
 
         sys.stdout = ef.Logger(checkpoint_name+'/logger.log')  # Keep a copy of print outputs there
         shutil.copy(__file__, checkpoint_name+'/Funs.py') # Copy this file to the directory of the training
-        
+        shutil.copy('history.py', checkpoint_name)  # Also copy a version of the files we work with to analyze the results of the training
+        shutil.copy('reconstruction.py', checkpoint_name)
     return myinput
 
-def LoadData(creation, Model, lat_start, lat_end, lon_start, lon_end, NUM_IMAGES):
+def LoadData(creation, Model, lat_start, lat_end, lon_start, lon_end, year_list):
     print("==Reading data==")
 
     ###### THIS FILEDS ARE ANOMALIES!
-    zg500 = ef.Plasim_Field('zg','ANO_LONG_zg500','500 mbar Geopotential', Model, lat_start, lat_end, lon_start, lon_end,'single','')
+    zg500 = ef.Plasim_Field('zg','ANO_LONG_zg500','500 mbar Geopotential', Model, lat_start=lat_start, lat_end=lat_end, lon_start=lon_start, lon_end=lon_end,myprecision='single',mysampling='',years=8000)
     
-    if creation == None:
-        zg500.years = NUM_IMAGES # Currently this feature doesn't work because .years was not supposed to be used like this. It was supposed to always coincide with the known dimension of the *.nc dataset 
-    else: # if we are running this to plot reconstruction rather than for training we don't need to load all the images which takes too much time
-        zg500.years = NUM_IMAGES//10
+    if year_list == range(8000): # we are asking the full data set
+        zg500.load_field('/local/gmiloshe/PLASIM/Data_Plasim_LONG/')
+    else:
+        zg500.load_field('/local/gmiloshe/PLASIM/Data_Plasim_LONG/', year_list=year_list)
     
-    zg500.load_field('/local/gmiloshe/PLASIM/Data_Plasim_LONG/')
     X = zg500.var.reshape(zg500.var.shape[0]*zg500.var.shape[1],zg500.var.shape[2],zg500.var.shape[3],1)
 
     INPUT_DIM = X.shape[1:]  # Image dimension
@@ -159,12 +160,15 @@ def ConstructVAE(INPUT_DIM, Z_DIM, checkpoint_name, N_EPOCHS, myinput, K1, K2):
     
     return vae, history, N_EPOCHS, INITIAL_EPOCH, checkpoint, checkpoint_path
 
-def PrepareDataAndVAE(creation=None):
-    WEIGHTS_FOLDER, RESCALE_TYPE, Z_DIM, BATCH_SIZE, LEARNING_RATE, N_EPOCHS, NUM_IMAGES, K1, K2, checkpoint_name, data_path, Model, lon_start, lon_end, lat_start, lat_end, Tot_Mon1 = PrepareParameters(creation)
+def PrepareDataAndVAE(creation=None, DIFFERENT_YEARS=None):
+    WEIGHTS_FOLDER, RESCALE_TYPE, Z_DIM, BATCH_SIZE, LEARNING_RATE, N_EPOCHS, SET_YEARS, K1, K2, checkpoint_name, data_path, Model, lon_start, lon_end, lat_start, lat_end, Tot_Mon1 = PrepareParameters(creation)
+    if DIFFERENT_YEARS!=None:
+        SET_YEARS = DIFFERENT_YEARS # for benchmark runs we don't need all years or the same years, with different years we can load some other data.
     
     myinput = CreateFolder(creation,checkpoint_name)
     
-    X, INPUT_DIM = LoadData(creation, Model, lat_start, lat_end, lon_start, lon_end, NUM_IMAGES)
+    X, INPUT_DIM = LoadData(creation, Model, lat_start, lat_end, lon_start, lon_end, SET_YEARS) 
+    
     X = RescaleNormalize(X,RESCALE_TYPE, creation, checkpoint_name)
     print("X.shape = ", X.shape,  " ,np.mean(X[:,5,5,0]) = ", np.mean(X[:,5,5,0]), " ,np.std(X[:,5,5,0]) = ", np.std(X[:,5,5,0]), " , np.min(X) = ", np.min(X), " , np.max(X) = ", np.max(X))
 
