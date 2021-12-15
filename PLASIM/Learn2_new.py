@@ -6,16 +6,17 @@ import os as os
 from pathlib import Path
 import sys
 import warnings
+import time
+import shutil
+import gc
+import psutil
+import numpy as np
 
 path_to_ERA = Path(__file__).resolve().parent.parent / 'ERA' # when absolute path, so you can run the script from another folder (outside plasim)
 sys.path.insert(1, str(path_to_ERA))
 # sys.path.insert(1, '../ERA/')
 import ERA_Fields as ef # general routines
 import TF_Fields as tff # tensorflow routines 
-import time
-import shutil
-import gc
-import psutil
 
 from imblearn.over_sampling import RandomOverSampler
 from imblearn.under_sampling import RandomUnderSampler
@@ -223,7 +224,38 @@ def make_X(fields, time_start, time_end, T=14, tau=0):
     X = X.transpose(*range(1,len(X.shape)), 0)
     return X
 
-    
+def roll_X(X, axis='lon', steps=0):
+    '''
+    Rolls `X` along a given axis. useful for example for moving France away from the Greenwich meridian
+
+    Parameters:
+    -----------
+        X: array with shape (years, days, lat, lon, field)
+        axis: 'year' (or 'y'), 'day' (or 'd'), 'lat', 'lon', 'field' (or 'f')
+        steps: number of gridsteps to roll
+            a positive value for 'steps' means that the elements of the array are moved forward in it, e.g. `steps` = 1 means that the old first element is now in the second place
+            This means that for every axis a positive value of `steps` yields a shift of the array
+            'year', 'day' : forward in time
+            'lat' : southward
+            'lon' : eastward
+            'field' : forward in the numbering of the fields
+    '''
+    if steps == 0:
+        return X
+    if axis.startswith('y'):
+        axis = 0
+    elif axis.startswith('d'):
+        axis = 1
+    elif axis == 'lat':
+        axis = 2
+    elif axis == 'lon':
+        axis = 3
+    elif axis.startswith('f'):
+        axis = 4
+    else:
+        raise ValueError(f'Unknown valur for axis: {axis}')
+    return np.roll(X,steps,axis=axis)
+
 
 def Mix(percent, num_years=8000, creation=None, checkpoint_name=None):
     
