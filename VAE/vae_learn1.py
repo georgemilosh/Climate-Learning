@@ -24,8 +24,8 @@ def PrepareParameters(creation):
     BATCH_SIZE = 128#512
     LEARNING_RATE = 1e-3#5e-4# 1e-3#5e-6
     N_EPOCHS = 20#600#200
-    SET_YEARS = range(8000) # the set of years that variational autoencoder sees
-    SET_YEARS_LABEL = 'range(8000)'
+    SET_YEARS = range(1000) # the set of years that variational autoencoder sees
+    SET_YEARS_LABEL = 'range1000'
     K1 = 0.9 # 1#100
     K2 = 0.1 #1
     
@@ -162,8 +162,12 @@ def ConstructVAE(INPUT_DIM, Z_DIM, checkpoint_name, N_EPOCHS, myinput, K1, K2):
 
 def PrepareDataAndVAE(creation=None, DIFFERENT_YEARS=None):
     WEIGHTS_FOLDER, RESCALE_TYPE, Z_DIM, BATCH_SIZE, LEARNING_RATE, N_EPOCHS, SET_YEARS, K1, K2, checkpoint_name, data_path, Model, lon_start, lon_end, lat_start, lat_end, Tot_Mon1 = PrepareParameters(creation)
-    if DIFFERENT_YEARS!=None:
+
+    if isinstance(DIFFERENT_YEARS, np.ndarray): # Need to check because otherwise comparing array to None would give an error
         SET_YEARS = DIFFERENT_YEARS # for benchmark runs we don't need all years or the same years, with different years we can load some other data.
+    else: # might be a list
+        if DIFFERENT_YEARS!=None: #check that the parameter is not None before overwriting the years
+            SET_YEARS = DIFFERENT_YEARS # for benchmark runs we don't need all years or the same years, with different years we can load some other data.
     
     myinput = CreateFolder(creation,checkpoint_name)
     
