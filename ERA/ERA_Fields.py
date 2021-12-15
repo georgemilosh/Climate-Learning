@@ -1692,8 +1692,14 @@ class Plasim_Field:
             temp2[:,:,:,1] = np.imag(temp)
             return temp2
 
-    def ComputeTimeAverage(self,time_start,time_end,T,tau, percent,delta=1): # computes time average from time series
-        A = np.zeros((self.var.shape[0], time_end - time_start - T + 1), dtype=self.np_precision)   # When we use convolve (running mean) there is an extra point that we can generate by displacing the window hence 13 instead of 14
+    def ComputeTimeAverage(self,time_start,time_end,T=14,tau=0, percent=5,delta=1, threshold=None): 
+        '''
+        Computes time average from time series
+
+        `tau` is not used
+        if `threshold` is provided, it overrides percent
+        '''
+        A = np.zeros((self.var.shape[0], time_end - time_start - T + 1), dtype=self.np_precision)   # When we use convolve (running mean) there is an extra point that we can generate by displacing the window hence T-1 instead of T
         if delta==1:
             convseq = np.ones(T)/T
         else: # if coarse graining is applied we define time average differently by skipping unnecessary steps
@@ -1704,7 +1710,8 @@ class Plasim_Field:
         for y in range(self.var.shape[0]):
             A[y,:]=np.convolve(self.abs_area_int[y,(time_start):(time_end)],  convseq, mode='valid')
         A_reshape = A.reshape((A.shape[0]*A.shape[1]))
-        threshold = np.sort(A_reshape)[np.ceil(A_reshape.shape[0]*(1-percent/100)).astype('int')]
+        if threshold is None:
+            threshold = np.sort(A_reshape)[np.ceil(A_reshape.shape[0]*(1-percent/100)).astype('int')]
         list_extremes = list(A_reshape >= threshold)
         return A, A_reshape, threshold, list_extremes, convseq
         
