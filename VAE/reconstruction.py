@@ -36,7 +36,8 @@ print("checkpoint_name = ", checkpoint_name)
 print("loading module from ", checkpoint_name+'/Funs.py')
 foo = module_from_file("foo", checkpoint_name+'/Funs.py')
 print("==Reading data==")
-X, vae, Z_DIM, N_EPOCHS, INITIAL_EPOCH, BATCH_SIZE, LEARNING_RATE, checkpoint_path, checkpoint_name, myinput, history = foo.PrepareDataAndVAE(checkpoint_name, DIFFERENT_YEARS=range(500))
+
+X, vae, Z_DIM, N_EPOCHS, INITIAL_EPOCH, BATCH_SIZE, LEARNING_RATE, checkpoint_path, checkpoint_name, myinput, history = foo.PrepareDataAndVAE(checkpoint_name, DIFFERENT_YEARS=np.random.permutation(range(2000,3000)))
 
 print("X.shape = ", X.shape, " , np.max(X) = ", np.max(X), " , np.min (X) = ", np.min(X), " , np.mean(X[:,5,5,0]) = ", np.mean(X[:,5,5,0]), " , np.std(X[:,5,5,0]) = ", np.std(X[:,5,5,0]))
 
@@ -50,13 +51,14 @@ checkpoint_i = '/cp-'+nb_zeros_c*'0'+str(checkpoint)+'.ckpt'
 vae.load_weights(checkpoint_name+checkpoint_i)
 
 
-        
-example_images = X[:10]
+import random as rd        
+example_images = X[rd.sample(range(X.shape[0]), 10)]
 import matplotlib.pyplot as plt
 tff.plot_compare(vae,example_images)
 
 from scipy.stats import norm
-_,_,z_test = vae.encoder.predict(X[:200])
+
+_,_,z_test = vae.encoder.predict(X[rd.sample(range(X.shape[0]), 200)])
 print("z_test.shape = ", z_test.shape)
 
 Z_DIM = z_test.shape[1] #200 # Dimension of the latent vector (z)
