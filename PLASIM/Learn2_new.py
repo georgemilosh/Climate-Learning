@@ -383,58 +383,6 @@ def balance_folds(weights, nfolds=10):
     return permutation
 
     
-
-
-
-def Mix(percent, num_years=8000, creation=None, checkpoint_name=None):
-    
-    new_mixing = False                     # if set to True the undersampling will also follow the suit
-    # ==== Premixing =====
-    print('==== PreMixing ====')
-    if creation is None: # If we are not running from the same directory
-        filename_mixing = t2m.PreMixing(new_mixing, 'PostprocLONG',num_years)  # perform mixing (mix batches and years but not days of the same year!)  # NEW MIXING MEANS ALSO NEW UNDERSAMPLING!
-        shutil.copy(filename_mixing, checkpoint_name) # move the permutation file that was used to mix 
-        zg500.PreMixing(False, 'PostprocLONG',num_years) # IT IS IMPORTANT THAT ALL SUBSEQUENT FIELDS BE MIXED (SHUFFLED) THE SAME WAY, otherwise no synchronization!
-        mrso.PreMixing(False, 'PostprocLONG',num_years)
-    else:
-        filename_mixing = t2m.PreMixing(new_mixing,creation,num_years) # load from the folder that we are calling this file from   # NEW MIXING MEANS ALSO NEW UNDERSAMPLING!
-        zg500.PreMixing(False,creation,num_years) # IT IS IMPORTANT THAT ALL SUBSEQUENT FIELDS BE MIXED (SHUFFLED) THE SAME WAY, otherwise no synchronization!
-        mrso.PreMixing(False,creation,num_years)
-    print(f"{t2m.var.shape = }")
-    print(f"{time_end = } ,{time_start = } ,{T = }")
-    
-    A, A_reshape, threshold, list_extremes, convseq =  t2m.ComputeTimeAverage(time_start,time_end,T,tau, percent)
-    print(f"{threshold = }")
-    # ==== Equal mixing =====
-    #   it ensures that there is equal number of heatwaves (or nearly equal) per what we call batch (century if we are dealing with 1000 years of data). This way the skill fluctuates less per ``batch''. This is not the same definition of batch we find in machine learning!
-    print('==== EqualMixing ====')
-    if creation is None: # If we are not running from the same directory
-        filename_mixing = t2m.EqualMixing(A, threshold, new_mixing, 'PostprocLONG',num_years)
-        shutil.copy(filename_mixing, checkpoint_name) # move the permutation file that was used to mix 
-        zg500.EqualMixing(A, threshold, False, 'PostprocLONG',num_years) #IT IS IMPORTANT THAT ALL SUBSEQUENT FIELDS BE MIXED (SHUFFLED) THE SAME WAY, otherwise no synchronization!
-        mrso.EqualMixing(A, threshold, False, 'PostprocLONG',num_years)
-    else:
-        filename_mixing = t2m.EqualMixing(A, threshold, new_mixing,creation,num_years)
-        zg500.EqualMixing(A, threshold, False,creation,num_years)
-        mrso.EqualMixing(A, threshold, False,creation,num_years)
-    # Now we have to recompute the extremes:
-    
-    A, A_reshape, threshold, list_extremes, convseq =  t2m.ComputeTimeAverage(time_start,time_end,T,tau, percent)
-    
-    print(f"{threshold = }")
-    print(A.dtype)
-    
-    # ==== Just to be safe temperature filter is applied after the computation of A(t)
-    t2m.var = t2m.var*filter_mask # applying the filter to set to zero all values outside the domain
-
-    # Below we reshape into time by flattened array, these are only needed if we require them for training the network
-    t2m.abs_area_int_reshape = t2m.ReshapeInto1Dseries(area, mask, Tot_Mon1[6], Tot_Mon1[9], T, tau)
-    mrso.abs_area_int_reshape = mrso.ReshapeInto1Dseries(area, mask, Tot_Mon1[6], Tot_Mon1[9], T, tau)
-    print("mrso.abs_area_int_reshape.shape = ", mrso.abs_area_int_reshape.shape)
-
-    print("t2m.var.shape = ", t2m.var.shape)
-
-    
     
 
 def Prepare(creation = None):  # if we do not specify creation it automacially creates new folder. If we specify the creation, it should correspond to the folder we are running the file from
