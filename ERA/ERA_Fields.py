@@ -1494,7 +1494,7 @@ class Plasim_Field:
         return filename
     
     
-    def EqualMixing(self, A, threshold, new_mixing, containing_folder='Postproc', num_years=1000, select_group=0, delta=1): 
+    def EqualMixing(self, A, threshold, new_mixing, containing_folder='Postproc', num_years=1000, select_group=0, delta=1, threshold_end=''): 
         '''
         Permute all years (useful for Machine Learning input), mix until each batch has the same number of heatwave days!
         '''
@@ -1515,10 +1515,17 @@ class Plasim_Field:
             filenamepostfix4 = ''
         else:
             filenamepostfix4 = '_'+str(delta)
-        filename = f'{containing_folder}/EqualMixing_{self.sampling}_{self.Model}{filenamepostfix1}{filenamepostfix2}{filenamepostfix3}{filenamepostfix4}.npy'
+        if threshold_end == '': # This is reserved in case we want to define extremes between two thresholds
+            filenamepostfix5 = ''
+        else:
+            filenamepostfix5 = '_'+str(threshold_end)
+        filename = f'{containing_folder}/EqualMixing_{self.sampling}_{self.Model}{filenamepostfix1}{filenamepostfix2}{filenamepostfix3}{filenamepostfix4}{filenamepostfix5}.npy'
         
         if ((new_mixing) or (not os.path.exists(filename))): # if we order new mixing or the mixing file doesn't exist
-            mixed_event_per_year = np.sum((A>=threshold),1)
+            if threshold_end == '': # If we don't provide the end we imply that it is max of A
+                mixed_event_per_year = np.sum((A>=threshold),1)
+            else:   # If we provide the threshold_end we expect it to be the upper cap on the heatwaves
+                mixed_event_per_year = np.sum((A>=threshold)&(A<threshold_end),1)
             mixing = np.arange(A.shape[0])
             entropy_per_iteration, number_per_century, norm_per_century = ComputeEntropy(mixed_event_per_year,mixing)
 
