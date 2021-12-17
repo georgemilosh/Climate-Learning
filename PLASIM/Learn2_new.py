@@ -9,6 +9,7 @@ import warnings
 import time
 import shutil
 import gc
+from numpy.lib.arraysetops import isin
 from numpy.random.mtrand import permutation
 import psutil
 import numpy as np
@@ -30,38 +31,80 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers, models
 
+########## ARGUMENT PARSING ####################
+def run_smart(func, default_kwargs, **kwargs):
+    for k, v in kwargs.items():
+        if k not in default_kwargs:
+            raise KeyError(f'Unknown argument {k}')
+        iterate = False
+        if isinstance(v, list): # possible need to iterate over the argument
+            if isinstance(default_kwargs[k], list):
+                if isinstance(v[0], list):
+                    iterate = True
+            else:
+                iterate = True
+        if iterate:
+            for _v in v:
+                kwargs[k] = _v
+                run_smart(func, default_kwargs, **kwargs) #### HMMMMMMM
+
 ########## NEURAL NETWORK DEFINITION ###########
 
-def custom_CNN(model_input_dim): # This CNN I took from https://www.tensorflow.org/tutorials/images/cnn
+def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=1,
+                 batch_normalizations=True, conv_activations='relu', conv_dropouts=0.2, max_pool_sizes=[2,2,False],
+                 dense_units=[64,2], dense_activations=['relu', None], dense_dropouts=[0.2,False]):
+    '''
+    Creates a model consisting of a series of convolutional layers followed by fully connected ones
+    '''
     model = models.Sequential()
-    model.add(layers.Conv2D(32, (3, 3), input_shape=model_input_dim))
-    model.add(layers.BatchNormalization())
-    model.add(layers.Activation("relu"))
-    model.add(layers.SpatialDropout2D(0.2))
-    model.add(layers.MaxPooling2D((2, 2)))
 
-    model.add(layers.Conv2D(64, (3, 3)))
-    model.add(layers.BatchNormalization())
-    model.add(layers.Activation("relu"))
-    model.add(layers.SpatialDropout2D(0.2))
-    model.add(layers.MaxPooling2D((2, 2)))
+    # convolutional layers
+    # adjust the shape of the arguments to be of the same length as conv_channels
+    args = kernel_sizes, strides, batch_normalizations, conv_activations, conv_dropouts, max_pool_sizes
+    for j,arg in enumerate(range(len(args))):
+        if not isinstance(arg, list):
+            args[j] = [arg]*len(conv_channels)
+        elif len(arg) != len(conv_channels):
+            raise ValueError(f'Invalid length for argument {arg}')
+    kernel_sizes, strides, batch_normalizations, conv_activations, conv_dropouts, max_pool_sizes = args
+    # build the convolutional layers
+    for i in range(len(conv_channels)):
+        if i == 0:
+            model.add(layers.Conv2D(conv_channels[i], kernel_sizes[i],
+                      strides=strides[i], input_shape=input_shape))
+        else:
+            model.add(layers.Conv2D(conv_channels[i], kernel_sizes[i],
+                      strides=strides[i]))
+        if batch_normalizations[i]:
+            model.add(layers.BatchNormalization())
+        model.add(layers.Activation(conv_activations[i]))
+        if conv_dropouts[i]:
+            model.add(layers.SpatialDropout2D(conv_dropouts[i]))
+        if max_pool_sizes[i]:
+            model.add(layers.MaxPooling2D(max_pool_sizes[i]))
 
-    model.add(layers.Conv2D(64, (3, 3)))
-    model.add(layers.BatchNormalization())
-    model.add(layers.Activation("relu"))
-    model.add(layers.SpatialDropout2D(0.2))
-
+    # flatten
     model.add(layers.Flatten())
-    model.add(layers.Dense(64, activation='relu'))
-    model.add(layers.Dropout(0.2))
-    model.add(layers.Dense(2))
+
+    # dense layers
+    # adjust the shape of the arguments to be of the same length as conv_channels
+    args = dense_activations, dense_dropouts
+    for j,arg in enumerate(range(len(args))):
+        if not isinstance(arg, list):
+            args[j] = [arg]*len(dense_units)
+        elif len(arg) != len(dense_units):
+            raise ValueError(f'Invalid length for argument {arg}')
+    dense_activations, dense_dropouts = args
+    # build the dense layers
+    for i in range(len(dense_units)):
+        model.add(layers.Dense(dense_units[i], activation=dense_activations[i]))
+        if dense_dropouts[i]:
+            model.add(layers.Dropout(dense_dropouts[i]))
+    
+    print(model.summary())
+
     return model
 
-
-def probability_model(inputs,input_model): # This function is used to apply softmax to the output of the neural network
-    x = input_model(inputs)
-    outputs = layers.Softmax()(x)
-    return keras.Model(inputs, outputs)
 
 
 
@@ -382,7 +425,7 @@ def balance_folds(weights, nfolds=10):
 
     return permutation
 
-    
+
     
 
 def Prepare(creation = None):  # if we do not specify creation it automacially creates new folder. If we specify the creation, it should correspond to the folder we are running the file from
