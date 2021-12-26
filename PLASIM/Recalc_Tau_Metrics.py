@@ -24,13 +24,19 @@ def module_from_file(module_name, file_path): #The code that imports the file wh
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
             return module
-
 fig = plt.figure(figsize=(20,5))
 plt.style.use('seaborn-whitegrid')
 ax1 = plt.subplot(141)
 ax2 = plt.subplot(142)
 ax3 = plt.subplot(143)
 ax4 = plt.subplot(144)
+
+fig2 = plt.figure(figsize=(20,5))
+plt.style.use('seaborn-whitegrid')
+ax21 = plt.subplot(141)
+ax22 = plt.subplot(142)
+ax23 = plt.subplot(143)
+ax24 = plt.subplot(144)
 
 linestyles=['-', '--', '-.', ':']
 linestylescycle = cycle(linestyles)
@@ -39,7 +45,6 @@ linestylesnext = next(linestylescycle)
 markerstyles=['1','2','3','4']
 markerstylescycle = cycle(markerstyles)
 markerstylesnext = next(markerstylescycle)
-
 print('Number of curves to output ',len(sys.argv) - 2)
 
 if '[' in sys.argv[-1]: #checking for multiple inputs
@@ -84,6 +89,15 @@ for check_num1, checkpoint_name1 in enumerate(sys.argv[1:-2]):
     mean_WBS = []
     std_WBS = []
     tau = []
+    
+    mean_new_TPR = []
+    std_new_TPR = []
+    mean_new_PPV = []
+    std_new_PPV = []
+    mean_new_FPR = []
+    std_new_FPR = []
+    mean_new_F1 = []
+    std_new_F1 = []
     counter = 0
     print("Looking for filenames ", checkpoint_name1+'*')
     for checkpoint_name in glob.glob(checkpoint_name1+'*'):
@@ -142,6 +156,10 @@ for check_num1, checkpoint_name1 in enumerate(sys.argv[1:-2]):
             new_WBS = np.zeros(10,)
             new_freq = np.zeros(10,)
             new_skill = np.zeros(10,)
+            new_TP = np.zeros(10,)
+            new_FP = np.zeros(10,)
+            new_TN = np.zeros(10,)
+            new_FN = np.zeros(10,)
             if (undersampling_factor>1)and(undersampling_factor != undersampling_rate_input): # 
                 print("The r we want to compute is undersampling_factor and is >1 ")
                 print(" and it is not equal to undersampling_rate_input, which is the value we expect to be evaluated during training (I have started doing this roughly from Oct 4) ")
@@ -212,8 +230,21 @@ for check_num1, checkpoint_name1 in enumerate(sys.argv[1:-2]):
                     new_skill[i] =  (maxskill-new_entropy[i])/maxskill
                     #print("opt_checkpoint = ", opt_checkpoint, "len(history['val_MCC'])",len(history['val_MCC']))
                     new_MCC[i] = history['val_MCC'][opt_checkpoint]#[checkpoint]
+                    [[new_TN[i], new_FP[i]],[new_FN[i], new_TP[i]]] = history['val_confusion_matrix'][opt_checkpoint]#[checkpoint]
+                    
                 print("========Optimal checkpoint = ", opt_checkpoint)
         print(checkpoint_name1+f" TOTAL MCC  = {np.mean(new_MCC):.3f} +- {np.std(new_MCC):.3f} , entropy = {np.mean(new_entropy):.3f} +- {np.std(new_entropy):.3f} , skill = {np.mean(new_skill):.3f} +- {np.std(new_skill):.3f}, Brier = {np.mean(new_BS):.3f} +- {np.std(new_BS):.3f} , Weighted Brier = {np.mean(new_WBS):.3f} +- {np.std(new_WBS):.3f} , frequency = {np.mean(new_freq):.3f} +- {np.std(new_freq):.3f}")
+        
+        print(f"TP = {np.mean(new_TP,0)} +- {np.std(new_TP,0)}, TN = {np.mean(new_TN,0)} +- {np.std(new_TN,0)}, FP = {np.mean(new_FP,0)} +- {np.std(new_FP,0)}, FN = {np.mean(new_FN,0)} +- {np.std(new_FN,0)}")
+        mean_new_TPR.append(np.mean(new_TP/(new_TP+new_FN),0))
+        std_new_TPR.append(np.std(new_TP/(new_TP+new_FN),0))
+        mean_new_PPV.append(np.mean(new_TP/(new_TP+new_FP),0))
+        std_new_PPV.append(np.std(new_TP/(new_TP+new_FP),0))
+        mean_new_FPR.append(np.mean(new_FP/(new_FP+new_TN),0))
+        std_new_FPR.append(np.std(new_FP/(new_FP+new_TN),0))
+        mean_new_F1.append(np.mean(2*new_TP/(2*new_TP+new_FP+new_TN),0))
+        std_new_F1.append(np.std(2*new_TP/(2*new_TP+new_FP+new_TN),0))
+        
         mean_new_MCC.append(np.mean(new_MCC))
         std_new_MCC.append(np.std(new_MCC))
         mean_entropy.append(np.mean(new_entropy))
@@ -252,6 +283,17 @@ for check_num1, checkpoint_name1 in enumerate(sys.argv[1:-2]):
     ax3.fill_between(-np.array(tau), np.array(mean_BS) - np.array(std_BS), np.array(mean_BS) + np.array(std_BS), alpha=0.1)
     ax4.plot(-np.array(tau), mean_entropy, linestyle=linestylesnext, marker=markerstylesnext)
     ax4.fill_between(-np.array(tau), np.array(mean_entropy) - np.array(std_entropy), np.array(mean_entropy) + np.array(std_entropy), alpha=0.1)
+    
+    # Here we plot recall, precision etc
+    ax21.errorbar(-np.array(tau), mean_new_TPR, yerr = std_new_TPR, capsize = 3, elinewidth = 1, capthick = 1, linestyle=linestylesnext, marker=markerstylesnext)
+    ax21.fill_between(-np.array(tau), np.array(mean_new_TPR) - np.array(std_new_TPR), np.array(mean_new_TPR) + np.array(std_new_TPR), alpha=0.1)
+    ax22.errorbar(-np.array(tau), mean_new_PPV, yerr = std_new_PPV, capsize = 3,  elinewidth = 1, capthick = 1, linestyle=linestylesnext, marker=markerstylesnext)
+    ax22.fill_between(-np.array(tau), np.array(mean_new_PPV) - np.array(std_new_PPV), np.array(mean_skill) + np.array(std_skill), alpha=0.1)
+    ax23.plot(-np.array(tau), mean_new_FPR, linestyle=linestylesnext, marker=markerstylesnext)
+    ax23.fill_between(-np.array(tau), np.array(mean_new_FPR) - np.array(std_new_FPR), np.array(mean_new_FPR) + np.array(std_new_FPR), alpha=0.1)
+    ax24.plot(-np.array(tau), mean_new_F1, linestyle=linestylesnext, marker=markerstylesnext)
+    ax24.fill_between(-np.array(tau), np.array(mean_new_F1) - np.array(std_new_F1), np.array(mean_new_F1) + np.array(std_new_F1), alpha=0.1)
+    
     linestylesnext = next(linestylescycle)
     markerstylesnext = next(markerstylescycle)
    
@@ -268,6 +310,16 @@ ax1.set_ylim([-0, .5])
 ax2.set_ylim([-0, .5])
 #plt.legend(loc='best')
 #plt.tight_layout()
+
+
+ax21.set_title('TPR (Recall) = TP/(TP+FN)')
+ax21.set_xlabel(r'$\tau$ (days)')
+ax22.set_xlabel(r'$\tau$ (days)')
+ax22.set_title('PVV (Precision) = TP/(TP+FP)')
+ax23.set_xlabel(r'$\tau$ (days)')
+ax23.set_title('FPR = FP/(FP+TN)')
+ax24.set_title('F1 = 2(PPV+TPR)/(PPV+TPR)')
+ax24.set_xlabel(r'$\tau$ (days)')
 end = time.time()
 print("Computation time = ",end - start)
 
@@ -276,5 +328,4 @@ bbox = ax1.get_tightbbox(fig.canvas.get_renderer())
 fig.savefig("Images/Tau_scan_MCC_norm"+sys.argv[-1]+".png", bbox_inches=bbox.transformed(fig.dpi_scale_trans.inverted()), dpi=200)
 bbox = ax2.get_tightbbox(fig.canvas.get_renderer())
 fig.savefig("Images/Tau_scan_skill_norm"+sys.argv[-1]+".png", bbox_inches=bbox.transformed(fig.dpi_scale_trans.inverted()), dpi=200)
-
 print("saved Images/Tau_scan_MCC_norm"+sys.argv[-1]+".png and Images/Tau_scan_skill_norm"+sys.argv[-1]+".png")
