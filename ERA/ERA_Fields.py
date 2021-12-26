@@ -2076,7 +2076,7 @@ class Logger(object): # This object is used to keep track of the output generate
         #you might want to specify some extra behavior here.
         pass
 
-def ReadStringFromFileRaw(filename, string2):
+def ReadStringFromFileRaw(filename, string2, verbose=True):
 # Read the original py file that launched the training and find the relevant parameter without taking float part
     file1 = open(filename, "r")
     flag = 0
@@ -2093,14 +2093,16 @@ def ReadStringFromFileRaw(filename, string2):
             if line_index == -1: # if couldn't find
                 line_index = line.find('=')
             line_index2 = line.find('#')
-          
-            print("found =space at", line_index, " in |", line, "| with length = ", len(line), " extracting |", line[line_index+1:line_index2], "|")
+            if verbose:
+                print("found =space at", line_index, " in |", line, "| with length = ", len(line), " extracting |", line[line_index+1:line_index2], "|")
             parameter = (line[line_index+1:line_index2])#-1])
             flag = 1
-            print("parameter = ", parameter, " at index = ", index)
-            #print(string2+" = ", parameter, " ,index = ", index, " ,line = ", line)
+            if verbose:
+                print("parameter = ", parameter, " at index = ", index)
+                #print(string2+" = ", parameter, " ,index = ", index, " ,line = ", line)
             break
-    #print(string2+" index = ", index)
+    if verbose:
+        print(string2+" index = ", index)
     file1.close()
     return parameter
 
