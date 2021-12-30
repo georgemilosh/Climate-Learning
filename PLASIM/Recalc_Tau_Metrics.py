@@ -179,7 +179,7 @@ for check_num1, checkpoint_name1 in enumerate(sys.argv[1:-2]):
                     for i in range(10): # preemptively compute the optimal score
                         historyCustom.append(np.load(checkpoint_name+'/batch_'+str(i)+'_history.npy', allow_pickle=True).item()['val_CustomLoss'])
                     historyCustom = np.mean(np.array(historyCustom),0)
-                    opt_checkpoint = np.argmin(historyCustom) # We will use optimal checkpoint in this case!
+                    opt_checkpoint = np.argmin(historyCustom)+1 # We will use optimal checkpoint in this case! we add one because history doesn't save the 0 state
                 else: # If somehow the customLoss is missing (this could be if we are running this on a folder generated before October 5 where the files my_MCC_r.... when not computed 
                     print( "'val_CustomLoss' not in history.keys()")
                     opt_checkpoint = checkpoint # then opt_checkpoint will be just the one we provide when calling Recalc_Tau_metrics.py
@@ -200,7 +200,7 @@ for check_num1, checkpoint_name1 in enumerate(sys.argv[1:-2]):
                             new_entropy[i] = history['val_CustomLoss'][opt_checkpoint]#[checkpoint]
                         else: 
                             #print("We don't have val_CustomLoss so what can only use the last Y_test, Y_pred which we shall call optimal")
-                            opt_checkpoint = len(history['val_loss'])-1
+                            opt_checkpoint = len(history['val_loss'])  #-1 the length of history doesn't include the 0 initial state
                             Y_test = np.load(checkpoint_name+'/batch_'+str(i)+'_Y_test.npy')
                             Y_pred = np.load(checkpoint_name+'/batch_'+str(i)+'_Y_pred.npy')
 
@@ -212,6 +212,8 @@ for check_num1, checkpoint_name1 in enumerate(sys.argv[1:-2]):
                     new_skill[i] =  (maxskill-new_entropy[i])/maxskill
                     #print("opt_checkpoint = ", opt_checkpoint, "len(history['val_MCC'])",len(history['val_MCC']))
                     new_MCC[i] = history['val_MCC'][opt_checkpoint]#[checkpoint]
+                    
+                    #print("MCC = " , new_MCC[i]," ,entropy = ", new_entropy[i],  " ,BS = ", new_BS[i], " , WBS = ", new_WBS[i], " , freq = ", new_freq[i])
                 print("========Optimal checkpoint = ", opt_checkpoint)
         print(checkpoint_name1+f" TOTAL MCC  = {np.mean(new_MCC):.3f} +- {np.std(new_MCC):.3f} , entropy = {np.mean(new_entropy):.3f} +- {np.std(new_entropy):.3f} , skill = {np.mean(new_skill):.3f} +- {np.std(new_skill):.3f}, Brier = {np.mean(new_BS):.3f} +- {np.std(new_BS):.3f} , Weighted Brier = {np.mean(new_WBS):.3f} +- {np.std(new_WBS):.3f} , frequency = {np.mean(new_freq):.3f} +- {np.std(new_freq):.3f}")
         mean_new_MCC.append(np.mean(new_MCC))
