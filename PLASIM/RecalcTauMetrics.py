@@ -205,7 +205,7 @@ for check_num1, checkpoint_name1 in enumerate(sys.argv[1:-2]):
                     if checkpoint != 0:
                         opt_checkpoint = checkpoint
                     else:
-                        opt_checkpoint = np.argmin(historyCustom) # We will use optimal checkpoint in this case!
+                        opt_checkpoint = np.argmin(historyCustom)+1 # We will use optimal checkpoint in this case!
                 else: # If somehow the customLoss is missing (this could be if we are running this on a folder generated before October 5 where the files my_MCC_r.... when not computed 
                     print( "'val_CustomLoss' not in history.keys()")
                     opt_checkpoint = checkpoint # then opt_checkpoint will be just the one we provide when calling Recalc_Tau_metrics.py
@@ -226,7 +226,7 @@ for check_num1, checkpoint_name1 in enumerate(sys.argv[1:-2]):
                             new_entropy[i] = history['val_CustomLoss'][opt_checkpoint]#[checkpoint]
                         else: 
                             #print("We don't have val_CustomLoss so what can only use the last Y_test, Y_pred which we shall call optimal")
-                            opt_checkpoint = len(history['val_loss'])-1
+                            opt_checkpoint = len(history['val_loss']) #-1
                             Y_test = np.load(checkpoint_name+'/batch_'+str(i)+'_Y_test.npy')
                             Y_pred = np.load(checkpoint_name+'/batch_'+str(i)+'_Y_pred.npy')
 
