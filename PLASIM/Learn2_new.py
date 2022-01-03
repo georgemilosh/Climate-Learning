@@ -148,19 +148,19 @@ def move_to_folder(folder):
 ########## DATA PREPROCESSING ##############
 
 fields_infos = {
-    't2m': {
+    't2m': { # temperature
         'name': 'tas',
         'filename_suffix': 'tas',
         'label': 'Temperature',
     },
-    'mrso': {
+    'mrso': { # soil moisture
         'name': 'mrso',
         'filename_suffix': 'mrso',
         'label': 'Soil Moisture',
     },
 }
 
-for h in [200,300,500,850]:
+for h in [200,300,500,850]: # geopotential heights
     fields_infos[f'zg{h}'] = {
         'name': 'zg',
         'filename_suffix': f'zg{h}',
@@ -369,7 +369,7 @@ def shuffle_years(X, permutation=None, seed=0, apply=False):
         return X[permutation,...]
     return permutation
 
-def balance_folds(weights, nfolds=10):
+def balance_folds(weights, nfolds=10, verbose=False):
     '''
     Returns a permutation that, once applied to `weights` would make the consecutive `nfolds` pieces of equal length have their sum the most similar to each other.
 
@@ -388,7 +388,7 @@ def balance_folds(weights, nfolds=10):
             self.length = target_length
             self.target_sum = target_sum
             self.sum = 0
-            self.hunger = np.infty
+            self.hunger = np.infty # how much a fold 'wants' the next datapoint
             self.name = name
         
         def add(self, a):
@@ -405,23 +405,31 @@ def balance_folds(weights, nfolds=10):
         raise ValueError(f'Cannot make {nfolds} folds of equal lenght out of {len(weights)} years of data')
     target_sum = np.sum(weights)/nfolds
 
-
+    # create nfolds Folds that will redistribute the data
     folds = [Fold(fold_length, target_sum, name=i) for i in range(nfolds)]
     permutation = []
 
+    # sort the weights keeping track of the original order
     ws = [(a,i) for i,a in enumerate(weights)]
     ws.sort()
     ws = ws[::-1]
-        
+    
+    sums = []
+    # run over the weights and distribute data to the folds
     for a in ws:
-        # determine the hungriest fold
+        # determine the hungriest fold, i.e. the one that has its sum the furthest from its target
         j = np.argmax([f.hunger for f in folds])
-        if folds[j].add(a):
+        if folds[j].add(a): # add datapoint and check if the fold is full
             f = folds.pop(j)
+            sums.append(f.sum)
             permutation += f.indexs
 
     if len(permutation) != len(weights):
         raise ValueError('balance_folds: Something went wrong during balancing: either missing or duplicated data')
+
+    if verbose:
+        sums = np.array(sums)
+        print(f'Sums of the balanced {nfolds} folds:\n{sums}\nstd/avg = {np.std(sums)/target_sum}\nmax relative deviation = {np.max(np.abs(sums - target_sum))/target_sum*100}\%')
 
     return permutation
 
