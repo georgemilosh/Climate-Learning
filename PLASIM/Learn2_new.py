@@ -31,9 +31,18 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers, models
 
+########## USAGE ###############################
+def usage():
+    s = '''
+    
+    '''
+    return s
+
+
 ########## ARGUMENT PARSING ####################
-def run_smart(func, default_kwargs, **kwargs):
-    for k, v in kwargs.items():
+def run_smart(func, default_kwargs, **kwargs): # this is not as powerful as it looks like
+    evaluate = True
+    for k,v in kwargs.items():
         if k not in default_kwargs:
             raise KeyError(f'Unknown argument {k}')
         iterate = False
@@ -44,9 +53,16 @@ def run_smart(func, default_kwargs, **kwargs):
             else:
                 iterate = True
         if iterate:
+            evaluate = False
             for _v in v:
                 kwargs[k] = _v
-                run_smart(func, default_kwargs, **kwargs) #### HMMMMMMM
+                run_smart(func, default_kwargs, **kwargs)
+            break
+    if evaluate:
+        f_kwargs = default_kwargs
+        for k,v in kwargs.items():
+            f_kwargs[k] = v
+        func(**f_kwargs)
 
 ########## NEURAL NETWORK DEFINITION ###########
 
@@ -140,8 +156,9 @@ def move_to_folder(folder):
     # Metrics.py
     # Recalc_Tau_Metrics.py
     # Recalc_History.py
-
-    print(f'Now you can go to {folder} and run the learning from there')
+    
+    print(f'Now you can go to {folder} and run the learning from there:\n')
+    print(f'cd \"{folder}\"\n')
     
     
 
@@ -514,8 +531,8 @@ def Prepare(creation = None):  # if we do not specify creation it automacially c
 
 
 ######## TRAIN THE NETWORK #########
-
-if __name__ == '__main__':
+if __name__ == '__main__a':
+    
     print(f"====== running {__file__} ====== ")  
     print(f"{tf.__version__ = }")
     if int(tf.__version__[0]) < 2:
@@ -690,4 +707,33 @@ if __name__ == '__main__':
     print(f'Learning time = {end - start}')
 
 
+# def run(kwargs, default_kwargs)
 
+if __name__ == '__main__':
+    # check if there is a lock:
+    lock = Path(__file__).resolve().parent / 'lock.txt'
+    if os.path.exists(lock): # there is a lock
+        # check for folder argument
+        if len(sys.argv) < 2:
+            print(usage())
+            exit(0)
+        if len(sys.argv) == 2:
+            folder = sys.argv[1]
+            print(f'moving code to {folder = }')
+            move_to_folder(folder)
+            exit(0)
+        else:
+            with open(lock) as l:
+                raise ValueError(l.read())
+    
+    # if there is a lock, the previous block of code would have ended the run, so the code below is executed only if there is no lock
+    
+    # load config file
+
+    # parse command line arguments
+
+    # run(kwargs, default_kwargs)
+
+    
+
+    
