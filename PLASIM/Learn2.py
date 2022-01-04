@@ -417,7 +417,7 @@ if __name__ == '__main__':
         np.save(f'{checkpoint_name}/batch_{i}_X_mean', X_mean) # this values must be saved if the neural network is to be tested again, by reloading some other data
         np.save(f'{checkpoint_name}/batch_{i}_X_std', X_std)
         
-        if tau < 0: # engagge transfer learning
+        if tau < 0: # engage transfer learning
             print(f"opt_checkpoint: {opt_checkpoint} ,loading model: {checkpoint_name_previous}")
             model = (tf.keras.models.load_model(f'{checkpoint_name_previous}/batch_{i}', compile=False)) # if we just want to train
 
@@ -460,7 +460,8 @@ if __name__ == '__main__':
         model.save(f'{checkpoint_name}/batch_{i}')
         np.save(f'{checkpoint_name}/batch_{i}_history.npy',my_history.history)
         
-        my_probability_model=(tf.keras.Sequential([ # softmax output to make a prediction
+        # unused
+        my_probability_model=(tf.keras.Sequential([ # softmax output to make a prediction 
               model,
               tf.keras.layers.Softmax()
             ]))

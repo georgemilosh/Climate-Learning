@@ -13,6 +13,7 @@ from numpy.lib.arraysetops import isin
 from numpy.random.mtrand import permutation
 import psutil
 import numpy as np
+from tensorflow.python.types.core import Value
 
 path_to_ERA = Path(__file__).resolve().parent.parent / 'ERA' # when absolute path, so you can run the script from another folder (outside plasim)
 sys.path.insert(1, str(path_to_ERA))
@@ -450,6 +451,179 @@ def balance_folds(weights, nfolds=10, verbose=False):
 
     return permutation
 
+
+###### TRAINING THE NETWORK ############
+
+def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, batch_size, loss, metrics,
+                checkpoint_every=1, additional_callbacks=None):
+    '''
+    Trains a given model checkpointing its weights
+
+    Parameters:
+    -----------
+        model: keras.models.Model object
+        X_tr: training data
+        Y_tr: training labels
+        X_va: validation data
+        Y_va: validation labels
+        folder: loaction where to save the checkpoints of the model
+        num_epochs: int, number of maximum epochs for the training
+        optimizer: keras.Optimizer object
+        batch_size: int
+        loss: keras.losses.Loss object
+        metrics: list of keras.metrics.Metric or str
+        checkpoint_every: int or str. Examples:
+            0: disabled
+            5 or '5 epochs' or '5 e': every 5 epochs
+            '100 batches' or '100 b': every 100 batches
+            'best custom_loss': every time 'custom_loss' reaches a new minimum. 'custom_loss' must be in the list of metrics
+        additional_callbacks: list of keras.callbacks.Callback objects, for example EarlyStopping
+    '''
+    folder = folder.rstrip('/')
+    ckpt_name = folder + '/cp-{epoch:04d}.ckpt'
+    if additional_callbacks is None:
+        additional_callbacks = []
+
+    ckpt_callback = None
+    if checkpoint_every == 0:
+        pass
+    elif checkpoint_every == 1: # save every epoch
+        ckpt_callpback = keras.callbacks.ModelCheckpoint(filepath=ckpt_name, save_weights_only=True, verbose=1)
+    elif isinstance(checkpoint_every, int): # save every checkpoint_every epochs 
+        ckpt_callpback = keras.callbacks.ModelCheckpoint(filepath=ckpt_name, save_weights_only=True, verbose=1, period=checkpoint_every)
+    elif isinstance(checkpoint_every, str): # parse string options
+        if checkpoint_every[0].isnumeric():
+            every, what = checkpoint_every.split(' ',1)
+            every = int(every)
+            if what.startswith('b'): # every batch
+                ckpt_callpback = keras.callbacks.ModelCheckpoint(filepath=ckpt_name, save_weights_only=True, verbose=1, save_freq=every)
+            elif what.startswith('e'): # every epoch
+                ckpt_callpback = keras.callbacks.ModelCheckpoint(filepath=ckpt_name, save_weights_only=True, verbose=1, period=every)
+            else:
+                raise ValueError(f'Unrecognized value for {checkpoint_every = }')
+
+        elif checkpoint_every.startswith('best'): # every best of something
+            monitor = checkpoint_every.split(' ',1)[1]
+            ckpt_callpback = keras.callbacks.ModelCheckpoint(filepath=ckpt_name, monitor=monitor, save_best_only=True, save_weights_only=True, verbose=1)
+        else:
+            raise ValueError(f'Unrecognized value for {checkpoint_every = }')
+    else:
+        raise ValueError(f'Unrecognized value for {checkpoint_every = }')
+
+    if ckpt_callpback is not None:
+        additional_callbacks.append(ckpt_callpback)
+
+    model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
+
+    model.save_weights(ckpt_name.format(epoch=0))
+
+    my_history=model.fit(X_tr, Y_tr, batch_size=batch_size, validation_data=(X_va,Y_va), shuffle=True,
+                         callbacks=additional_callbacks, epochs=num_epochs, verbose=2, class_weight=None)
+
+    model.save(folder)
+    np.save(f'{folder}_history.npy', my_history.history)
+
+def k_fold_cross_val_split(i, X, Y, nfolds, val_folds=1):
+    '''
+    Splits X and Y in a training and validation set according to k fold cross validation algorithm
+
+    Parameters:
+    -----------
+        i: int, fold number from 0 to `nfolds`-1
+        X: data
+        Y: labels
+        nfolds: number of folds
+        val_folds: number of consecutive folds for the validation set (between 1 and `nfolds`-1). Default 1.
+
+    Returns:
+    --------
+        X_tr, Y_tr, X_va, Y_va
+    '''
+    if i < 0 or i >= nfolds:
+        raise ValueError(f'fold number i is out of the range [0, {nfolds - 1}]')
+    if val_folds >= nfolds or val_folds <= 0:
+        raise ValueError(f'val_folds out of the range [1, {nfolds - 1}]')
+    fold_len = X.shape[0]//nfolds
+    lower = i*fold_len % ndata
+    upper = (i+val_folds) % ndata
+    if lower < upper:
+        X_va = X[lower:upper]
+        Y_va = Y[lower:upper]
+        X_tr = np.concatenate([X[upper:], X[:lower]], axis=0)
+        Y_tr = np.concatenate([Y[upper:], Y[:lower]], axis=0)
+    else: # upper overshoots
+        X_va = np.concatenate([X[lower:], X[:upper]], axis=0)
+        Y_va = np.concatenate([Y[lower:], Y[:upper]], axis=0)
+        X_tr = X[upper:lower]
+        Y_tr = Y[upper:lower]
+    return X_tr, Y_tr, X_va, Y_va
+
+def k_fold_cross_val(nfolds, folder, model_kwargs, X, Y, val_folds=1, u=1):
+    '''
+    
+    '''
+    load_from = model_kwargs.pop('load_from', None)
+    folder = folder.rstrip('/')
+
+    opt_checkpoint = None
+    if load_from is not None:
+        load_from = load_from.rstrip('/')
+        # Here we insert analysis of the previous training with the assessment of the ideal checkpoint
+        history0 = np.load(f'{load_from}/fold_0_history.npy', allow_pickle=True).item()
+        if 'val_CustomLoss' not in history0.keys():
+            raise KeyError('val_CustomLoss not in history: cannot compute optimal checkpoint')
+        historyCustom = [np.load(f'{load_from}/fold_{i}_history.npy', allow_pickle=True).item()['val_CustomLoss'] for i in range(nfolds)]
+        historyCustom = np.mean(np.array(historyCustom),axis=0)
+        opt_checkpoint = np.argmin(historyCustom) # We will use optimal checkpoint in this case!
+        print(f'{opt_checkpoint = }')
+
+            
+
+    for i in range(nfolds):
+        # split data
+        X_tr, Y_tr, X_va, Y_va = k_fold_cross_val_split(i, X, Y, nfolds=nfolds, val_folds=val_folds)
+
+        n_pos_tr = np.sum(Y_tr)
+        n_neg_tr = len(Y_tr) - n_pos_tr
+        print(f'number of training data: {len(Y_tr)} of which {n_neg_tr} negative and {n_pos_tr} positive')
+
+        # perform undersampling
+        if u > 1:
+            undersampling_strategy = n_pos_tr/(n_neg_tr/u)
+            pipeline = Pipeline(steps=[('u', RandomUnderSampler(random_state=42, sampling_strategy=undersampling_strategy))])
+            # reshape data to feed it to the pipeline
+            X_tr_shape = X_tr.shape
+            X_tr = X_tr.reshape(X_tr_shape[0], np.product(X_tr_shape[1:]))
+            X_tr, Y_tr = pipeline.fit_resample(X_tr, Y_tr)
+            X_tr = X_tr.reshape(X_tr.shape[0], *X_tr_shape[1:])
+            n_pos_tr = np.sum(Y_tr)
+            n_neg_tr = len(Y_tr) - n_pos_tr
+            print(f'number of training data: {len(Y_tr)} of which {n_neg_tr} negative and {n_pos_tr} positive')
+
+        # renormalize data with pointwise mean and std
+        X_mean = np.mean(X_tr, axis=0)
+        X_std = np.std(X_tr, axis=0)
+        print(f'{np.sum(X_std < 1e-5)/np.product(X_std.shape)*100}\% of the data have std below 1e-5')
+        X_std[X_std==0] = 1 # If there is no variance we shouldn't divide by zero ### hmmm: this may create discontinuities
+
+        # save X_mean and X_std
+        np.save(f'{folder}/fold_{i}_X_mean.npy', X_mean)
+        np.save(f'{folder}/fold_{i}_X_std.npy', X_std)
+
+        X_tr = (X_tr - X_mean)/X_std
+        X_va = (X_va - X_mean)/X_std
+
+        print(f'{X_tr.shape = }, {X_va.shape = }')
+
+
+
+        # check for transfer learning:
+        model = None
+        
+        if load_from is None:
+            model = create_model(**model_kwargs)
+        else:
+            model = keras.models.load_model(f'{load_from}/fold_{i}')
 
     
 
