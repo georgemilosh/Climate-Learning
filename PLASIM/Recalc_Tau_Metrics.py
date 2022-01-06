@@ -183,6 +183,9 @@ for check_num1, checkpoint_name1 in enumerate(sys.argv[1:-2]):
                 else: # If somehow the customLoss is missing (this could be if we are running this on a folder generated before October 5 where the files my_MCC_r.... when not computed 
                     print( "'val_CustomLoss' not in history.keys()")
                     opt_checkpoint = checkpoint # then opt_checkpoint will be just the one we provide when calling Recalc_Tau_metrics.py
+                if opt_checkpoint == len(history['val_CustomLoss']):
+                    opt_checkpoint = opt_checkpoint - 1
+                print("===opt_checkpoint = ", opt_checkpoint)
                 for i in range(10):
                     #print("===============================")
                     #print("cross validation i = ", str(i))
