@@ -65,65 +65,6 @@ def run_smart(func, default_kwargs, **kwargs): # this is not as powerful as it l
             f_kwargs[k] = v
         func(**f_kwargs)
 
-########## NEURAL NETWORK DEFINITION ###########
-
-def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=1,
-                 batch_normalizations=True, conv_activations='relu', conv_dropouts=0.2, max_pool_sizes=[2,2,False],
-                 dense_units=[64,2], dense_activations=['relu', None], dense_dropouts=[0.2,False]):
-    '''
-    Creates a model consisting of a series of convolutional layers followed by fully connected ones
-    '''
-    model = models.Sequential()
-
-    # convolutional layers
-    # adjust the shape of the arguments to be of the same length as conv_channels
-    args = kernel_sizes, strides, batch_normalizations, conv_activations, conv_dropouts, max_pool_sizes
-    for j,arg in enumerate(range(len(args))):
-        if not isinstance(arg, list):
-            args[j] = [arg]*len(conv_channels)
-        elif len(arg) != len(conv_channels):
-            raise ValueError(f'Invalid length for argument {arg}')
-    kernel_sizes, strides, batch_normalizations, conv_activations, conv_dropouts, max_pool_sizes = args
-    # build the convolutional layers
-    for i in range(len(conv_channels)):
-        if i == 0:
-            model.add(layers.Conv2D(conv_channels[i], kernel_sizes[i],
-                      strides=strides[i], input_shape=input_shape))
-        else:
-            model.add(layers.Conv2D(conv_channels[i], kernel_sizes[i],
-                      strides=strides[i]))
-        if batch_normalizations[i]:
-            model.add(layers.BatchNormalization())
-        model.add(layers.Activation(conv_activations[i]))
-        if conv_dropouts[i]:
-            model.add(layers.SpatialDropout2D(conv_dropouts[i]))
-        if max_pool_sizes[i]:
-            model.add(layers.MaxPooling2D(max_pool_sizes[i]))
-
-    # flatten
-    model.add(layers.Flatten())
-
-    # dense layers
-    # adjust the shape of the arguments to be of the same length as conv_channels
-    args = dense_activations, dense_dropouts
-    for j,arg in enumerate(range(len(args))):
-        if not isinstance(arg, list):
-            args[j] = [arg]*len(dense_units)
-        elif len(arg) != len(dense_units):
-            raise ValueError(f'Invalid length for argument {arg}')
-    dense_activations, dense_dropouts = args
-    # build the dense layers
-    for i in range(len(dense_units)):
-        model.add(layers.Dense(dense_units[i], activation=dense_activations[i]))
-        if dense_dropouts[i]:
-            model.add(layers.Dropout(dense_dropouts[i]))
-    
-    print(model.summary())
-
-    return model
-
-
-
 
 ########## COPY SOURCE FILES #########
 
@@ -452,10 +393,68 @@ def balance_folds(weights, nfolds=10, verbose=False):
     return permutation
 
 
+########## NEURAL NETWORK DEFINITION ###########
+
+def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=1,
+                 batch_normalizations=True, conv_activations='relu', conv_dropouts=0.2, max_pool_sizes=[2,2,False],
+                 dense_units=[64,2], dense_activations=['relu', None], dense_dropouts=[0.2,False]):
+    '''
+    Creates a model consisting of a series of convolutional layers followed by fully connected ones
+    '''
+    model = models.Sequential()
+
+    # convolutional layers
+    # adjust the shape of the arguments to be of the same length as conv_channels
+    args = kernel_sizes, strides, batch_normalizations, conv_activations, conv_dropouts, max_pool_sizes
+    for j,arg in enumerate(range(len(args))):
+        if not isinstance(arg, list):
+            args[j] = [arg]*len(conv_channels)
+        elif len(arg) != len(conv_channels):
+            raise ValueError(f'Invalid length for argument {arg}')
+    kernel_sizes, strides, batch_normalizations, conv_activations, conv_dropouts, max_pool_sizes = args
+    # build the convolutional layers
+    for i in range(len(conv_channels)):
+        if i == 0:
+            model.add(layers.Conv2D(conv_channels[i], kernel_sizes[i],
+                      strides=strides[i], input_shape=input_shape))
+        else:
+            model.add(layers.Conv2D(conv_channels[i], kernel_sizes[i],
+                      strides=strides[i]))
+        if batch_normalizations[i]:
+            model.add(layers.BatchNormalization())
+        model.add(layers.Activation(conv_activations[i]))
+        if conv_dropouts[i]:
+            model.add(layers.SpatialDropout2D(conv_dropouts[i]))
+        if max_pool_sizes[i]:
+            model.add(layers.MaxPooling2D(max_pool_sizes[i]))
+
+    # flatten
+    model.add(layers.Flatten())
+
+    # dense layers
+    # adjust the shape of the arguments to be of the same length as conv_channels
+    args = dense_activations, dense_dropouts
+    for j,arg in enumerate(range(len(args))):
+        if not isinstance(arg, list):
+            args[j] = [arg]*len(dense_units)
+        elif len(arg) != len(dense_units):
+            raise ValueError(f'Invalid length for argument {arg}')
+    dense_activations, dense_dropouts = args
+    # build the dense layers
+    for i in range(len(dense_units)):
+        model.add(layers.Dense(dense_units[i], activation=dense_activations[i]))
+        if dense_dropouts[i]:
+            model.add(layers.Dropout(dense_dropouts[i]))
+    
+    print(model.summary())
+
+    return model
+
+
 ###### TRAINING THE NETWORK ############
 
-def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, batch_size, loss, metrics,
-                checkpoint_every=1, additional_callbacks=None):
+def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics,
+                batch_size=1024, checkpoint_every=1, additional_callbacks=None):
     '''
     Trains a given model checkpointing its weights
 
@@ -469,9 +468,9 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, ba
         folder: loaction where to save the checkpoints of the model
         num_epochs: int, number of maximum epochs for the training
         optimizer: keras.Optimizer object
-        batch_size: int
         loss: keras.losses.Loss object
         metrics: list of keras.metrics.Metric or str
+        batch_size: int, default 1024
         checkpoint_every: int or str. Examples:
             0: disabled
             5 or '5 epochs' or '5 e': every 5 epochs
@@ -558,13 +557,37 @@ def k_fold_cross_val_split(i, X, Y, nfolds, val_folds=1):
         Y_tr = Y[upper:lower]
     return X_tr, Y_tr, X_va, Y_va
 
-def k_fold_cross_val(nfolds, folder, model_kwargs, X, Y, val_folds=1, u=1):
+def k_fold_cross_val(nfolds, folder, model_kwargs, X, Y, val_folds=1, u=1,
+                     fullmetrics=True, training_epochs=40, training_epochs_tl=10, lr=1e-4, **kwargs):
     '''
-    
+    Performs k fold cross validation on a model architecture.
+
+    Parameters:
+    -----------
+    nfolds: int, number of folds
+    folder: folder in which to save data related to the folds
+    model_kwargs: dictionary with the parameters to create a model, or dictionary containing the parameter 'load_from' which is the folder from which to load models for transfer learning.
+    X: all data (train + val)
+    Y: all labels
+    val_folds: number of folds to be used for the validation set for every split
+    u: float, undersampling factor (>=1)
+    fullmetrics: bool, whether to use a set of evaluation metrics or just the loss
+    training_epochs: number of training epochs when creating a model from scratch
+    training_epochs_tl: numer of training epochs when using transfer learning
+    lr: learning_rate for Adam optimizer
+
+    **kwargs: additional arguments to pass to `train_model` (see its docstring), in particular
+        num_epochs: overrides `training_epochs` and `training_epochs_tl`
+        optimizer: overrides `lr`
+        loss: overrides the default SparseCrossEntropyLoss
+        metrics: overrides `fullmetrics`
     '''
     load_from = model_kwargs.pop('load_from', None)
     folder = folder.rstrip('/')
 
+    my_memory = []
+
+    # find the optimal checkpoint
     opt_checkpoint = None
     if load_from is not None:
         load_from = load_from.rstrip('/')
@@ -577,8 +600,7 @@ def k_fold_cross_val(nfolds, folder, model_kwargs, X, Y, val_folds=1, u=1):
         opt_checkpoint = np.argmin(historyCustom) # We will use optimal checkpoint in this case!
         print(f'{opt_checkpoint = }')
 
-            
-
+    # k fold cross validation
     for i in range(nfolds):
         # split data
         X_tr, Y_tr, X_va, Y_va = k_fold_cross_val_split(i, X, Y, nfolds=nfolds, val_folds=val_folds)
@@ -616,91 +638,45 @@ def k_fold_cross_val(nfolds, folder, model_kwargs, X, Y, val_folds=1, u=1):
         print(f'{X_tr.shape = }, {X_va.shape = }')
 
 
-
-        # check for transfer learning:
-        model = None
-        
+        # check for transfer learning
+        model = None        
         if load_from is None:
-            model = create_model(**model_kwargs)
+            model = create_model(input_shape=X_tr.shape[1:], **model_kwargs)
         else:
-            model = keras.models.load_model(f'{load_from}/fold_{i}')
+            model = keras.models.load_model(f'{load_from}/fold_{i}', compile=False)
+            model.load_weights(f'{load_from}/fold_{i}/cp-{opt_checkpoint:04d}.ckpt')            
+        print(model.summary())
 
-    
+        num_epochs = kwargs.pop('num_epochs', None)
+        if num_epochs is None:
+            if load_from is None:
+                num_epochs = training_epochs
+            else:
+                num_epochs = training_epochs_tl
 
-def Prepare(creation = None):  # if we do not specify creation it automacially creates new folder. If we specify the creation, it should correspond to the folder we are running the file from
+        tf_sampling = tf.cast([0.5*np.log(u), -0.5*np.log(u)], tf.float32)
+        metrics = kwargs.pop('metrics', None)
+        if metrics is None:
+            if fullmetrics:
+                metrics=['accuracy',tff.MCCMetric(2),tff.ConfusionMatrixMetric(2),tff.CustomLoss(tf_sampling)]#keras.metrics.SparseCategoricalCrossentropy(from_logits=True)]#CustomLoss()]   # the last two make the code run longer but give precise discrete prediction benchmarks
+            else:
+                metrics=['loss']
+        fold_folder = f'{folder}/fold_{i}'
+        optimizer = kwargs.pop('optimizer',keras.optimizers.Adam(learning_rate=lr))
+        loss = kwargs.pop('loss',keras.losses.SparseCategoricalCrossentropy(from_logits=True))
 
-    percent = 1 # 5  # Percent of the anomalies that will be treated as heat waves 
+        train_model(model, X_tr, Y_tr, X_va, Y_va,
+                    folder=fold_folder, num_epochs=num_epochs, optimizer=optimizer, loss=loss, metrics=metrics, **kwargs)
 
-    
-    tau = 0 #-5  # lag
-    usepipelines = False # This variable used to have the following meaning: if True => Dataset.from_tensor_slices will be used. This is a more advanced method but it takes more RAM and there is a possiblity for memory leaks when repeating training for cross-validation. Now it is used to pass extra parameters from the function PrepareData()
-    fullmetrics = True # If True MCC and confusion matrix will be evaluated during training. This makes training slower!
-    
+        my_memory.append(psutil.virtual_memory())
+        print('RAM memory:', my_memory[i][3]) # Getting % usage of virtual_memory ( 3rd field)
 
-    # If an integer >= 1 is chosen we simply undersample by this rate
-    # If a float between 0 and 1 is chosen we select each state with the probability given by this float
-    undersampling_factor = 20 # 1 #15 #10 #5 #1 #0.25 #0.15 #0.25    # How much we want to reduce our dataset
-    oversampling_factor = 1 # oversampling_factor = 1 means that oversampling will not be performed
-    thefield = 't2m' # Important: this is the field that is used to determine the extrema (important for undersampling) and therefore the label space
-    BATCH_SIZE = 1024 # choose this for training so that the chance of encountering positive batches is nonnegligeable
-    if tau < 0: # we plan to take advantage of transfer learning
-        NUM_EPOCHS = 10
-    else:
-        NUM_EPOCHS = 40 #1000 #20 #200 #50 # number of epochs the training involves
-    saveweightseveryblaepoch = 1 # If set to 0 the model will not save weights as it is being trained, otherwise this number will tell us how many epochs it waits until saving
-    if saveweightseveryblaepoch > 0:
-        ckpt = 'ckpt'
-    else:
-        cktp = ''
-    
-
-    checkpoint_name_root = f'{myscratch}training/stack_CNN_equalmixed_{ckpt}_{thefield}France__with_zg500_t2mmrsoFrance_{sampling}_22by128_u{undersampling_factor}o{oversampling_factor}_LONG{num_years}yrs__per_{percent}_tau_'
-    checkpoint_name = checkpoint_name_root+str(tau) # current filename, we also need filename of the previous tau for transfer learning (previous tau is obtained by adding to tau an integer)
-    checkpoint_name_previous = checkpoint_name_root+str(tau+5) # THIS HAS TO BE CHANGED IF THE STEP IN TAU IS DIFFERENT!!
-
-    print("creation = ", creation)
-    if creation == None: # If we are not running from the same directory (in other words, if we are running for the first time). Otherwise nothing needs to be copied. We just need to follow the same procedures to load the data as were done when the model was trained. Basically the parameter is not None (I choose the folder itself as a parameter always) if we need to load the model and the corresponding data to run some tests or make plots) The alrnative is to load the data by hand but then spatial care has to be made that the same operations are performed to the data, as the ones that were performed when the model was trained. 
-        if os.path.exists(checkpoint_name): 
-            print(f'folder {checkpoint_name} exists. Should I overwrite?')
-            if input(" write Y to overwrite, else the execution will stop: ") != "Y":
-                sys.exit("User has aborted the program")
-        else: # Create the directory
-            print('folder '+checkpoint_name+' created')
-            os.mkdir(checkpoint_name)
-
-        sys.stdout = Logger(checkpoint_name+'/logger.log')  # Keep a copy of print outputs there
-        shutil.copy(__file__, checkpoint_name) # Copy this file to the directory of the training
-        dest = shutil.copy(__file__, checkpoint_name+'/Funs.py')
-        shutil.copy(myscratch+'../ERA/ERA_Fields.py', checkpoint_name)
-        shutil.copy(myscratch+'../ERA/TF_Fields.py', checkpoint_name)
-        shutil.copy(myscratch+'History.py', checkpoint_name)
-        shutil.copy(myscratch+'Recalc_History.py', checkpoint_name)
-        shutil.copy(myscratch+'Recalc_Tau_Metrics.py', checkpoint_name)
-        shutil.copy(myscratch+'Metrics.py', checkpoint_name)
-    # specify the precise input rectangle that will enter inside the neural network. These will be concatenated, which is useful when we need to include Greenwich meridian. 
-    #           The procedure below will concatenate a rectangle with latitude range lat_from[0] - lat_to[0] and longtitude range lon_from[0] - lon_to[0] with
-    #                       a rectangle with latitude range lat_from[1] - lat_to[1] and longitude range lon_from[1] - lon_from[1].
-    #lat_from = [4,4]     # 18x42
-    #lat_to   = [22,22]
-    #lon_from = [101,0]
-    #lon_to   = [128,15]
-    lat_from =  [0,0]   # 22x128
-    lat_to =    [22,22]
-    lon_from =  [64, 0]
-    lon_to =    [128, 64]
+        keras.backend.clear_session()
+        gc.collect() # Garbage collector which removes some extra references to the objects
+        
+    np.save(f'{folder}/RAM_stats.npy', my_memory)
 
 
-    print(f'{percent = }, {T = }, {Model = }, {area = }, {undersampling_factor = }, {lat_from = }, {lat_to = }, {lon_from = }, {lon_to = }, {thefield = }')
-    
-    
-
-    del t2m.var
-    gc.collect() # Garbage collector which removes some extra references to the object
-    usepipelines = A_reshape, threshold, checkpoint_name_previous, tau
-    undersampling_factor = [undersampling_factor, oversampling_factor]
-
-                                
-    return X, list_extremes, thefield, sampling, percent, usepipelines, undersampling_factor, new_mixing,  saveweightseveryblaepoch, NUM_EPOCHS, BATCH_SIZE, checkpoint_name, fullmetrics
 
 
 
