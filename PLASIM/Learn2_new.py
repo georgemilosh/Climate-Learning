@@ -13,7 +13,10 @@ from numpy.lib.arraysetops import isin
 from numpy.random.mtrand import permutation
 import psutil
 import numpy as np
-from tensorflow.python.types.core import Value
+import inspect
+import json
+
+this_module = sys.modules[__name__]
 
 path_to_ERA = Path(__file__).resolve().parent.parent / 'ERA' # when absolute path, so you can run the script from another folder (outside plasim)
 sys.path.insert(1, str(path_to_ERA))
@@ -31,6 +34,7 @@ from functools import reduce
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers, models
+from tensorflow.python.types.core import Value
 
 ########## USAGE ###############################
 def usage():
@@ -41,6 +45,7 @@ def usage():
 
 
 ########## ARGUMENT PARSING ####################
+
 def run_smart(func, default_kwargs, **kwargs): # this is not as powerful as it looks like
     evaluate = True
     for k,v in kwargs.items():
@@ -65,6 +70,39 @@ def run_smart(func, default_kwargs, **kwargs): # this is not as powerful as it l
             f_kwargs[k] = v
         func(**f_kwargs)
 
+def get_default_params(func, recursive=False):
+    '''
+    Given a function returns a dictionary with the default values of its parameters
+    '''
+    s = inspect.signature(func)
+    default_params = {
+        k:v.default for k,v in s.parameters.items()
+        if v.default is not inspect.Parameter.empty
+    }
+    if recursive: # look for parameters ending in '_kwagrs' and extract further default arguments
+        possible_other_params = [k for k,v in s.parameters.items() if (v.default is inspect.Parameter.empty and k.endswith('_kwargs'))]
+        for k in possible_other_params:
+            func_name = k.rsplit('_',1)[0] # remove '_kwargs'
+            try:
+                default_params[k] = get_default_params(getattr(this_module, func_name), recursive=True)
+            except:
+                print(f'Could not find function {func_name}')
+    return default_params
+
+def read_json(filename):
+    '''
+    Reads a json file as a dictionary
+    '''
+    with open(filename, 'r') as j:
+        d = json.load(j)
+    return d
+
+def write_to_json(d, filename):
+    '''
+    Saves a dictionary `d` to a json file
+    '''
+    with open(filename, 'w') as j:
+        json.dump(d, j, indent=4)
 
 ########## COPY SOURCE FILES #########
 
@@ -142,7 +180,7 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
         filter_area: area over which to keep filtered fields
         lon_start, lon_end, lat_start, lat_end: longitude and latitude extremes of the data expressed in indices (model specific)
         mylocal: path the the data storage. For speed it is better if it is a local path.
-        fields: list of field to be loaded. Add '_filtered' to the name to have the velues of the field outside `area` set to zero.
+        fields: list of field names to be loaded. Add '_filtered' to the name to have the velues of the field outside `area` set to zero.
 
     Returns:
     --------
@@ -201,7 +239,7 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
     return _fields
 
 
-def assign_labels(field, time_start, time_end, T=14, percent=5, threshold=None):
+def assign_labels(field, time_start=30, time_end=120, T=14, percent=5, threshold=None):
     '''
     Given a field of anomalies it computes the `T` days forward convolution of the integrated anomaly and assigns label 1 to anomalies above a given `threshold`.
     If `threshold` is not provided, then it is computed from `percent`, namely to identify the `percent` most extreme anomalies.
@@ -213,7 +251,7 @@ def assign_labels(field, time_start, time_end, T=14, percent=5, threshold=None):
     A, A_flattened, threshold =  field.ComputeTimeAverage(time_start, time_end, T=T, percent=percent, threshold=threshold)[:3]
     return np.array(A >= threshold, dtype=int)
 
-def make_X(fields, time_start, time_end, T=14, tau=0):
+def make_X(fields, time_start=30, time_end=120, T=14, tau=0):
     '''
     Cuts the fields in time and stacks them. The original fields are not modified
 
@@ -227,7 +265,20 @@ def make_X(fields, time_start, time_end, T=14, tau=0):
     X = X.transpose(*range(1,len(X.shape)), 0)
     return X
 
-def roll_X(X, axis='lon', steps=0):
+def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0, percent=5, threshold=None):
+    '''
+    Combines make_X and assign labels
+
+    Returns:
+    --------
+        X: array with shape (years, days, lat, lon, field)
+        Y: array with shape (years, days)
+    '''
+    X = make_X(fields, time_start=time_start, time_end=time_end, T=T, tau=tau)
+    Y = assign_labels(fields[label_field], time_start=time_start, time_end=time_end, T=T, percent=percent, threshold=threshold)
+    return X,Y
+
+def roll_X(X, axis='lon', steps=64):
     '''
     Rolls `X` along a given axis. useful for example for moving France away from the Greenwich meridian
 
@@ -543,8 +594,8 @@ def k_fold_cross_val_split(i, X, Y, nfolds, val_folds=1):
     if val_folds >= nfolds or val_folds <= 0:
         raise ValueError(f'val_folds out of the range [1, {nfolds - 1}]')
     fold_len = X.shape[0]//nfolds
-    lower = i*fold_len % ndata
-    upper = (i+val_folds) % ndata
+    lower = i*fold_len % X.shape[0]
+    upper = (i+val_folds) % X.shape[0]
     if lower < upper:
         X_va = X[lower:upper]
         Y_va = Y[lower:upper]
@@ -557,18 +608,18 @@ def k_fold_cross_val_split(i, X, Y, nfolds, val_folds=1):
         Y_tr = Y[upper:lower]
     return X_tr, Y_tr, X_va, Y_va
 
-def k_fold_cross_val(nfolds, folder, model_kwargs, X, Y, val_folds=1, u=1,
+def k_fold_cross_val(folder, model_kwargs, X, Y, nfolds=10, val_folds=1, u=1,
                      fullmetrics=True, training_epochs=40, training_epochs_tl=10, lr=1e-4, **kwargs):
     '''
     Performs k fold cross validation on a model architecture.
 
     Parameters:
     -----------
-    nfolds: int, number of folds
     folder: folder in which to save data related to the folds
     model_kwargs: dictionary with the parameters to create a model, or dictionary containing the parameter 'load_from' which is the folder from which to load models for transfer learning.
     X: all data (train + val)
     Y: all labels
+    nfolds: int, number of folds
     val_folds: number of folds to be used for the validation set for every split
     u: float, undersampling factor (>=1)
     fullmetrics: bool, whether to use a set of evaluation metrics or just the loss
@@ -677,187 +728,48 @@ def k_fold_cross_val(nfolds, folder, model_kwargs, X, Y, val_folds=1, u=1,
     np.save(f'{folder}/RAM_stats.npy', my_memory)
 
 
+########## PUTTING THE PIECES TOGETHER ###########
 
+def prepare_data(load_data_kwargs, make_XY_kwargs, roll_X_kwargs, premix_seed=0, nfolds=10):
+    # load data
+    found = False
+    for field_name in load_data_kwargs['fields']:
+        if field_name.startswith(make_XY_kwargs['label_field']):
+            found = True
+            break
+    if not found:
+        raise KeyError(f"field {make_XY_kwargs['label_field']} is not a loaded field")
 
+    fields = load_data(**load_data_kwargs)
 
-######## TRAIN THE NETWORK #########
-if __name__ == '__main__a':
+    X,Y = make_XY(fields, **make_XY_kwargs)
     
-    print(f"====== running {__file__} ====== ")  
-    print(f"{tf.__version__ = }")
-    if int(tf.__version__[0]) < 2:
-        print(f"{tf.test.is_gpu_available() = }")
-    else:
-        print(f"{tf.config.list_physical_devices('GPU') = }")
+    # move greenwich_meridian
+    X = roll_X(X, **roll_X_kwargs)
 
-    start = time.time()
+    # mixing
+    premix_permutation = shuffle_years(X, seed=premix_seed, apply=False)
+    Y = Y[premix_permutation]
+    # balance folds:
+    weights = np.sum(Y, axis=1) # get the number of heatwave events per year
+    balance_permutation = balance_folds(weights,nfolds=nfolds)
+    Y = Y[balance_permutation]
+    tot_permutation = compose_permutations([premix_permutation, balance_permutation])
+    X = X[tot_permutation]
+
+    return X, Y, tot_permutation
 
 
+def run(folder, prepare_data_kwargs, model_kwargs, k_fold_cross_val_kwargs):
+    folder = folder.rstrip('./')
+    # prepare the data
+    X,Y, permutation = prepare_data(**prepare_data_kwargs)
+    np.save(f'{folder}/year_permutation.npy',permutation)
 
-    X, list_extremes, thefield, sampling, percent, usepipelines, undersampling_factor, new_mixing,  saveweightseveryblaepoch, NUM_EPOCHS, BATCH_SIZE, checkpoint_name, fullmetrics = PrepareData() # The reason it is written as a function is because we want to re-use it when loading the data
+    # run kfold
+    k_fold_cross_val(folder, model_kwargs, X, Y, **k_fold_cross_val_kwargs)
     
-    oversampling_factor = undersampling_factor[1]
-    undersampling_factor = undersampling_factor[0]
-                                
-    print("full dimension of the data is X[0].shape = ", X[0].shape) # do the previous statement in steps so that first we get a list (I extract the necessary sizes)
-    end = time.time()
 
-    # Getting % usage of virtual_memory ( 3rd field)
-    print(f'RAM memory used: {psutil.virtual_memory()[3]}')
-    print(f'Reading time = {end - start}')
-    start = time.time()
-
-    mylabels = np.array(list_extremes)
-    checkpoint_name_previous = usepipelines[2]
-    tau = usepipelines[3]
-
-    if tau < 0: # we can import previous weights
-        # Here we insert analysis of the previous tau with the assessment of the ideal checkpoint
-        history = np.load(checkpoint_name_previous+'/batch_'+str(0)+'_history.npy', allow_pickle=True).item()
-        if ('val_CustomLoss' in history.keys()):
-            print( "'val_CustomLoss' in history.keys()")
-            historyCustom = []
-            for i in range(10): # preemptively compute the optimal score
-                historyCustom.append(np.load(checkpoint_name_previous+'/batch_'+str(i)+'_history.npy', allow_pickle=True).item()['val_CustomLoss'])
-            historyCustom = np.mean(np.array(historyCustom),0)
-            opt_checkpoint = np.argmin(historyCustom) # We will use optimal checkpoint in this case!
-        else:
-            print( "'val_CustomLoss' not in history.keys()")
-            sys.exit("Aborting the program!")
-
-    
-    # do the training 10 times to with 10-fold cross validation
-    my_MCC = np.zeros(10,)
-    my_entropy = np.zeros(10,)
-    my_skill = np.zeros(10,)
-    my_BS = np.zeros(10,)
-    my_WBS = np.zeros(10,)
-    my_freq = np.zeros(10,)
-    my_memory = []
-
-    for i in range(10):
-        print("===============================")
-        print("cross validation i = ", str(i))
-        test_indices, train_indices, train_true_labels_indices, train_false_labels_indices, filename_permutation = TrainTestSplitIndices(i,X, mylabels, 1, sampling, new_mixing, thefield, percent) # 1 implies undersampling_rate=1 indicating that we supress the manual undersampling
-        print("# events in the train sample after TrainTestSplitIndices: ",  len(train_indices))
-        print("original proportion of positive events in the train sample: ",  np.sum(mylabels[train_indices])/len(train_indices))
-        
-        oversampling_strategy = oversampling_factor/(100/percent-1)
-        if oversampling_factor > 1:
-            print("oversampling_strategy = ", oversampling_strategy )
-            over = RandomOverSampler(random_state=42, sampling_strategy=oversampling_strategy) # first oversample the minority class to have 15 percent the number of examples of the majority class
-            #over = SMOTEENN(random_state=42, sampling_strategy=oversampling_strategy) # first oversample the minority class to have 15 percent the number of examples of the majority class
-        
-        undersampling_strategy = undersampling_factor*oversampling_strategy
-        print("undersampling_strategy = ", undersampling_strategy )
-        under = RandomUnderSampler(random_state=42, sampling_strategy=undersampling_strategy)
-                            
-        if oversampling_factor > 1:
-                steps = [('o', over), ('u', under)]
-        else:
-                steps = [('u', under)]
-        pipeline = Pipeline(steps=steps) # The Pipeline can then be applied to a dataset, performing each transformation in turn and returning a final dataset with the accumulation of the transform applied to it, in this case oversampling followed by undersampling.
-        # To make use of the in-built pipelines we need to transform the X into the required dimensions
-        XTrain_indicesShape = X[train_indices].shape
-        print("Original dimension of the train set is X[train_indices].shape = ", XTrain_indicesShape)
-        X_train, Y_train = pipeline.fit_resample(X[train_indices].reshape(XTrain_indicesShape[0],XTrain_indicesShape[1]*XTrain_indicesShape[2]*XTrain_indicesShape[3]),  mylabels[train_indices])
-        X_train = X_train.reshape(X_train.shape[0],XTrain_indicesShape[1],XTrain_indicesShape[2],XTrain_indicesShape[3])
-
-        Y_test = mylabels[test_indices]
-        neg = train_false_labels_indices.shape[0]
-        pos = train_true_labels_indices.shape[0]
-        
-        print("====Dimensions of the data before entering the neural net===")
-        print("dimension of the train set is X[train_indices].shape = ", X_train.shape)
-        
-        # normalize the data with pointwise mean and std
-        X_mean = np.mean(X_train,0)
-        X_std = np.std(X_train,0)
-        
-        print(f'{np.sum(X_std < 1e-5)/np.product(X_std.shape)*100}\% of the data have std below 1e-5')
-        X_std[X_std==0] = 1 # If there is no variance we shouldn't divide by zero ### hmmm: this may create discontinuities
-
-        X_test = (X[test_indices]-X_mean)/X_std
-        Y_test = mylabels[test_indices]
-
-        X_train = (X_train-X_mean)/X_std
-
-
-         
-        print("Y_train.shape = ", Y_train.shape)
-        print("Y_test.shape = ", Y_test.shape)
-         
-        print(f"Train set: # of true labels = {np.sum(Y_train)}, # of false labels = {Y_train.shape[0] - np.sum(Y_train)}")
-        print(f"Train set: effective sampling rate for rare events is {np.sum(Y_train)/Y_train.shape[0]}")
-        
-        np.save(f'{checkpoint_name}/batch_{i}_X_mean', X_mean) # this values must be saved if the neural network is to be tested again, by reloading some other data
-        np.save(f'{checkpoint_name}/batch_{i}_X_std', X_std)
-        
-        if tau < 0: # engagge transfer learning
-            print(f"opt_checkpoint: {opt_checkpoint} ,loading model: {checkpoint_name_previous}")
-            model = (tf.keras.models.load_model(f'{checkpoint_name_previous}/batch_{i}', compile=False)) # if we just want to train
-
-            nb_zeros_c = 4-len(str(opt_checkpoint))
-            cp_checkpoint_name = '/cp-'+nb_zeros_c*'0'+str(opt_checkpoint)+'.ckpt'
-            print(f'loading weights from {checkpoint_name_previous}/batch_{i}{cp_checkpoint_name}')
-            model.load_weights(f'{checkpoint_name_previous}/batch_{i}{cp_checkpoint_name}')
-        else:
-            model_input_dim = X.shape[1:] 
-            model = custom_CNN(model_input_dim) 
-       
-        tf_sampling = tf.cast([0.5*np.log(undersampling_factor), -0.5*np.log(undersampling_factor)], tf.float32)
-        #print("model_input_dim = ",model_input_dim)
-        model.summary()
-        if fullmetrics:
-            METRICS=['accuracy',MCCMetric(2),ConfusionMatrixMetric(2),CustomLoss(tf_sampling)]#tf.keras.metrics.SparseCategoricalCrossentropy(from_logits=True)]#CustomLoss()]   # the last two make the code run longer but give precise discrete prediction benchmarks
-        else:
-            METRICS=['loss']
-        model.compile(
-            optimizer=tf.keras.optimizers.Adam(learning_rate = 2e-4),
-            loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True), #If the predicted labels are not converted to a probability distribution by the last layer of the model (using sigmoid or softmax activation functions), we need to inform these three Cross-Entropy functions by setting their from_logits = True.
-            #One advantage of using sparse categorical cross-entropy is it saves storage in memory as well as time in computation because it simply uses a single integer for a class, rather than a whole one-hot vector. This works despite the fact that the neural network has an one-hot vector output  
-            metrics=METRICS   # the last two make the code run longer but give precise discrete prediction benchmarks
-        )
-        # Create a callback that saves the model's weights every saveweightseveryblaepoch epochs
-        checkpoint_path = checkpoint_name+'/batch_'+str(i)+"/cp-{epoch:04d}.ckpt"
-        if saveweightseveryblaepoch > 0:
-            print("cp_callback save option on")
-            # Create a callback that saves the model's weights
-            cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_path,
-                                                             save_weights_only=True,
-                                                             verbose=1)
-        else:
-            cp_callback=None
-
-        model.save_weights(checkpoint_path.format(epoch=0))
-
-        my_history=model.fit(X_train, Y_train, batch_size=BATCH_SIZE, validation_data=(X_test,Y_test), shuffle=True, callbacks=[cp_callback], epochs=NUM_EPOCHS,verbose=2, class_weight=None)
-
-        model.save(f'{checkpoint_name}/batch_{i}')
-        np.save(f'{checkpoint_name}/batch_{i}_history.npy',my_history.history)
-        
-        my_probability_model=(tf.keras.Sequential([ # softmax output to make a prediction
-              model,
-              tf.keras.layers.Softmax()
-            ]))
-
-        print("======================================")
-        my_memory.append(psutil.virtual_memory())
-        print('RAM memory:', my_memory[i][3])
-
-        tf.keras.backend.clear_session()
-        gc.collect() # Garbage collector which removes some extra references to the object
-
-        # Getting % usage of virtual_memory ( 3rd field)
-
-    np.save(f'{checkpoint_name}/RAM_stats.npy', my_memory)
-
-    end = time.time()
-    print(f'files saved in  {checkpoint_name}')
-    print(f'Learning time = {end - start}')
-
-
-# def run(kwargs, default_kwargs)
 
 if __name__ == '__main__':
     # check if there is a lock:

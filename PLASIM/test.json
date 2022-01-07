@@ -1,0 +1,20 @@
+{
+    "load_data": {
+        "dataset_years": 8000,
+        "year_list": null,
+        "sampling": "",
+        "Model": "Plasim",
+        "area": "France",
+        "filter_area": "France",
+        "lon_start": 0,
+        "lon_end": 128,
+        "lat_start": 0,
+        "lat_end": 22,
+        "mylocal": "/local/gmiloshe/PLASIM/",
+        "fields": [
+            "t2m",
+            "zg500",
+            "mrso_filtered"
+        ]
+    }
+}
