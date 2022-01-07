@@ -338,6 +338,7 @@ for itau, tau in enumerate(taus):
             new_TP[itau,i,j], new_TN[itau,i,j], new_FP[itau,i,j], new_FN[itau,i,j], MCC = ComputeMCC(Y_test, label_assignment, False)
 new_TPR = new_TP/(new_TP+new_FN)
 new_PPV = new_TP/(new_TP+new_FP)
+#new_PPV[new_TP==0] = 0
 new_FPR = new_FP/(new_FP+new_TN)
 new_F1 = 2*new_TP/(2*new_TP+new_FP+new_FN)
 np.savez(creation+'/new_vars_'+str(sys.argv[3]), new_MCC=new_MCC, new_entropy=new_entropy, new_BS=new_BS, new_WBS=new_WBS, new_freq=new_freq, new_skill=new_skill, new_TP=new_TP, new_FP=new_FP, new_TN=new_TN, new_FN=new_FN, new_TPR=new_TPR, new_PPV=new_PPV, new_FPR=new_FPR, new_F1=new_F1, undersampling_factors=undersampling_factors, taus=taus)
