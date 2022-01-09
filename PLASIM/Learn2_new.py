@@ -17,8 +17,13 @@ import inspect
 import json
 
 this_module = sys.modules[__name__]
-
-path_to_ERA = Path(__file__).resolve().parent.parent / 'ERA' # when absolute path, so you can run the script from another folder (outside plasim)
+path_to_here = Path(__file__).resolve().parent
+path_to_ERA = path_to_here / 'ERA' # when absolute path, so you can run the script from another folder (outside plasim)
+if not os.path.exists(path_to_ERA):
+    path_to_ERA = path_to_here.parent / 'ERA'
+    if not os.path.exists(path_to_ERA):
+        raise FileNotFoundError('Could not find ERA folder')
+print(path_to_ERA)
 sys.path.insert(1, str(path_to_ERA))
 # sys.path.insert(1, '../ERA/')
 import ERA_Fields as ef # general routines
@@ -39,7 +44,7 @@ from tensorflow.python.types.core import Value
 ########## USAGE ###############################
 def usage():
     s = '''
-    
+    How to use this script:
     '''
     return s
 
@@ -70,6 +75,8 @@ def run_smart(func, default_kwargs, **kwargs): # this is not as powerful as it l
             f_kwargs[k] = v
         func(**f_kwargs)
 
+#### CONFIG FILE #####
+
 def get_default_params(func, recursive=False):
     '''
     Given a function returns a dictionary with the default values of its parameters
@@ -91,7 +98,7 @@ def get_default_params(func, recursive=False):
 
 def read_json(filename):
     '''
-    Reads a json file as a dictionary
+    Reads a json file `filename` as a dictionary
     '''
     with open(filename, 'r') as j:
         d = json.load(j)
@@ -99,10 +106,50 @@ def read_json(filename):
 
 def write_to_json(d, filename):
     '''
-    Saves a dictionary `d` to a json file
+    Saves a dictionary `d` to a json file `filename`
     '''
     with open(filename, 'w') as j:
         json.dump(d, j, indent=4)
+
+def build_config_dict(functions):
+    '''
+    Creates a config file with the default arguments of the functions in the list `functions`
+
+    Parameters:
+    -----------
+        functions: list of functions or string with the function name
+    
+    Returns:
+    --------
+        d: dictionary
+    '''
+    d = {}
+    for f in functions:
+        if isinstance(f, str):
+            f_name = f
+            f = getattr(this_module, f_name)
+        else:
+            f_name = f.__name__
+        d[f_name] = get_default_params(f, recursive=True)
+    return d
+
+def collapse_dict(d_nested, d_flat=None):
+    '''
+    Flattens a nested dictionary `d_nested` into a flat one `d_flat`. 
+    `d_nested` can contain dictionaries and other types. If a key is present more times the associated values must be the same, otherwise an error will be raised
+    '''
+    if d_flat is None:
+        d_flat = {}
+
+    for k,v in d_nested.items():
+        if isinstance(v, dict):
+            d_flat = collapse_dict(v,d_flat)
+        else:
+            if k in d_flat and v != d_flat[k]:
+                raise ValueError(f'Multiple definitions for argument {k}')
+            d_flat[k] = v
+    return d_flat
+    
 
 ########## COPY SOURCE FILES #########
 
@@ -123,13 +170,13 @@ def move_to_folder(folder):
 
     # copy other files in the same directory as this one
     path_to_here = path_to_here.parent
-    shutil.copy(path_to_here / 'config', folder)
+    # shutil.copy(path_to_here / 'config', folder)
 
     # copy files in ../ERA/
     path_to_here = path_to_here.parent / 'ERA'
     shutil.copy(path_to_here / 'cartopy_plots.py', ERA_folder)
     shutil.copy(path_to_here / 'ERA_Fields.py', ERA_folder)
-    shutil.copy(path_to_here / 'TF_fields.py', ERA_folder)
+    shutil.copy(path_to_here / 'TF_Fields.py', ERA_folder)
 
     # copy additional files
     # History.py
@@ -172,7 +219,7 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
 
     Parameters:
     -----------
-        dataset_years: number of years of te dataset, 8000 or 1000
+        dataset_years: number of years of the dataset, 8000 or 1000
         year_list: list of years to load from the dataset
         sampling: '' (dayly) or '3hrs'
         Model: 'Plasim', 'CESM', ...
@@ -185,10 +232,6 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
     Returns:
     --------
         _fields: dictionary of ERA_Fields.Plasim_Field objects
-
-
-    TO IMPROVE:
-        possibility to load less years from a dataset
     '''
 
     if area != filter_area:
@@ -278,7 +321,7 @@ def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0,
     Y = assign_labels(fields[label_field], time_start=time_start, time_end=time_end, T=T, percent=percent, threshold=threshold)
     return X,Y
 
-def roll_X(X, axis='lon', steps=64):
+def roll_X(X, roll_axis='lon', roll_steps=64):
     '''
     Rolls `X` along a given axis. useful for example for moving France away from the Greenwich meridian
 
@@ -294,21 +337,21 @@ def roll_X(X, axis='lon', steps=64):
             'lon' : eastward
             'field' : forward in the numbering of the fields
     '''
-    if steps == 0:
+    if roll_steps == 0:
         return X
-    if axis.startswith('y'):
-        axis = 0
-    elif axis.startswith('d'):
-        axis = 1
-    elif axis == 'lat':
-        axis = 2
-    elif axis == 'lon':
-        axis = 3
-    elif axis.startswith('f'):
-        axis = 4
+    if roll_axis.startswith('y'):
+        roll_axis = 0
+    elif roll_axis.startswith('d'):
+        roll_axis = 1
+    elif roll_axis == 'lat':
+        roll_axis = 2
+    elif roll_axis == 'lon':
+        roll_axis = 3
+    elif roll_axis.startswith('f'):
+        roll_axis = 4
     else:
-        raise ValueError(f'Unknown valur for axis: {axis}')
-    return np.roll(X,steps,axis=axis)
+        raise ValueError(f'Unknown valur for axis: {roll_axis}')
+    return np.roll(X,roll_steps,axis=roll_axis)
 
 ####### MIXING ########
 
@@ -573,7 +616,7 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     model.save(folder)
     np.save(f'{folder}_history.npy', my_history.history)
 
-def k_fold_cross_val_split(i, X, Y, nfolds, val_folds=1):
+def k_fold_cross_val_split(i, X, Y, nfolds=10, val_folds=1):
     '''
     Splits X and Y in a training and validation set according to k fold cross validation algorithm
 
@@ -608,7 +651,7 @@ def k_fold_cross_val_split(i, X, Y, nfolds, val_folds=1):
         Y_tr = Y[upper:lower]
     return X_tr, Y_tr, X_va, Y_va
 
-def k_fold_cross_val(folder, model_kwargs, X, Y, nfolds=10, val_folds=1, u=1,
+def k_fold_cross_val(folder, create_model_kwargs, X, Y, nfolds=10, val_folds=1, u=1,
                      fullmetrics=True, training_epochs=40, training_epochs_tl=10, lr=1e-4, **kwargs):
     '''
     Performs k fold cross validation on a model architecture.
@@ -616,7 +659,7 @@ def k_fold_cross_val(folder, model_kwargs, X, Y, nfolds=10, val_folds=1, u=1,
     Parameters:
     -----------
     folder: folder in which to save data related to the folds
-    model_kwargs: dictionary with the parameters to create a model, or dictionary containing the parameter 'load_from' which is the folder from which to load models for transfer learning.
+    create_model_kwargs: dictionary with the parameters to create a model, or dictionary containing the parameter 'load_from' which is the folder from which to load models for transfer learning.
     X: all data (train + val)
     Y: all labels
     nfolds: int, number of folds
@@ -633,8 +676,10 @@ def k_fold_cross_val(folder, model_kwargs, X, Y, nfolds=10, val_folds=1, u=1,
         loss: overrides the default SparseCrossEntropyLoss
         metrics: overrides `fullmetrics`
     '''
-    load_from = model_kwargs.pop('load_from', None)
+    load_from = create_model_kwargs.pop('load_from', None)
     folder = folder.rstrip('/')
+
+    # NOTE: add possibility to find the previous run
 
     my_memory = []
 
@@ -692,7 +737,7 @@ def k_fold_cross_val(folder, model_kwargs, X, Y, nfolds=10, val_folds=1, u=1,
         # check for transfer learning
         model = None        
         if load_from is None:
-            model = create_model(input_shape=X_tr.shape[1:], **model_kwargs)
+            model = create_model(input_shape=X_tr.shape[1:], **create_model_kwargs)
         else:
             model = keras.models.load_model(f'{load_from}/fold_{i}', compile=False)
             model.load_weights(f'{load_from}/fold_{i}/cp-{opt_checkpoint:04d}.ckpt')            
@@ -783,6 +828,10 @@ if __name__ == '__main__':
             folder = sys.argv[1]
             print(f'moving code to {folder = }')
             move_to_folder(folder)
+
+            d = build_config_dict([run])
+            write_to_json(d,f'{folder}/config.json')
+
             exit(0)
         else:
             with open(lock) as l:
@@ -791,10 +840,37 @@ if __name__ == '__main__':
     # if there is a lock, the previous block of code would have ended the run, so the code below is executed only if there is no lock
     
     # load config file
+    config_dict = read_json('config.json')
+    config_dict_flat = collapse_dict(config_dict)
+    print(config_dict_flat)
 
     # parse command line arguments
+    cl_args = sys.argv[1:]
+    i = 0
+    arg_dict = {}
+    while(i < len(cl_args)):
+        key = cl_args[i]
+        if '=' in key:
+            key, value = key.split('=')
+            i += 1
+        else:
+            value = cl_args[i+1]
+            i += 2
+        if key not in config_dict_flat:
+            raise KeyError(f'Unknown argument {key}')
+        arg_dict[key] = value
+    print(arg_dict)
 
-    # run(kwargs, default_kwargs)
+    folder = ''
+    for k in sorted(arg_dict):
+        folder += f'{k}_{arg_dict[k]}__'
+    folder = folder[:-2] # remove the last '__'
+    print(folder)
+
+    # add folder name to the list of runs
+    # NOTE: enable transfer learning from previous run
+
+    # run()
 
     
 
