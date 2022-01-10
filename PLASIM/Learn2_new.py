@@ -149,7 +149,57 @@ def collapse_dict(d_nested, d_flat=None):
                 raise ValueError(f'Multiple definitions for argument {k}')
             d_flat[k] = v
     return d_flat
+
+def parse_run_name(run_name):
+    d = {}
+    args = run_name.split('__')
+    for arg in args:
+        if '_' not in arg:
+            continue
+        key, value = arg.rsplit('_',1)
+        d[key] = value
+    return d
+
+def get_run(load_from, current_run_name=None):
+    '''
+    Parameters:
+    -----------
+        load_from: int, str or 'last'. If int it is the number of the run. If 'last' it is the last completed run. Otherwise it can be a piece of the run name.
+            If the choice is ambiguous an error will be raised.
+        current_run_name: optional, used to check for compatibility issues when loading a model
+    '''
+    if load_from is None:
+        return None
+    # get run_folder name
+    with open('runs.txt', 'r') as runs_file:
+        runs = runs_file.readlines()
+    if len(runs) == 0:
+        print('No runs to load from')
+        return None
+    try:
+        l = int(load_from)
+    except ValueError: # cannot convert load_from to int, so it must be a string that doesn't contain only numbers
+        if load_from == 'last':
+            l = -1
+        else:
+            found = False
+            for i,r in enumerate(runs):
+                if load_from in r:
+                    if not found:
+                        found = True
+                        l = r
+                    else:
+                        raise KeyError(f'Multiple runs contain {load_from}, at least {l} and {i}')
+    run_name = runs[l].rstrip('\n')
     
+    if current_run_name is not None: # check for compatibility issues when loading
+        # parse run_name for arguments
+        run_dict = parse_run_name(run_name)
+        current_run_dict = parse_run_name(current_run_name)
+
+        # NOTE: continue here
+
+    return run_name
 
 ########## COPY SOURCE FILES #########
 
@@ -651,7 +701,7 @@ def k_fold_cross_val_split(i, X, Y, nfolds=10, val_folds=1):
         Y_tr = Y[upper:lower]
     return X_tr, Y_tr, X_va, Y_va
 
-def k_fold_cross_val(folder, create_model_kwargs, X, Y, nfolds=10, val_folds=1, u=1,
+def k_fold_cross_val(folder, X, Y, create_model_kwargs, load_from=None, nfolds=10, val_folds=1, u=1,
                      fullmetrics=True, training_epochs=40, training_epochs_tl=10, lr=1e-4, **kwargs):
     '''
     Performs k fold cross validation on a model architecture.
@@ -659,9 +709,10 @@ def k_fold_cross_val(folder, create_model_kwargs, X, Y, nfolds=10, val_folds=1, 
     Parameters:
     -----------
     folder: folder in which to save data related to the folds
-    create_model_kwargs: dictionary with the parameters to create a model, or dictionary containing the parameter 'load_from' which is the folder from which to load models for transfer learning.
     X: all data (train + val)
     Y: all labels
+    create_model_kwargs: dictionary with the parameters to create a model
+    load_from: from where to load weights for transfer learning. If not None it overrides `create_model_kwargs` (the model is loaded instead of created)
     nfolds: int, number of folds
     val_folds: number of folds to be used for the validation set for every split
     u: float, undersampling factor (>=1)
@@ -676,10 +727,9 @@ def k_fold_cross_val(folder, create_model_kwargs, X, Y, nfolds=10, val_folds=1, 
         loss: overrides the default SparseCrossEntropyLoss
         metrics: overrides `fullmetrics`
     '''
-    load_from = create_model_kwargs.pop('load_from', None)
     folder = folder.rstrip('/')
 
-    # NOTE: add possibility to find the previous run
+    load_from = get_run(load_from, current_run_name=folder.rstrip('/').rsplit('/',1)[1])
 
     my_memory = []
 
@@ -805,14 +855,14 @@ def prepare_data(load_data_kwargs, make_XY_kwargs, roll_X_kwargs, premix_seed=0,
     return X, Y, tot_permutation
 
 
-def run(folder, prepare_data_kwargs, model_kwargs, k_fold_cross_val_kwargs):
-    folder = folder.rstrip('./')
+def run(folder, prepare_data_kwargs, k_fold_cross_val_kwargs):
+    folder = folder.rstrip('/')
     # prepare the data
     X,Y, permutation = prepare_data(**prepare_data_kwargs)
     np.save(f'{folder}/year_permutation.npy',permutation)
 
     # run kfold
-    k_fold_cross_val(folder, model_kwargs, X, Y, **k_fold_cross_val_kwargs)
+    k_fold_cross_val(folder, X, Y, **k_fold_cross_val_kwargs)
     
 
 
