@@ -6,6 +6,28 @@
 
 '''
 Module for training a Convolutional Neural Network on climate data.
+
+Usage:
+------
+First you need to move the code to a desired folder by running
+    python Learn2_new.py <folder>
+
+This will copy this code and its dependencies to your desired location and will create a config file from the default values in the functions specified in this module.
+
+`cd` into your folder and have a look at the config file, modify all the parameters you want BEFORE the first run, but AFTER you run the code DO NOT MODIFY the config file.
+
+The config file will store the default values for the arguments of the functions.
+
+When running the code you can specify some parameters to deviate from their default value, for example running
+    python Learn2_new.py tau=5
+will run the code with all parameters at their default values but `tau` which will now be 5
+
+Beware that arguments are parsed with spaces, so valid syntaxes are
+    python Learn2_new.py tau=5 lr=1e-4
+    python Learn2_new.py tau 5 lr 1e-4
+Invalid syntaxes are:
+    python Learn2_new.py tau=5 lr = 1e-4
+    python Learn2_new.py tau=5, lr=1e-4
 '''
 
 # Import librairies
@@ -84,6 +106,28 @@ def run_smart(func, default_kwargs, **kwargs): # this is not as powerful as it l
 def get_default_params(func, recursive=False):
     '''
     Given a function returns a dictionary with the default values of its parameters
+
+    Parameters:
+    -----------
+        func: function inside this module
+        recursive: bool, if True arguments of the type '*_kwargs' will be interpreted as kwargs to pass to function * and `get_default_params` will be applied to * as well to retrieve the default values
+    
+    Returns:
+    --------
+        default_params: dict
+
+    Examples:
+    ---------
+    >>> get_default_params(balance_folds)
+    {'nfolds': 10, 'verbose': False}
+
+    >>> def pnroll(X, roll_X_kwargs, greeting='Hello there!'):
+    ...     print(greeting)
+    ...     return roll_X(X, **roll_X_kwargs)
+    ... 
+    >>> get_default_params(pnroll, recursive=True)
+    ... 
+    {'greeting': 'Hello there!', 'roll_X_kwargs': {'roll_axis': 'lon', 'roll_steps': 64}}
     '''
     s = inspect.signature(func)
     default_params = {
@@ -103,6 +147,10 @@ def get_default_params(func, recursive=False):
 def read_json(filename):
     '''
     Reads a json file `filename` as a dictionary
+
+    Returns:
+    --------
+        d: dict
     '''
     with open(filename, 'r') as j:
         d = json.load(j)
@@ -139,8 +187,28 @@ def build_config_dict(functions):
 
 def collapse_dict(d_nested, d_flat=None):
     '''
-    Flattens a nested dictionary `d_nested` into a flat one `d_flat`. 
-    `d_nested` can contain dictionaries and other types. If a key is present more times the associated values must be the same, otherwise an error will be raised
+    Flattens a nested dictionary `d_nested` into a flat one `d_flat`.
+
+    Parameters:
+    -----------
+        `d_nested`: dict, can contain dictionaries and other types.
+            If a key is present more times the associated values must be the same, otherwise an error will be raised
+        `d_flat`, dict, optional: flat dictionary into which to store the items of `d_nested`
+    
+    Returns:
+    --------
+        d_flat: dict
+
+    Raises:
+    -------
+        ValueError: if a key appears more than once with different values
+
+    Examples:
+    ---------
+    >>> collapse_dict({'a': 10, 'b': {'a': 10, 'c': 4}})
+    {'a': 10, 'c': 4}
+    >>> collapse_dict({'a': 10, 'b': {'a': 10, 'c': 4}}, d_flat={'a': 10, 'z': 7})
+    {'a': 10, 'z': 7, 'c': 4}
     '''
     if d_flat is None:
         d_flat = {}
@@ -159,6 +227,7 @@ def set_values_recursive(d_nested, d_flat):
     Given a nested dictionary `d_nested` replaces its values at any level of indentation according according to the ones in `d_flat`.
 
     Example:
+    --------
     >>> set_values_recursive({'a': 10, 'b': {'a': 10, 'c': 8}}, {'a': 'hello'})
     {'a': 'hello', 'b': {'a': 'hello', 'c': 8}}
     '''
@@ -173,6 +242,24 @@ def set_values_recursive(d_nested, d_flat):
     return d_nested
 
 def parse_run_name(run_name):
+    '''
+    Parses a string into a dictionary
+
+    Parameters:
+    -----------
+        run_name: str with format <param_name>_<param_value>__...
+    
+    Returns:
+    --------
+        d: dict
+    
+    Examples:
+    ---------
+    >>> parse_run_name('a_5__b_7')
+    {'a': '5', 'b': '7'}
+    >>> parse_run_name('test_arg_bla__b_7')
+    {'test_arg': 'bla', 'b': '7'}
+    '''
     d = {}
     args = run_name.split('__')
     for arg in args:
@@ -982,7 +1069,3 @@ if __name__ == '__main__':
     print(run_kwargs)
 
     run(folder, **run_kwargs)
-
-    
-
-    
