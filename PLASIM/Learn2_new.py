@@ -1,5 +1,12 @@
-# George Miloshevich 2021
-# Train a neural network
+# '''
+# Created in December 2021
+
+# @author: Alessandro Lovo
+# '''
+
+'''
+Module for training a Convolutional Neural Network on climate data.
+'''
 
 # Import librairies
 import os as os
@@ -43,10 +50,7 @@ from tensorflow.python.types.core import Value
 
 ########## USAGE ###############################
 def usage():
-    s = '''
-    How to use this script:
-    '''
-    return s
+    return this_module.__doc__
 
 
 ########## ARGUMENT PARSING ####################
@@ -150,6 +154,24 @@ def collapse_dict(d_nested, d_flat=None):
             d_flat[k] = v
     return d_flat
 
+def set_values_recursive(d_nested, d_flat):
+    '''
+    Given a nested dictionary `d_nested` replaces its values at any level of indentation according according to the ones in `d_flat`.
+
+    Example:
+    >>> set_values_recursive({'a': 10, 'b': {'a': 10, 'c': 8}}, {'a': 'hello'})
+    {'a': 'hello', 'b': {'a': 'hello', 'c': 8}}
+    '''
+    if len(d_flat) == 0:
+        return d_nested
+
+    for k,v in d_nested.items():
+        if isinstance(v, dict):
+            d_nested[k] = set_values_recursive(v, d_flat)
+        elif k in d_flat:
+            d_nested[k] = d_flat[k]
+    return d_nested
+
 def parse_run_name(run_name):
     d = {}
     args = run_name.split('__')
@@ -196,8 +218,15 @@ def get_run(load_from, current_run_name=None):
         # parse run_name for arguments
         run_dict = parse_run_name(run_name)
         current_run_dict = parse_run_name(current_run_name)
+        create_model_kwargs = get_default_params(create_model)
 
-        # NOTE: continue here
+        # keep only arguments that are model kwargs
+        run_dict = {k:v for k,v in run_dict.items() if k in create_model_kwargs}
+        current_run_dict = {k:v for k,v in current_run_dict.items() if k in create_model_kwargs}
+
+        # check if arguments match
+        if run_dict != current_run_dict:
+            raise ValueError('The current run and the one you want to load from have different model architectures')
 
     return run_name
 
@@ -701,8 +730,8 @@ def k_fold_cross_val_split(i, X, Y, nfolds=10, val_folds=1):
         Y_tr = Y[upper:lower]
     return X_tr, Y_tr, X_va, Y_va
 
-def k_fold_cross_val(folder, X, Y, create_model_kwargs, load_from=None, nfolds=10, val_folds=1, u=1,
-                     fullmetrics=True, training_epochs=40, training_epochs_tl=10, lr=1e-4, **kwargs):
+def k_fold_cross_val(folder, X, Y, create_model_kwargs, load_from='last', nfolds=10, val_folds=1, u=1,
+                     fullmetrics=True, training_epochs=40, training_epochs_tl=10, lr=1e-4, batch_size=1024, **kwargs):
     '''
     Performs k fold cross validation on a model architecture.
 
@@ -712,7 +741,8 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, load_from=None, nfolds=1
     X: all data (train + val)
     Y: all labels
     create_model_kwargs: dictionary with the parameters to create a model
-    load_from: from where to load weights for transfer learning. If not None it overrides `create_model_kwargs` (the model is loaded instead of created)
+    load_from: None, int, str or 'last': from where to load weights for transfer learning. See the documentation of function `get_run`
+        If not None it overrides `create_model_kwargs` (the model is loaded instead of created)
     nfolds: int, number of folds
     val_folds: number of folds to be used for the validation set for every split
     u: float, undersampling factor (>=1)
@@ -720,6 +750,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, load_from=None, nfolds=1
     training_epochs: number of training epochs when creating a model from scratch
     training_epochs_tl: numer of training epochs when using transfer learning
     lr: learning_rate for Adam optimizer
+    batch_size: int
 
     **kwargs: additional arguments to pass to `train_model` (see its docstring), in particular
         num_epochs: overrides `training_epochs` and `training_epochs_tl`
@@ -812,7 +843,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, load_from=None, nfolds=1
         loss = kwargs.pop('loss',keras.losses.SparseCategoricalCrossentropy(from_logits=True))
 
         train_model(model, X_tr, Y_tr, X_va, Y_va,
-                    folder=fold_folder, num_epochs=num_epochs, optimizer=optimizer, loss=loss, metrics=metrics, **kwargs)
+                    folder=fold_folder, num_epochs=num_epochs, optimizer=optimizer, loss=loss, metrics=metrics, batch_size=batch_size, **kwargs)
 
         my_memory.append(psutil.virtual_memory())
         print('RAM memory:', my_memory[i][3]) # Getting % usage of virtual_memory ( 3rd field)
@@ -857,12 +888,18 @@ def prepare_data(load_data_kwargs, make_XY_kwargs, roll_X_kwargs, premix_seed=0,
 
 def run(folder, prepare_data_kwargs, k_fold_cross_val_kwargs):
     folder = folder.rstrip('/')
+    # setup logger
+    old_stdout = sys.stdout
+    sys.stdout = ef.Logger(f'{folder}/log.log')
     # prepare the data
     X,Y, permutation = prepare_data(**prepare_data_kwargs)
     np.save(f'{folder}/year_permutation.npy',permutation)
 
     # run kfold
     k_fold_cross_val(folder, X, Y, **k_fold_cross_val_kwargs)
+
+    # restore old stdout
+    sys.stdout = old_stdout
     
 
 
@@ -892,7 +929,7 @@ if __name__ == '__main__':
     # load config file
     config_dict = read_json('config.json')
     config_dict_flat = collapse_dict(config_dict)
-    print(config_dict_flat)
+    print(config_dict)
 
     # parse command line arguments
     cl_args = sys.argv[1:]
@@ -908,19 +945,43 @@ if __name__ == '__main__':
             i += 2
         if key not in config_dict_flat:
             raise KeyError(f'Unknown argument {key}')
-        arg_dict[key] = value
-    print(arg_dict)
+        # `value` is a string. Here we try to cast it to the correct type
+        value = None if value.lower() == 'none' else value # recognize None values
+        if config_dict_flat[key] is not None:
+            try:
+                dtype = type(config_dict_flat[key])
+                value = dtype(value)
+            except Exception:
+                print(f'Could not convert {value} to {dtype}. Keeping string type')
+        # now check if the provided value is equal to the default one
+        if value == config_dict_flat[key]:
+            print(f'Skipping given argument {key} as it is at its default value {value}')
+        else:
+            arg_dict[key] = value
 
-    folder = ''
+    # get run number
+    if not os.path.exists('runs.txt'):
+        run_id = 0
+    else:
+        with open('runs.txt', 'r') as r:
+            run_id = len(r.readlines())
+
+    folder = f'{run_id}__'
     for k in sorted(arg_dict):
         folder += f'{k}_{arg_dict[k]}__'
     folder = folder[:-2] # remove the last '__'
     print(folder)
 
     # add folder name to the list of runs
-    # NOTE: enable transfer learning from previous run
+    with open('runs.txt', 'a') as r:
+        r.write(f'{folder}\n')
+    os.mkdir(folder)
 
-    # run()
+    # set the arguments provided into the nested dictionaries
+    run_kwargs = set_values_recursive(config_dict, arg_dict)
+    print(run_kwargs)
+
+    run(folder, **run_kwargs)
 
     
 
