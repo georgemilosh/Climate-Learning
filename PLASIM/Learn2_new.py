@@ -78,6 +78,36 @@ def usage():
 ########## ARGUMENT PARSING ####################
 
 def run_smart(func, default_kwargs, **kwargs): # this is not as powerful as it looks like
+    '''
+    Runs a function in a vectorized manner:
+
+    Parameters:
+    -----------
+        func: function with signature func(**kwargs) -> None
+        default_kwargs: dict: default values for the keyword arguments of func
+        **kwargs: non default values of the keyword arguments. If a list is provided, the function is run iterating over the list
+
+    Examples:
+    ---------
+    >>> def add(x, y=0):
+    ...     print(x + y)
+    >>> run_smart(add, {'x': 0, 'y': 0}, x=1)
+    1
+    >>> run_smart(add, {'x': 0, 'y': 0}, x=1, y=[1,2,3]) # iterates over y
+    2
+    3
+    4
+    >>> run_smart(add, {'x': 0, 'y': 0}, x=[0, 10], y=[1,2]) # iterates over x and y
+    1
+    2
+    11
+    12
+    >>> run_smart(add, {'x': [0], 'y': [0]}, x=[1,2], y=[1]) # correctly interprets lists when not supposed to iterate over them
+    [1, 2, 1]
+    >>> run_smart(add, {'x': [0], 'y': [0]}, x=[1,2], y=[[1], [0]]) # to iterate over list arguments, nest the lists
+    [1, 2, 1]
+    [1, 2, 0]
+    '''
     evaluate = True
     for k,v in kwargs.items():
         if k not in default_kwargs:
@@ -144,7 +174,7 @@ def get_default_params(func, recursive=False):
                 print(f'Could not find function {func_name}')
     return default_params
 
-def read_json(filename):
+def json2dict(filename):
     '''
     Reads a json file `filename` as a dictionary
 
@@ -156,7 +186,7 @@ def read_json(filename):
         d = json.load(j)
     return d
 
-def write_to_json(d, filename):
+def dict2json(d, filename):
     '''
     Saves a dictionary `d` to a json file `filename`
     '''
@@ -165,7 +195,7 @@ def write_to_json(d, filename):
 
 def build_config_dict(functions):
     '''
-    Creates a config file with the default arguments of the functions in the list `functions`
+    Creates a config file with the default arguments of the functions in the list `functions`. See also function `get_default_params`
 
     Parameters:
     -----------
@@ -191,9 +221,9 @@ def collapse_dict(d_nested, d_flat=None):
 
     Parameters:
     -----------
-        `d_nested`: dict, can contain dictionaries and other types.
+        d_nested: dict, can contain dictionaries and other types.
             If a key is present more times the associated values must be the same, otherwise an error will be raised
-        `d_flat`, dict, optional: flat dictionary into which to store the items of `d_nested`
+        d_flat: dict (optional), flat dictionary into which to store the items of `d_nested`
     
     Returns:
     --------
@@ -453,6 +483,15 @@ def assign_labels(field, time_start=30, time_end=120, T=14, percent=5, threshold
     Given a field of anomalies it computes the `T` days forward convolution of the integrated anomaly and assigns label 1 to anomalies above a given `threshold`.
     If `threshold` is not provided, then it is computed from `percent`, namely to identify the `percent` most extreme anomalies.
 
+    Parameters:
+    -----------
+        field: Plasim_Field object
+        time_start: int, first day of the period of interest
+        time_end: int, first day after the end of the period of interst
+        T: width of the window for the running average
+        percent: float, percentage of the most extreme heatwaves
+        threshold: float (optional), if provided overrides `percent`
+
     Returns:
     --------
         labels: 2D array with shape (years, days) and values 0 or 1
@@ -463,6 +502,14 @@ def assign_labels(field, time_start=30, time_end=120, T=14, percent=5, threshold
 def make_X(fields, time_start=30, time_end=120, T=14, tau=0):
     '''
     Cuts the fields in time and stacks them. The original fields are not modified
+
+    Parameters:
+    -----------
+        fields: list of Plasim_Field objects
+        time_start: int, first day of the period of interest
+        time_end: int, first day after the end of the period of interst
+        T: width of the window for the running average
+        tau: delay between observation and prediction
 
     Returns:
     --------
@@ -476,7 +523,18 @@ def make_X(fields, time_start=30, time_end=120, T=14, tau=0):
 
 def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0, percent=5, threshold=None):
     '''
-    Combines make_X and assign labels
+    Combines 'make_X' and 'assign_labels'
+
+    Parameters:
+    -----------
+        fields: dict of Plasim_Field objects
+        label_field: str: key for the field used for computing labels
+        time_start: int, first day of the period of interest
+        time_end: int, first day after the end of the period of interst
+        T: width of the window for the running average
+        tau: delay between observation and prediction
+        percent: float, percentage of the most extreme heatwaves
+        threshold: float (optional), if provided overrides `percent`
 
     Returns:
     --------
@@ -502,6 +560,9 @@ def roll_X(X, roll_axis='lon', roll_steps=64):
             'lat' : southward
             'lon' : eastward
             'field' : forward in the numbering of the fields
+    Returns:
+    --------
+        X_rolled: np.ndarray of the same shape of `X`
     '''
     if roll_steps == 0:
         return X
@@ -524,17 +585,19 @@ def roll_X(X, roll_axis='lon', roll_steps=64):
 def invert_permutation(permutation):
     '''
     Inverts a permutation.
-    e.g.:
-        a = np.array([3,4,2,5])
-        p = np.random.permutation(np.arange(4))
-        a_permuted = a[p]
-        p_inverse = invert_permutation(p)
-
-        `a` and `a_permuted[p_inverse]` will be equal
 
     Parameters:
     -----------
         permutation: 1D array that must be a permutation of an array of the kind `np.arange(n)` with `n` integer
+
+    Examples:
+    ---------
+    >>> a = np.array([3,4,2,5])
+    >>> p = np.random.permutation(np.arange(4))
+    >>> a_permuted = a[p]
+    >>> p_inverse = invert_permutation(p)
+    >>> all(a == a_permuted[p_inverse])
+    True
     '''
     return np.argsort(permutation)
 
@@ -555,6 +618,18 @@ def compose_permutations(permutations):
     Parameters:
     -----------
         permutations: list of 1D arrays that must be a permutation of an array of the kind `np.arange(n)` with `n` integer and the same for every permutation
+    
+    Examples:
+    ---------
+    >>> a = np.array([3,4,2,5])
+    >>> p1 = np.random.permutation(np.arange(4))
+    >>> p2 = np.random.permutation(np.arange(4))
+    >>> p_composed = compose_permutations([p1,p2])
+    >>> a_permuted1 = a[p1]
+    >>> a_permuted2 = a_permuted1[p2]
+    >>> a_permuted_c = a[p_composed]
+    >>> all(a_permuted_c == a_permuted2)
+    True
     '''
     l = len(permutations[0])
     for p in permutations[1:]:
@@ -577,6 +652,13 @@ def shuffle_years(X, permutation=None, seed=0, apply=False):
         permutation: None or 1D array that must be a permutation of an array of `np.arange(X.shape[0])`
         seed: int, if `permutation` is None, then it is computed using the provided seed.
         apply: bool, if True the function returns the permuted data, otherwise the permutation is returned
+    
+    Returns:
+    --------
+        if apply:
+            np.ndarray of the same shape of X
+        else:
+            np.ndarray of shape (X.shape[0],)
     '''
     if permutation is None:
         if seed is not None:
@@ -660,6 +742,25 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
                  dense_units=[64,2], dense_activations=['relu', None], dense_dropouts=[0.2,False]):
     '''
     Creates a model consisting of a series of convolutional layers followed by fully connected ones
+
+    Parameters:
+    -----------
+        input_shape: tuple
+        conv_channels: list of int, number of channels corresponding to the convolutional layers
+        kernel_sizes: int, 2-tuple or list of ints or 2-tuples. If list must be of the same size of `conv_channels`
+        strides: same as kernel_sizes
+        batch_normalizations: bool or list of bools, whether to add a BatchNormalization layer after each Conv2D layer
+        conv_activations: str or list of str
+        conv_dropouts: float in [0,1] or list of floats in [0,1], dropout to be applied after the BatchNormalization layer. If 0 no dropout is applied
+        max_pool_sizes: int or list of int size of max pooling layer to be applied after dropout. If 0 no max pool is applied
+
+        dense_units: list of int, number of neurons for each fully connected layer
+        dense_activations: str or list of str
+        dense_dropouts: float in [0,1] or list of floats in [0,1]
+
+    Returns:
+    --------
+        model: keras.models.Model
     '''
     model = models.Sequential()
 
@@ -796,7 +897,10 @@ def k_fold_cross_val_split(i, X, Y, nfolds=10, val_folds=1):
 
     Returns:
     --------
-        X_tr, Y_tr, X_va, Y_va
+        X_tr: training data
+        Y_tr: training labels
+        X_va: validation data
+        Y_va: validation labels
     '''
     if i < 0 or i >= nfolds:
         raise ValueError(f'fold number i is out of the range [0, {nfolds - 1}]')
@@ -879,9 +983,9 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, load_from='last', nfolds
             pipeline = Pipeline(steps=[('u', RandomUnderSampler(random_state=42, sampling_strategy=undersampling_strategy))])
             # reshape data to feed it to the pipeline
             X_tr_shape = X_tr.shape
-            X_tr = X_tr.reshape(X_tr_shape[0], np.product(X_tr_shape[1:]))
+            X_tr = X_tr.reshape((X_tr_shape[0], np.product(X_tr_shape[1:])))
             X_tr, Y_tr = pipeline.fit_resample(X_tr, Y_tr)
-            X_tr = X_tr.reshape(X_tr.shape[0], *X_tr_shape[1:])
+            X_tr = X_tr.reshape((X_tr.shape[0], *X_tr_shape[1:]))
             n_pos_tr = np.sum(Y_tr)
             n_neg_tr = len(Y_tr) - n_pos_tr
             print(f'number of training data: {len(Y_tr)} of which {n_neg_tr} negative and {n_pos_tr} positive')
@@ -944,6 +1048,23 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, load_from='last', nfolds
 ########## PUTTING THE PIECES TOGETHER ###########
 
 def prepare_data(load_data_kwargs, make_XY_kwargs, roll_X_kwargs, premix_seed=0, nfolds=10):
+    '''
+    Combines all the steps from loading the data to the creation of X and Y
+
+    Parameters:
+    -----------
+        load_data_kwargs: dict, arguments to pass to the function `load_data`
+        make_XY_kwargs: dict, arguments to pass to the function `make_XY`
+        roll_X_kwargs: dict, arguments to pass to the function `roll_X`
+        premix_seed: int, seed for premixing. If None premixing is skipped
+        nfolds: int, necessary for balancing folds
+
+    Returns:
+    --------
+        X: np.ndarray with shape (years, days, lat, lon, fields), data
+        Y: np.ndarray with shape (years, days, 2), labels
+        tot_permutation: np.ndarray with shape (years,), final permutaion of the years that reproduces X and Y once applied to the just loaded data
+    '''
     # load data
     found = False
     for field_name in load_data_kwargs['fields']:
@@ -961,19 +1082,31 @@ def prepare_data(load_data_kwargs, make_XY_kwargs, roll_X_kwargs, premix_seed=0,
     X = roll_X(X, **roll_X_kwargs)
 
     # mixing
-    premix_permutation = shuffle_years(X, seed=premix_seed, apply=False)
-    Y = Y[premix_permutation]
+    if premix_seed is not None:
+        premix_permutation = shuffle_years(X, seed=premix_seed, apply=False)
+        Y = Y[premix_permutation]
     # balance folds:
     weights = np.sum(Y, axis=1) # get the number of heatwave events per year
     balance_permutation = balance_folds(weights,nfolds=nfolds)
     Y = Y[balance_permutation]
-    tot_permutation = compose_permutations([premix_permutation, balance_permutation])
+    tot_permutation = balance_permutation
+    if premix_seed is not None:
+        tot_permutation = compose_permutations([premix_permutation, tot_permutation])
     X = X[tot_permutation]
 
     return X, Y, tot_permutation
 
 
 def run(folder, prepare_data_kwargs, k_fold_cross_val_kwargs):
+    '''
+    Perfroms a full run
+
+    Parameters:
+    -----------
+        folder: folder where to perform the run
+        prepare_data_kwargs: dict, arguments to pass to the `prepare_data` function
+        k_fold_cross_val_kwargs: dict, arguments to pass to the `k_fold_cross_val` function
+    '''
     folder = folder.rstrip('/')
     # setup logger
     old_stdout = sys.stdout
@@ -981,6 +1114,12 @@ def run(folder, prepare_data_kwargs, k_fold_cross_val_kwargs):
     # prepare the data
     X,Y, permutation = prepare_data(**prepare_data_kwargs)
     np.save(f'{folder}/year_permutation.npy',permutation)
+
+    print(f'{X.shape = }, {Y.shape = }')
+    # flatten the time axis
+    X = X.reshape((X.shape[0]*X.shape[1],*X.shape[2:]))
+    Y = Y.reshape((Y.shape[0]*Y.shape[1],Y.shape[2]))
+    print(f'Flattened time: {X.shape = }, {Y.shape = }')
 
     # run kfold
     k_fold_cross_val(folder, X, Y, **k_fold_cross_val_kwargs)
@@ -1004,7 +1143,7 @@ if __name__ == '__main__':
             move_to_folder(folder)
 
             d = build_config_dict([run])
-            write_to_json(d,f'{folder}/config.json')
+            dict2json(d,f'{folder}/config.json')
 
             exit(0)
         else:
@@ -1014,7 +1153,7 @@ if __name__ == '__main__':
     # if there is a lock, the previous block of code would have ended the run, so the code below is executed only if there is no lock
     
     # load config file
-    config_dict = read_json('config.json')
+    config_dict = json2dict('config.json')
     config_dict_flat = collapse_dict(config_dict)
     print(config_dict)
 
