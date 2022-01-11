@@ -465,7 +465,7 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
                                 Model=Model, lat_start=lat_start, lat_end=lat_end, lon_start=lon_start, lon_end=lon_end,
                                 myprecision='single', mysampling=sampling, years=dataset_years)
         # load the data
-        field.load_data(mylocal+file_suffix, year_list=year_list)
+        field.load_field(mylocal+file_suffix, year_list=year_list)
         # Set area integral
         field.abs_area_int, field.ano_area_int = field.Set_area_integral(area,mask,'Postproc')
         # filter
@@ -951,7 +951,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, load_from='last', nfolds
     '''
     folder = folder.rstrip('/')
 
-    load_from = get_run(load_from, current_run_name=folder.rstrip('/').rsplit('/',1)[1])
+    load_from = get_run(load_from, current_run_name=folder.rsplit('/',1)[-1])
 
     my_memory = []
 
@@ -1062,7 +1062,7 @@ def prepare_data(load_data_kwargs, make_XY_kwargs, roll_X_kwargs, premix_seed=0,
     Returns:
     --------
         X: np.ndarray with shape (years, days, lat, lon, fields), data
-        Y: np.ndarray with shape (years, days, 2), labels
+        Y: np.ndarray with shape (years, days), labels
         tot_permutation: np.ndarray with shape (years,), final permutaion of the years that reproduces X and Y once applied to the just loaded data
     '''
     # load data
@@ -1108,9 +1108,11 @@ def run(folder, prepare_data_kwargs, k_fold_cross_val_kwargs):
         k_fold_cross_val_kwargs: dict, arguments to pass to the `k_fold_cross_val` function
     '''
     folder = folder.rstrip('/')
+    if not os.path.exists(folder):
+        os.mkdir(folder)
     # setup logger
     old_stdout = sys.stdout
-    sys.stdout = ef.Logger(f'{folder}/log.log')
+    sys.stdout = ef.Logger(f'{folder}/')
     # prepare the data
     X,Y, permutation = prepare_data(**prepare_data_kwargs)
     np.save(f'{folder}/year_permutation.npy',permutation)
@@ -1118,7 +1120,7 @@ def run(folder, prepare_data_kwargs, k_fold_cross_val_kwargs):
     print(f'{X.shape = }, {Y.shape = }')
     # flatten the time axis
     X = X.reshape((X.shape[0]*X.shape[1],*X.shape[2:]))
-    Y = Y.reshape((Y.shape[0]*Y.shape[1],Y.shape[2]))
+    Y = Y.reshape((Y.shape[0]*Y.shape[1]))
     print(f'Flattened time: {X.shape = }, {Y.shape = }')
 
     # run kfold
@@ -1141,9 +1143,13 @@ if __name__ == '__main__':
             folder = sys.argv[1]
             print(f'moving code to {folder = }')
             move_to_folder(folder)
-
+            
+            # config file
             d = build_config_dict([run])
             dict2json(d,f'{folder}/config.json')
+
+            # runs file
+            open(f'{folder}/runs.txt', 'a').close()
 
             exit(0)
         else:
@@ -1155,7 +1161,7 @@ if __name__ == '__main__':
     # load config file
     config_dict = json2dict('config.json')
     config_dict_flat = collapse_dict(config_dict)
-    print(config_dict)
+    print(f'{config_dict = }')
 
     # parse command line arguments
     cl_args = sys.argv[1:]
@@ -1196,11 +1202,11 @@ if __name__ == '__main__':
     for k in sorted(arg_dict):
         folder += f'{k}_{arg_dict[k]}__'
     folder = folder[:-2] # remove the last '__'
-    print(folder)
+    print(f'{folder = }')
 
     # set the arguments provided into the nested dictionaries
-    run_kwargs = set_values_recursive(config_dict, arg_dict)
-    print(run_kwargs)
+    run_kwargs = set_values_recursive(config_dict['run'], arg_dict)
+    print(f'{run_kwargs = }')
 
     run(folder, **run_kwargs)
 
