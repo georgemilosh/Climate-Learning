@@ -1198,13 +1198,15 @@ if __name__ == '__main__':
     folder = folder[:-2] # remove the last '__'
     print(folder)
 
-    # add folder name to the list of runs
-    with open('runs.txt', 'a') as r:
-        r.write(f'{folder}\n')
-    os.mkdir(folder)
-
     # set the arguments provided into the nested dictionaries
     run_kwargs = set_values_recursive(config_dict, arg_dict)
     print(run_kwargs)
 
     run(folder, **run_kwargs)
+
+    print('\n\nrun completed!!!\n\n')
+
+    # add folder name to the list of runs after the run has completed
+    with open('runs.txt', 'a') as r:
+        r.write(f'{folder}\n')
+    os.mkdir(folder)
