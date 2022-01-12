@@ -817,11 +817,12 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
     # convolutional layers
     # adjust the shape of the arguments to be of the same length as conv_channels
     args = [kernel_sizes, strides, batch_normalizations, conv_activations, conv_dropouts, max_pool_sizes]
-    for j,arg in enumerate(range(len(args))):
+    for j,arg in enumerate(args):
         if not isinstance(arg, list):
             args[j] = [arg]*len(conv_channels)
         elif len(arg) != len(conv_channels):
             raise ValueError(f'Invalid length for argument {arg}')
+    print(f'convolutional args = {args}')
     kernel_sizes, strides, batch_normalizations, conv_activations, conv_dropouts, max_pool_sizes = args
     # build the convolutional layers
     for i in range(len(conv_channels)):
@@ -845,11 +846,12 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
     # dense layers
     # adjust the shape of the arguments to be of the same length as conv_channels
     args = [dense_activations, dense_dropouts]
-    for j,arg in enumerate(range(len(args))):
+    for j,arg in enumerate(args):
         if not isinstance(arg, list):
             args[j] = [arg]*len(dense_units)
         elif len(arg) != len(dense_units):
             raise ValueError(f'Invalid length for argument {arg}')
+    print(f'dense args = {args}')
     dense_activations, dense_dropouts = args
     # build the dense layers
     for i in range(len(dense_units)):

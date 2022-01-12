@@ -1375,7 +1375,7 @@ class Plasim_Field:
             self.LON, self.LAT = np.meshgrid(self.lon, self.lat)
             print(f"output {self.var.shape = }")
             print(f"{self.time.shape = }")
-            print(np.min(np.diff(self.time))," < np.diff(self.time) < ",np.max(np.diff(self.time)))
+            print(f'{np.min(np.diff(self.time))} < np.diff(self.time) < {np.max(np.diff(self.time))}')
             dataset.close()
             print(f'total time: {pretty_time(time.time() - start_time)}\n')
             
