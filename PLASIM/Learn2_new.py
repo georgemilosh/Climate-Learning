@@ -43,6 +43,7 @@ from numpy.random.mtrand import permutation
 import psutil
 import numpy as np
 import inspect
+from functools import wraps
 import json
 
 this_module = sys.modules[__name__]
@@ -74,25 +75,28 @@ from tensorflow.python.types.core import Value
 def usage():
     return this_module.__doc__
 
-########## auto logging execution time ###################
-def execution_time(func, indent=0):
-    def wrapper(*args, **kwargs):
-        msg_len = 32
-        start_time = time.time()
-        msg = f'Running {func.__name__}'
-        if len(msg) < msg_len:
-            msg += '-'*(msg_len - len(msg))
-        msg += ' ' + '<'*indent
-        msg += '\n'*indent
-        print(msg)
-        r = func(*args, **kwargs)
-        msg = f'{func.__name__}: completed in {ef.pretty_time(time.time() - start_time)}'
-        if len(msg) < msg_len:
-            msg += '-'*(msg_len - len(msg))
-        msg += ' ' + '>'*indent
-        print('\n'*indent + msg)
-        return r
-    return wrapper
+###### auto logging execution time  decorator ###
+def execution_time(indent=0):
+    def wrapper_outer(func):
+        @wraps(func)
+        def wrapper_inner(*args, **kwargs):
+            msg_len = 32
+            start_time = time.time()
+            msg = f'Running {func.__name__}'
+            if len(msg) < msg_len:
+                msg += '-'*(msg_len - len(msg))
+            msg += ' ' + '<'*indent
+            msg += '\n'*indent
+            print(msg)
+            r = func(*args, **kwargs)
+            msg = f'{func.__name__}: completed in {ef.pretty_time(time.time() - start_time)}'
+            if len(msg) < msg_len:
+                msg += '-'*(msg_len - len(msg))
+            msg += ' ' + '>'*indent
+            print('\n'*indent + msg)
+            return r
+        return wrapper_inner
+    return wrapper_outer
 
 
 ########## ARGUMENT PARSING ####################
