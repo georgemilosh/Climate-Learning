@@ -816,7 +816,7 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
 
     # convolutional layers
     # adjust the shape of the arguments to be of the same length as conv_channels
-    args = kernel_sizes, strides, batch_normalizations, conv_activations, conv_dropouts, max_pool_sizes
+    args = [kernel_sizes, strides, batch_normalizations, conv_activations, conv_dropouts, max_pool_sizes]
     for j,arg in enumerate(range(len(args))):
         if not isinstance(arg, list):
             args[j] = [arg]*len(conv_channels)
@@ -844,7 +844,7 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
 
     # dense layers
     # adjust the shape of the arguments to be of the same length as conv_channels
-    args = dense_activations, dense_dropouts
+    args = [dense_activations, dense_dropouts]
     for j,arg in enumerate(range(len(args))):
         if not isinstance(arg, list):
             args[j] = [arg]*len(dense_units)
