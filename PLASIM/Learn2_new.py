@@ -53,7 +53,7 @@ if not os.path.exists(path_to_ERA):
     path_to_ERA = path_to_here.parent / 'ERA'
     if not os.path.exists(path_to_ERA):
         raise FileNotFoundError('Could not find ERA folder')
-print(path_to_ERA)
+print(f'{path_to_ERA = }')
 sys.path.insert(1, str(path_to_ERA))
 # sys.path.insert(1, '../ERA/')
 import ERA_Fields as ef # general routines
@@ -505,7 +505,7 @@ def load_data(dataset_years=1000, year_list=None, sampling='', Model='Plasim', a
         # load the data
         field.load_field(mylocal+file_suffix, year_list=year_list)
         # Set area integral
-        field.abs_area_int, field.ano_area_int = field.Set_area_integral(area,mask,containig_folder=None) # don't save area integrals in order to avoid conflicts between different runs
+        field.abs_area_int, field.ano_area_int = field.Set_area_integral(area,mask,containing_folder=None) # don't save area integrals in order to avoid conflicts between different runs
         # filter
         if do_filter: # set to zero all values outside `filter_area`
             filter_mask = ef.create_mask(Model, filter_area, field.var, axes='last 2', return_full_mask=True)
@@ -1170,6 +1170,8 @@ def run(folder, prepare_data_kwargs, k_fold_cross_val_kwargs):
     folder = folder.rstrip('/')
     if not os.path.exists(folder):
         os.mkdir(folder)
+    else:
+        raise FileExistsError(f'{folder} already exists')
     # setup logger
     old_stdout = sys.stdout
     sys.stdout = ef.Logger(f'{folder}/')
