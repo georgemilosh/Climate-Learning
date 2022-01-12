@@ -859,7 +859,7 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
         if dense_dropouts[i]:
             model.add(layers.Dropout(dense_dropouts[i]))
     
-    print(model.summary())
+    model.summary()
 
     return model
 
@@ -1027,6 +1027,9 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, load_from='last', nfolds
 
     # k fold cross validation
     for i in range(nfolds):
+        print('=============')
+        print(f'fold {i} ({i+1}/{nfolds})')
+        print('=============')
         # split data
         X_tr, Y_tr, X_va, Y_va = k_fold_cross_val_split(i, X, Y, nfolds=nfolds, val_folds=val_folds)
 
@@ -1037,6 +1040,12 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, load_from='last', nfolds
         # perform undersampling
         if u > 1:
             undersampling_strategy = n_pos_tr/(n_neg_tr/u)
+            if undersampling_strategy > 1:
+                # print(f'Too high undersmapling factor, maximum for this dataset is u={n_neg_tr/n_pos_tr}')
+                # print(f'using the maximum undersampling instead')
+                # undersampling_strategy = 1
+                # u = n_neg_tr/n_pos_tr
+                raise ValueError(f'Too high undersmapling factor, maximum for this dataset is u={n_neg_tr/n_pos_tr}')
             pipeline = Pipeline(steps=[('u', RandomUnderSampler(random_state=42, sampling_strategy=undersampling_strategy))])
             # reshape data to feed it to the pipeline
             X_tr_shape = X_tr.shape
