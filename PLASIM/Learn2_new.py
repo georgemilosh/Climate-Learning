@@ -44,6 +44,7 @@ import psutil
 import numpy as np
 import inspect
 import json
+from ERA.ERA_Fields import pretty_time
 
 this_module = sys.modules[__name__]
 path_to_here = Path(__file__).resolve().parent
@@ -73,6 +74,16 @@ from tensorflow.python.types.core import Value
 ########## USAGE ###############################
 def usage():
     return this_module.__doc__
+
+########## auto logging execution time ###################
+def execution_time(func, indent=0):
+    def wrapper(*args, **kwargs):
+        start_time = time.time()
+        print(f"Running {func.__name__} {'----'*indent}{'\n'*indent}")
+        r = func(*args, **kwargs)
+        print(f"{'\n'*indent}{func.__name__}: completed in {ef.pretty_time(time.time() - start_time)}")
+        return r
+    return wrapper
 
 
 ########## ARGUMENT PARSING ####################
@@ -408,7 +419,7 @@ for h in [200,300,500,850]: # geopotential heights
     }
 
 
-def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', area='France', filter_area='France',
+def load_data(dataset_years=1000, year_list=None, sampling='', Model='Plasim', area='France', filter_area='France',
               lon_start=0, lon_end=128, lat_start=0, lat_end=22, mylocal='/local/gmiloshe/PLASIM/',fields=['t2m','zg500','mrso_filtered']):
     '''
     Loads the data.
@@ -467,7 +478,7 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
         # load the data
         field.load_field(mylocal+file_suffix, year_list=year_list)
         # Set area integral
-        field.abs_area_int, field.ano_area_int = field.Set_area_integral(area,mask,'Postproc')
+        field.abs_area_int, field.ano_area_int = field.Set_area_integral(area,mask,containig_folder=None) # don't save area integrals in order to avoid conflicts between different runs
         # filter
         if do_filter: # set to zero all values outside `filter_area`
             filter_mask = ef.create_mask(Model, filter_area, field.var, axes='last 2', return_full_mask=True)
@@ -696,7 +707,8 @@ def balance_folds(weights, nfolds=10, verbose=False):
             self.indexs.append(a[1])
             self.sum += a[0]
             if self.length == len(self.indexs):
-                print(f'fold {self.name} done!')
+                if verbose:
+                    print(f'fold {self.name} done!')
                 return True
             self.hunger = (self.target_sum - self.sum)/(self.length - len(self.indexs))
             return False
@@ -716,6 +728,8 @@ def balance_folds(weights, nfolds=10, verbose=False):
     ws = ws[::-1]
     
     sums = []
+    if verbose:
+        print('Balancing folds')
     # run over the weights and distribute data to the folds
     for a in ws:
         # determine the hungriest fold, i.e. the one that has its sum the furthest from its target
@@ -1074,25 +1088,28 @@ def prepare_data(load_data_kwargs, make_XY_kwargs, roll_X_kwargs, premix_seed=0,
     if not found:
         raise KeyError(f"field {make_XY_kwargs['label_field']} is not a loaded field")
 
-    fields = load_data(**load_data_kwargs)
+    fields = execution_time(load_data(**load_data_kwargs), indent=1)
 
-    X,Y = make_XY(fields, **make_XY_kwargs)
+    X,Y = execution_time(make_XY(fields, **make_XY_kwargs), indent=1)
     
     # move greenwich_meridian
-    X = roll_X(X, **roll_X_kwargs)
+    X = execution_time(roll_X(X, **roll_X_kwargs), indent=1)
 
     # mixing
+    print('\nMixing')
+    start_time = time.time()
     if premix_seed is not None:
         premix_permutation = shuffle_years(X, seed=premix_seed, apply=False)
         Y = Y[premix_permutation]
     # balance folds:
     weights = np.sum(Y, axis=1) # get the number of heatwave events per year
-    balance_permutation = balance_folds(weights,nfolds=nfolds)
+    balance_permutation = execution_time(balance_folds(weights,nfolds=nfolds, verbose=True))
     Y = Y[balance_permutation]
     tot_permutation = balance_permutation
     if premix_seed is not None:
         tot_permutation = compose_permutations([premix_permutation, tot_permutation])
     X = X[tot_permutation]
+    print(f'Mixing completed in {ef.pretty_time(time.time() - start_time)}\n')
 
     return X, Y, tot_permutation
 
@@ -1107,6 +1124,7 @@ def run(folder, prepare_data_kwargs, k_fold_cross_val_kwargs):
         prepare_data_kwargs: dict, arguments to pass to the `prepare_data` function
         k_fold_cross_val_kwargs: dict, arguments to pass to the `k_fold_cross_val` function
     '''
+    start_time = time.time()
     folder = folder.rstrip('/')
     if not os.path.exists(folder):
         os.mkdir(folder)
@@ -1114,7 +1132,7 @@ def run(folder, prepare_data_kwargs, k_fold_cross_val_kwargs):
     old_stdout = sys.stdout
     sys.stdout = ef.Logger(f'{folder}/')
     # prepare the data
-    X,Y, permutation = prepare_data(**prepare_data_kwargs)
+    X,Y, permutation = execution_time(prepare_data(**prepare_data_kwargs), indent=2)
     np.save(f'{folder}/year_permutation.npy',permutation)
 
     print(f'{X.shape = }, {Y.shape = }')
@@ -1124,7 +1142,9 @@ def run(folder, prepare_data_kwargs, k_fold_cross_val_kwargs):
     print(f'Flattened time: {X.shape = }, {Y.shape = }')
 
     # run kfold
-    k_fold_cross_val(folder, X, Y, **k_fold_cross_val_kwargs)
+    execution_time(k_fold_cross_val(folder, X, Y, **k_fold_cross_val_kwargs), indent=2)
+
+    print(f'\ntotal run time: {ef.pretty_time(time.time() - start_time)}')
 
     # restore old stdout
     sys.stdout = old_stdout
