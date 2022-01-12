@@ -44,7 +44,6 @@ import psutil
 import numpy as np
 import inspect
 import json
-from ERA.ERA_Fields import pretty_time
 
 this_module = sys.modules[__name__]
 path_to_here = Path(__file__).resolve().parent
@@ -78,10 +77,20 @@ def usage():
 ########## auto logging execution time ###################
 def execution_time(func, indent=0):
     def wrapper(*args, **kwargs):
+        msg_len = 32
         start_time = time.time()
-        print(f"Running {func.__name__} {'----'*indent}{'\n'*indent}")
+        msg = f'Running {func.__name__}'
+        if len(msg) < msg_len:
+            msg += '-'*(msg_len - len(msg))
+        msg += ' ' + '<'*indent
+        msg += '\n'*indent
+        print(msg)
         r = func(*args, **kwargs)
-        print(f"{'\n'*indent}{func.__name__}: completed in {ef.pretty_time(time.time() - start_time)}")
+        msg = f'{func.__name__}: completed in {ef.pretty_time(time.time() - start_time)}'
+        if len(msg) < msg_len:
+            msg += '-'*(msg_len - len(msg))
+        msg += ' ' + '>'*indent
+        print('\n'*indent + msg)
         return r
     return wrapper
 
