@@ -76,27 +76,40 @@ def usage():
     return this_module.__doc__
 
 ###### auto logging execution time  decorator ###
-def execution_time(indent=0):
-    def wrapper_outer(func):
-        @wraps(func)
-        def wrapper_inner(*args, **kwargs):
-            msg_len = 32
-            start_time = time.time()
-            msg = f'Running {func.__name__}'
-            if len(msg) < msg_len:
-                msg += '-'*(msg_len - len(msg))
-            msg += ' ' + '<'*indent
-            msg += '\n'*indent
-            print(msg)
+class indenter():
+    def __init__(self):
+        self.terminal = sys.stdout
+    def write(self, message):
+        if message == '\n'*len(message):
+            self.terminal.write(message)
+        else:
+            self.terminal.write('\t'+'\n\t'.join(message.split('\n')))
+    def flush(self):
+        pass
+
+def indent_stdout(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        old_std_out = sys.stdout
+        sys.stdout = indenter()
+        try:
             r = func(*args, **kwargs)
-            msg = f'{func.__name__}: completed in {ef.pretty_time(time.time() - start_time)}'
-            if len(msg) < msg_len:
-                msg += '-'*(msg_len - len(msg))
-            msg += ' ' + '>'*indent
-            print('\n'*indent + msg)
-            return r
-        return wrapper_inner
-    return wrapper_outer
+        except Exception as e:
+            sys.stdout = old_std_out
+            raise e
+        sys.stdout = old_std_out
+        return r
+    return wrapper
+
+def execution_time(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        start_time = time.time()
+        print(f'{func.__name__}:')
+        r = func(*args, **kwargs)
+        print(f'{func.__name__}: completed in {ef.pretty_time(time.time() - start_time)}')
+        return r
+    return wrapper
 
 
 ########## ARGUMENT PARSING ####################
@@ -431,7 +444,8 @@ for h in [200,300,500,850]: # geopotential heights
         'label': f'{h} mbar Geopotential',
     }
 
-
+@execution_time
+@indent_stdout
 def load_data(dataset_years=1000, year_list=None, sampling='', Model='Plasim', area='France', filter_area='France',
               lon_start=0, lon_end=128, lat_start=0, lat_end=22, mylocal='/local/gmiloshe/PLASIM/',fields=['t2m','zg500','mrso_filtered']):
     '''
@@ -501,7 +515,8 @@ def load_data(dataset_years=1000, year_list=None, sampling='', Model='Plasim', a
     
     return _fields
 
-
+@execution_time
+@indent_stdout
 def assign_labels(field, time_start=30, time_end=120, T=14, percent=5, threshold=None):
     '''
     Given a field of anomalies it computes the `T` days forward convolution of the integrated anomaly and assigns label 1 to anomalies above a given `threshold`.
@@ -523,6 +538,8 @@ def assign_labels(field, time_start=30, time_end=120, T=14, percent=5, threshold
     A, A_flattened, threshold =  field.ComputeTimeAverage(time_start, time_end, T=T, percent=percent, threshold=threshold)[:3]
     return np.array(A >= threshold, dtype=int)
 
+@execution_time
+@indent_stdout
 def make_X(fields, time_start=30, time_end=120, T=14, tau=0):
     '''
     Cuts the fields in time and stacks them. The original fields are not modified
@@ -545,6 +562,8 @@ def make_X(fields, time_start=30, time_end=120, T=14, tau=0):
     X = X.transpose(*range(1,len(X.shape)), 0)
     return X
 
+@execution_time
+@indent_stdout
 def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0, percent=5, threshold=None):
     '''
     Combines 'make_X' and 'assign_labels'
@@ -569,6 +588,8 @@ def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0,
     Y = assign_labels(fields[label_field], time_start=time_start, time_end=time_end, T=T, percent=percent, threshold=threshold)
     return X,Y
 
+@execution_time
+@indent_stdout
 def roll_X(X, roll_axis='lon', roll_steps=64):
     '''
     Rolls `X` along a given axis. useful for example for moving France away from the Greenwich meridian
@@ -694,6 +715,8 @@ def shuffle_years(X, permutation=None, seed=0, apply=False):
         return X[permutation,...]
     return permutation
 
+@execution_time
+@indent_stdout
 def balance_folds(weights, nfolds=10, verbose=False):
     '''
     Returns a permutation that, once applied to `weights` would make the consecutive `nfolds` pieces of equal length have their sum the most similar to each other.
@@ -840,7 +863,8 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
 
 
 ###### TRAINING THE NETWORK ############
-
+@execution_time
+@indent_stdout
 def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics,
                 batch_size=1024, checkpoint_every=1, additional_callbacks=None):
     '''
@@ -910,6 +934,8 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     model.save(folder)
     np.save(f'{folder}_history.npy', my_history.history)
 
+@execution_time
+@indent_stdout
 def k_fold_cross_val_split(i, X, Y, nfolds=10, val_folds=1):
     '''
     Splits X and Y in a training and validation set according to k fold cross validation algorithm
@@ -948,6 +974,8 @@ def k_fold_cross_val_split(i, X, Y, nfolds=10, val_folds=1):
         Y_tr = Y[upper:lower]
     return X_tr, Y_tr, X_va, Y_va
 
+@execution_time
+@indent_stdout
 def k_fold_cross_val(folder, X, Y, create_model_kwargs, load_from='last', nfolds=10, val_folds=1, u=1,
                      fullmetrics=True, training_epochs=40, training_epochs_tl=10, lr=1e-4, batch_size=1024, **kwargs):
     '''
@@ -1073,7 +1101,8 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, load_from='last', nfolds
 
 
 ########## PUTTING THE PIECES TOGETHER ###########
-
+@execution_time
+@indent_stdout
 def prepare_data(load_data_kwargs, make_XY_kwargs, roll_X_kwargs, premix_seed=0, nfolds=10):
     '''
     Combines all the steps from loading the data to the creation of X and Y
@@ -1101,12 +1130,12 @@ def prepare_data(load_data_kwargs, make_XY_kwargs, roll_X_kwargs, premix_seed=0,
     if not found:
         raise KeyError(f"field {make_XY_kwargs['label_field']} is not a loaded field")
 
-    fields = execution_time(load_data(**load_data_kwargs), indent=1)
+    fields = load_data(**load_data_kwargs)
 
-    X,Y = execution_time(make_XY(fields, **make_XY_kwargs), indent=1)
+    X,Y = make_XY(fields, **make_XY_kwargs)
     
     # move greenwich_meridian
-    X = execution_time(roll_X(X, **roll_X_kwargs), indent=1)
+    X = roll_X(X, **roll_X_kwargs)
 
     # mixing
     print('\nMixing')
@@ -1116,7 +1145,7 @@ def prepare_data(load_data_kwargs, make_XY_kwargs, roll_X_kwargs, premix_seed=0,
         Y = Y[premix_permutation]
     # balance folds:
     weights = np.sum(Y, axis=1) # get the number of heatwave events per year
-    balance_permutation = execution_time(balance_folds(weights,nfolds=nfolds, verbose=True))
+    balance_permutation = balance_folds(weights,nfolds=nfolds, verbose=True)
     Y = Y[balance_permutation]
     tot_permutation = balance_permutation
     if premix_seed is not None:
@@ -1145,7 +1174,7 @@ def run(folder, prepare_data_kwargs, k_fold_cross_val_kwargs):
     old_stdout = sys.stdout
     sys.stdout = ef.Logger(f'{folder}/')
     # prepare the data
-    X,Y, permutation = execution_time(prepare_data(**prepare_data_kwargs), indent=2)
+    X,Y, permutation = prepare_data(**prepare_data_kwargs)
     np.save(f'{folder}/year_permutation.npy',permutation)
 
     print(f'{X.shape = }, {Y.shape = }')
@@ -1155,7 +1184,7 @@ def run(folder, prepare_data_kwargs, k_fold_cross_val_kwargs):
     print(f'Flattened time: {X.shape = }, {Y.shape = }')
 
     # run kfold
-    execution_time(k_fold_cross_val(folder, X, Y, **k_fold_cross_val_kwargs), indent=2)
+    k_fold_cross_val(folder, X, Y, **k_fold_cross_val_kwargs)
 
     print(f'\ntotal run time: {ef.pretty_time(time.time() - start_time)}')
 
