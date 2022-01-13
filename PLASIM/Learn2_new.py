@@ -43,6 +43,7 @@ import gc
 import psutil
 import numpy as np
 import inspect
+from functools import wraps
 
 ## user defined modules
 this_module = sys.modules[__name__]
@@ -894,7 +895,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, load_from='last', nfolds
                     folder=fold_folder, num_epochs=num_epochs, optimizer=optimizer, loss=loss, metrics=metrics, batch_size=batch_size, **kwargs)
 
         my_memory.append(psutil.virtual_memory())
-        print('RAM memory:', my_memory[i][3]) # Getting % usage of virtual_memory ( 3rd field)
+        print(f'RAM memory: {my_memory[i][3]:.3e}') # Getting % usage of virtual_memory ( 3rd field)
 
         keras.backend.clear_session()
         gc.collect() # Garbage collector which removes some extra references to the objects
@@ -960,7 +961,7 @@ def prepare_data(load_data_kwargs, make_XY_kwargs, roll_X_kwargs, premix_seed=0,
 
 def run(folder, prepare_data_kwargs, k_fold_cross_val_kwargs):
     '''
-    Perfroms a full run
+    Perfroms a single full run
 
     Parameters:
     -----------
@@ -1006,6 +1007,26 @@ def run(folder, prepare_data_kwargs, k_fold_cross_val_kwargs):
 
     # restore old stdout
     sys.stdout = old_stdout
+
+
+###### EFFICIENT MANAGEMENT OF MULTIPLE RUNS #######
+
+# NOTE: this is still pseudo-code
+class Trainer():
+    def __init__(self, **kwargs):
+        pass
+
+    def run(self):
+        for load_data_kwargs in _:
+            fields = load_data(**load_data_kwargs)
+
+            for build_XY_kwargs in _:
+                X, Y = build_XY(fields, **build_XY_kwargs)
+
+                for k_fold_cross_val_kwargs in _:
+                    k_fold_cross_val(folder, X, Y, **k_fold_cross_val)
+
+
     
 
 
@@ -1056,7 +1077,7 @@ if __name__ == '__main__':
         if key not in config_dict_flat:
             raise KeyError(f'Unknown argument {key}')
         # `value` is a string. Here we try to cast it to the correct type
-        value = None if value.lower() == 'none' else value # recognize None values
+        value = None if value == 'None' else value # recognize None values
         if config_dict_flat[key] is not None:
             try:
                 dtype = type(config_dict_flat[key])
