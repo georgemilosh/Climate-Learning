@@ -353,7 +353,7 @@ def get_run(load_from, current_run_name=None):
         print('No runs to load from')
         return None
     try:
-        l = int(load_from)
+        l = int(load_from) # run number
     except ValueError: # cannot convert load_from to int, so it must be a string that doesn't contain only numbers
         if load_from == 'last':
             l = -1
@@ -372,11 +372,11 @@ def get_run(load_from, current_run_name=None):
         # parse run_name for arguments
         run_dict = parse_run_name(run_name)
         current_run_dict = parse_run_name(current_run_name)
-        create_model_kwargs = get_default_params(create_model)
+        create_model_keys = list(get_default_params(create_model).keys()) + ['nfolds']
 
         # keep only arguments that are model kwargs
-        run_dict = {k:v for k,v in run_dict.items() if k in create_model_kwargs}
-        current_run_dict = {k:v for k,v in current_run_dict.items() if k in create_model_kwargs}
+        run_dict = {k:v for k,v in run_dict.items() if k in create_model_keys}
+        current_run_dict = {k:v for k,v in current_run_dict.items() if k in create_model_keys}
 
         # check if arguments match
         if run_dict != current_run_dict:
@@ -932,7 +932,7 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
                          callbacks=additional_callbacks, epochs=num_epochs, verbose=2, class_weight=None)
 
     model.save(folder)
-    np.save(f'{folder}_history.npy', my_history.history)
+    np.save(f'{folder}/history.npy', my_history.history)
 
 @execution_time
 @indent_stdout
@@ -1015,10 +1015,10 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, load_from='last', nfolds
     if load_from is not None:
         load_from = load_from.rstrip('/')
         # Here we insert analysis of the previous training with the assessment of the ideal checkpoint
-        history0 = np.load(f'{load_from}/fold_0_history.npy', allow_pickle=True).item()
+        history0 = np.load(f'{load_from}/fold_0/history.npy', allow_pickle=True).item()
         if 'val_CustomLoss' not in history0.keys():
             raise KeyError('val_CustomLoss not in history: cannot compute optimal checkpoint')
-        historyCustom = [np.load(f'{load_from}/fold_{i}_history.npy', allow_pickle=True).item()['val_CustomLoss'] for i in range(nfolds)]
+        historyCustom = [np.load(f'{load_from}/fold_{i}/history.npy', allow_pickle=True).item()['val_CustomLoss'] for i in range(nfolds)]
         historyCustom = np.mean(np.array(historyCustom),axis=0)
         opt_checkpoint = np.argmin(historyCustom) # We will use optimal checkpoint in this case!
         print(f'{opt_checkpoint = }')
@@ -1028,6 +1028,10 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, load_from='last', nfolds
         print('=============')
         print(f'fold {i} ({i+1}/{nfolds})')
         print('=============')
+        # create fold_folder
+        fold_folder = f'{folder}/fold_{i}'
+        os.mkdir(fold_folder)
+
         # split data
         X_tr, Y_tr, X_va, Y_va = k_fold_cross_val_split(i, X, Y, nfolds=nfolds, val_folds=val_folds)
 
@@ -1061,8 +1065,8 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, load_from='last', nfolds
         X_std[X_std==0] = 1 # If there is no variance we shouldn't divide by zero ### hmmm: this may create discontinuities
 
         # save X_mean and X_std
-        np.save(f'{folder}/fold_{i}_X_mean.npy', X_mean)
-        np.save(f'{folder}/fold_{i}_X_std.npy', X_std)
+        np.save(f'{fold_folder}/X_mean.npy', X_mean)
+        np.save(f'{fold_folder}/X_std.npy', X_std)
 
         X_tr = (X_tr - X_mean)/X_std
         X_va = (X_va - X_mean)/X_std
@@ -1093,7 +1097,6 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, load_from='last', nfolds
                 metrics=['accuracy',tff.MCCMetric(2),tff.ConfusionMatrixMetric(2),tff.CustomLoss(tf_sampling)]#keras.metrics.SparseCategoricalCrossentropy(from_logits=True)]#CustomLoss()]   # the last two make the code run longer but give precise discrete prediction benchmarks
             else:
                 metrics=['loss']
-        fold_folder = f'{folder}/fold_{i}'
         optimizer = kwargs.pop('optimizer',keras.optimizers.Adam(learning_rate=lr))
         loss = kwargs.pop('loss',keras.losses.SparseCategoricalCrossentropy(from_logits=True))
 
