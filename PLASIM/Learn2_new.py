@@ -45,6 +45,7 @@ import numpy as np
 import inspect
 from functools import wraps
 import json
+from datetime import datetime
 
 this_module = sys.modules[__name__]
 path_to_here = Path(__file__).resolve().parent
@@ -74,6 +75,10 @@ from tensorflow.python.types.core import Value
 ########## USAGE ###############################
 def usage():
     return this_module.__doc__
+
+######## now ##########
+def now():
+    return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
 ###### auto logging execution time  decorator ###
 class indenter():
@@ -340,33 +345,52 @@ def get_run(load_from, current_run_name=None):
     '''
     Parameters:
     -----------
-        load_from: int, str or 'last'. If int it is the number of the run. If 'last' it is the last completed run. Otherwise it can be a piece of the run name.
+        load_from: dict, int, str or 'last'. If dict it is a dictionary with arguments of the run. If int it is the number of the run. If 'last' it is the last completed run. Otherwise it can be a piece of the run name.
             If the choice is ambiguous an error will be raised.
         current_run_name: optional, used to check for compatibility issues when loading a model
     '''
     if load_from is None:
         return None
     # get run_folder name
-    with open('runs.txt', 'r') as runs_file:
-        runs = runs_file.readlines()
+    runs = json2dict('runs.json')
     if len(runs) == 0:
         print('No runs to load from')
         return None
-    try:
-        l = int(load_from) # run number
-    except ValueError: # cannot convert load_from to int, so it must be a string that doesn't contain only numbers
-        if load_from == 'last':
-            l = -1
-        else:
-            found = False
-            for i,r in enumerate(runs):
-                if load_from in r:
-                    if not found:
-                        found = True
-                        l = r
-                    else:
-                        raise KeyError(f'Multiple runs contain {load_from}, at least {l} and {i}')
-    run_name = runs[l].rstrip('\n')
+    if isinstance(load_from, dict):
+        found = False
+        for i,r in runs.items():
+            if load_from.items() <= r['args']: # check if the provided arguments are a subset of the run argument
+                if not found:
+                    found = True
+                    l = i
+                else: # ambiguity
+                    raise KeyError(f'Multiple runs contain {load_from}, at least {l} and {i}')
+        if not found:
+            raise KeyError(f'No previous run has {load_from}')
+    elif isinstance(load_from, int):
+        l = load_from
+    elif isinstance(load_from, str):
+        try:
+            l = int(load_from) # run number
+        except ValueError: # cannot convert load_from to int, so it must be a string that doesn't contain only numbers
+            if load_from == 'last':
+                l = -1
+            else:
+                load_from_dict = parse_run_name(load_from)
+                found = False
+                for i,r in runs.items():
+                    r_dict = parse_run_name(r['name']) # cannot use directly r['args'] because of types (we need argument values in string format)
+                    if load_from_dict.items() <= r_dict.items(): # check if the provided arguments are a subset of the run argument
+                        if not found:
+                            found = True
+                            l = i
+                        else: # ambiguity
+                            raise KeyError(f'Multiple runs contain {load_from_dict}, at least {l} and {i}')
+                if not found:
+                    raise KeyError(f'No previous run has {load_from_dict}')
+    else:
+        raise TypeError(f'Unsupported type {type(load_from)} for load_from')
+    run_name = runs[l]['name']
     
     if current_run_name is not None: # check for compatibility issues when loading
         # parse run_name for arguments
@@ -1237,7 +1261,7 @@ if __name__ == '__main__':
             dict2json(d,f'{folder}/config.json')
 
             # runs file
-            open(f'{folder}/runs.txt', 'a').close()
+            dict2json({},f'{folder}/runs.json')
 
             exit(0)
         else:
@@ -1280,27 +1304,35 @@ if __name__ == '__main__':
             arg_dict[key] = value
 
     # get run number
-    if not os.path.exists('runs.txt'):
-        run_id = 0
-    else:
-        with open('runs.txt', 'r') as r:
-            run_id = len(r.readlines())
+    runs = json2dict('runs.json')
+    run_id = len(runs)
 
     folder = f'{run_id}__'
     for k in sorted(arg_dict):
         folder += f'{k}_{arg_dict[k]}__'
     folder = folder[:-2] # remove the last '__'
     print(f'{folder = }')
+    runs[run_id] = {'name': folder, 'args': arg_dict}
 
     # set the arguments provided into the nested dictionaries
     run_kwargs = set_values_recursive(config_dict['run'], arg_dict)
     print(f'{run_kwargs = }')
 
-    run(folder, **run_kwargs)
+    runs[run_id]['status'] = 'RUNNING'
+    runs[run_id]['start_time'] = now()
+    dict2json(runs, 'runs.json')
+    try:
+        run(folder, **run_kwargs)
+    except Exception as e:
+        runs = dict2json('runs.json')
+        runs[run_id]['status'] = 'FAILED'
+        runs[run_id]['end_time'] = now()
+        dict2json(runs,'runs.json')
+        raise e
+
+    runs = dict2json('runs.json')
+    runs[run_id]['status'] = 'COMPLETED'
+    runs[run_id]['end_time'] = now()
+    dict2json(runs,'runs.json')
 
     print('\n\nrun completed!!!\n\n')
-
-    # add folder name to the list of runs after the run has completed
-    with open('runs.txt', 'a') as r:
-        r.write(f'{folder}\n')
-    os.mkdir(folder)
