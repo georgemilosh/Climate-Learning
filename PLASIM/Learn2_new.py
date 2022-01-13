@@ -858,8 +858,6 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
         model.add(layers.Dense(dense_units[i], activation=dense_activations[i]))
         if dense_dropouts[i]:
             model.add(layers.Dropout(dense_dropouts[i]))
-    
-    model.summary()
 
     return model
 
@@ -1191,8 +1189,12 @@ def run(folder, prepare_data_kwargs, k_fold_cross_val_kwargs):
     print(f"{tf.__version__ = }")
     if int(tf.__version__[0]) < 2:
         print(f"{tf.test.is_gpu_available() = }")
+        GPU = tf.test.is_gpu_available()
     else:
         print(f"{tf.config.list_physical_devices('GPU') = }")
+        GPU = len(tf.config.list_physical_devices('GPU'))
+    if not GPU:
+        warnings.warn('\nThis machine does not have a GPU: training will be very slow\n')
 
     # prepare the data
     X,Y, permutation = prepare_data(**prepare_data_kwargs)
