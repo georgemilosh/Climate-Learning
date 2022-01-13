@@ -1,5 +1,34 @@
-# George Miloshevich 2021
-# Train a neural network
+# '''
+# Created in December 2021
+
+# @author: Alessandro Lovo
+# '''
+
+'''
+Module for training a Convolutional Neural Network on climate data.
+
+Usage:
+------
+First you need to move the code to a desired folder by running
+    python Learn2_new.py <folder>
+
+This will copy this code and its dependencies to your desired location and will create a config file from the default values in the functions specified in this module.
+
+`cd` into your folder and have a look at the config file, modify all the parameters you want BEFORE the first run, but AFTER you run the code DO NOT MODIFY the config file.
+
+The config file will store the default values for the arguments of the functions.
+
+When running the code you can specify some parameters to deviate from their default value, for example running
+    python Learn2_new.py tau=5
+will run the code with all parameters at their default values but `tau` which will now be 5
+
+Beware that arguments are parsed with spaces, so valid syntaxes are
+    python Learn2_new.py tau=5 lr=1e-4
+    python Learn2_new.py tau 5 lr 1e-4
+Invalid syntaxes are:
+    python Learn2_new.py tau=5 lr = 1e-4
+    python Learn2_new.py tau=5, lr=1e-4
+'''
 
 # Import librairies
 import os as os
@@ -13,9 +42,18 @@ from numpy.lib.arraysetops import isin
 from numpy.random.mtrand import permutation
 import psutil
 import numpy as np
-from tensorflow.python.types.core import Value
+import inspect
+from functools import wraps
+import json
 
-path_to_ERA = Path(__file__).resolve().parent.parent / 'ERA' # when absolute path, so you can run the script from another folder (outside plasim)
+this_module = sys.modules[__name__]
+path_to_here = Path(__file__).resolve().parent
+path_to_ERA = path_to_here / 'ERA' # when absolute path, so you can run the script from another folder (outside plasim)
+if not os.path.exists(path_to_ERA):
+    path_to_ERA = path_to_here.parent / 'ERA'
+    if not os.path.exists(path_to_ERA):
+        raise FileNotFoundError('Could not find ERA folder')
+print(f'{path_to_ERA = }')
 sys.path.insert(1, str(path_to_ERA))
 # sys.path.insert(1, '../ERA/')
 import ERA_Fields as ef # general routines
@@ -31,17 +69,82 @@ from functools import reduce
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers, models
+from tensorflow.python.types.core import Value
 
 ########## USAGE ###############################
 def usage():
-    s = '''
-    
-    '''
-    return s
+    return this_module.__doc__
+
+###### auto logging execution time  decorator ###
+class indenter():
+    def __init__(self):
+        self.terminal = sys.stdout
+    def write(self, message):
+        if message == '\n'*len(message):
+            self.terminal.write(message)
+        else:
+            self.terminal.write('\t'+'\n\t'.join(message.split('\n')))
+    def flush(self):
+        pass
+
+def indent_stdout(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        old_std_out = sys.stdout
+        sys.stdout = indenter()
+        try:
+            r = func(*args, **kwargs)
+        except Exception as e:
+            sys.stdout = old_std_out
+            raise e
+        sys.stdout = old_std_out
+        return r
+    return wrapper
+
+def execution_time(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        start_time = time.time()
+        print(f'{func.__name__}:')
+        r = func(*args, **kwargs)
+        print(f'{func.__name__}: completed in {ef.pretty_time(time.time() - start_time)}')
+        return r
+    return wrapper
 
 
 ########## ARGUMENT PARSING ####################
+
 def run_smart(func, default_kwargs, **kwargs): # this is not as powerful as it looks like
+    '''
+    Runs a function in a vectorized manner:
+
+    Parameters:
+    -----------
+        func: function with signature func(**kwargs) -> None
+        default_kwargs: dict: default values for the keyword arguments of func
+        **kwargs: non default values of the keyword arguments. If a list is provided, the function is run iterating over the list
+
+    Examples:
+    ---------
+    >>> def add(x, y=0):
+    ...     print(x + y)
+    >>> run_smart(add, {'x': 0, 'y': 0}, x=1)
+    1
+    >>> run_smart(add, {'x': 0, 'y': 0}, x=1, y=[1,2,3]) # iterates over y
+    2
+    3
+    4
+    >>> run_smart(add, {'x': 0, 'y': 0}, x=[0, 10], y=[1,2]) # iterates over x and y
+    1
+    2
+    11
+    12
+    >>> run_smart(add, {'x': [0], 'y': [0]}, x=[1,2], y=[1]) # correctly interprets lists when not supposed to iterate over them
+    [1, 2, 1]
+    >>> run_smart(add, {'x': [0], 'y': [0]}, x=[1,2], y=[[1], [0]]) # to iterate over list arguments, nest the lists
+    [1, 2, 1]
+    [1, 2, 0]
+    '''
     evaluate = True
     for k,v in kwargs.items():
         if k not in default_kwargs:
@@ -65,6 +168,221 @@ def run_smart(func, default_kwargs, **kwargs): # this is not as powerful as it l
             f_kwargs[k] = v
         func(**f_kwargs)
 
+#### CONFIG FILE #####
+
+def get_default_params(func, recursive=False):
+    '''
+    Given a function returns a dictionary with the default values of its parameters
+
+    Parameters:
+    -----------
+        func: function inside this module
+        recursive: bool, if True arguments of the type '*_kwargs' will be interpreted as kwargs to pass to function * and `get_default_params` will be applied to * as well to retrieve the default values
+    
+    Returns:
+    --------
+        default_params: dict
+
+    Examples:
+    ---------
+    >>> get_default_params(balance_folds)
+    {'nfolds': 10, 'verbose': False}
+
+    >>> def pnroll(X, roll_X_kwargs, greeting='Hello there!'):
+    ...     print(greeting)
+    ...     return roll_X(X, **roll_X_kwargs)
+    ... 
+    >>> get_default_params(pnroll, recursive=True)
+    ... 
+    {'greeting': 'Hello there!', 'roll_X_kwargs': {'roll_axis': 'lon', 'roll_steps': 64}}
+    '''
+    s = inspect.signature(func)
+    default_params = {
+        k:v.default for k,v in s.parameters.items()
+        if v.default is not inspect.Parameter.empty
+    }
+    if recursive: # look for parameters ending in '_kwagrs' and extract further default arguments
+        possible_other_params = [k for k,v in s.parameters.items() if (v.default is inspect.Parameter.empty and k.endswith('_kwargs'))]
+        for k in possible_other_params:
+            func_name = k.rsplit('_',1)[0] # remove '_kwargs'
+            try:
+                default_params[k] = get_default_params(getattr(this_module, func_name), recursive=True)
+            except:
+                print(f'Could not find function {func_name}')
+    return default_params
+
+def json2dict(filename):
+    '''
+    Reads a json file `filename` as a dictionary
+
+    Returns:
+    --------
+        d: dict
+    '''
+    with open(filename, 'r') as j:
+        d = json.load(j)
+    return d
+
+def dict2json(d, filename):
+    '''
+    Saves a dictionary `d` to a json file `filename`
+    '''
+    with open(filename, 'w') as j:
+        json.dump(d, j, indent=4)
+
+def build_config_dict(functions):
+    '''
+    Creates a config file with the default arguments of the functions in the list `functions`. See also function `get_default_params`
+
+    Parameters:
+    -----------
+        functions: list of functions or string with the function name
+    
+    Returns:
+    --------
+        d: dictionary
+    '''
+    d = {}
+    for f in functions:
+        if isinstance(f, str):
+            f_name = f
+            f = getattr(this_module, f_name)
+        else:
+            f_name = f.__name__
+        d[f_name] = get_default_params(f, recursive=True)
+    return d
+
+def collapse_dict(d_nested, d_flat=None):
+    '''
+    Flattens a nested dictionary `d_nested` into a flat one `d_flat`.
+
+    Parameters:
+    -----------
+        d_nested: dict, can contain dictionaries and other types.
+            If a key is present more times the associated values must be the same, otherwise an error will be raised
+        d_flat: dict (optional), flat dictionary into which to store the items of `d_nested`
+    
+    Returns:
+    --------
+        d_flat: dict
+
+    Raises:
+    -------
+        ValueError: if a key appears more than once with different values
+
+    Examples:
+    ---------
+    >>> collapse_dict({'a': 10, 'b': {'a': 10, 'c': 4}})
+    {'a': 10, 'c': 4}
+    >>> collapse_dict({'a': 10, 'b': {'a': 10, 'c': 4}}, d_flat={'a': 10, 'z': 7})
+    {'a': 10, 'z': 7, 'c': 4}
+    '''
+    if d_flat is None:
+        d_flat = {}
+
+    for k,v in d_nested.items():
+        if isinstance(v, dict):
+            d_flat = collapse_dict(v,d_flat)
+        else:
+            if k in d_flat and v != d_flat[k]:
+                raise ValueError(f'Multiple definitions for argument {k}')
+            d_flat[k] = v
+    return d_flat
+
+def set_values_recursive(d_nested, d_flat):
+    '''
+    Given a nested dictionary `d_nested` replaces its values at any level of indentation according according to the ones in `d_flat`.
+
+    Example:
+    --------
+    >>> set_values_recursive({'a': 10, 'b': {'a': 10, 'c': 8}}, {'a': 'hello'})
+    {'a': 'hello', 'b': {'a': 'hello', 'c': 8}}
+    '''
+    if len(d_flat) == 0:
+        return d_nested
+
+    for k,v in d_nested.items():
+        if isinstance(v, dict):
+            d_nested[k] = set_values_recursive(v, d_flat)
+        elif k in d_flat:
+            d_nested[k] = d_flat[k]
+    return d_nested
+
+def parse_run_name(run_name):
+    '''
+    Parses a string into a dictionary
+
+    Parameters:
+    -----------
+        run_name: str with format <param_name>_<param_value>__...
+    
+    Returns:
+    --------
+        d: dict
+    
+    Examples:
+    ---------
+    >>> parse_run_name('a_5__b_7')
+    {'a': '5', 'b': '7'}
+    >>> parse_run_name('test_arg_bla__b_7')
+    {'test_arg': 'bla', 'b': '7'}
+    '''
+    d = {}
+    args = run_name.split('__')
+    for arg in args:
+        if '_' not in arg:
+            continue
+        key, value = arg.rsplit('_',1)
+        d[key] = value
+    return d
+
+def get_run(load_from, current_run_name=None):
+    '''
+    Parameters:
+    -----------
+        load_from: int, str or 'last'. If int it is the number of the run. If 'last' it is the last completed run. Otherwise it can be a piece of the run name.
+            If the choice is ambiguous an error will be raised.
+        current_run_name: optional, used to check for compatibility issues when loading a model
+    '''
+    if load_from is None:
+        return None
+    # get run_folder name
+    with open('runs.txt', 'r') as runs_file:
+        runs = runs_file.readlines()
+    if len(runs) == 0:
+        print('No runs to load from')
+        return None
+    try:
+        l = int(load_from)
+    except ValueError: # cannot convert load_from to int, so it must be a string that doesn't contain only numbers
+        if load_from == 'last':
+            l = -1
+        else:
+            found = False
+            for i,r in enumerate(runs):
+                if load_from in r:
+                    if not found:
+                        found = True
+                        l = r
+                    else:
+                        raise KeyError(f'Multiple runs contain {load_from}, at least {l} and {i}')
+    run_name = runs[l].rstrip('\n')
+    
+    if current_run_name is not None: # check for compatibility issues when loading
+        # parse run_name for arguments
+        run_dict = parse_run_name(run_name)
+        current_run_dict = parse_run_name(current_run_name)
+        create_model_kwargs = get_default_params(create_model)
+
+        # keep only arguments that are model kwargs
+        run_dict = {k:v for k,v in run_dict.items() if k in create_model_kwargs}
+        current_run_dict = {k:v for k,v in current_run_dict.items() if k in create_model_kwargs}
+
+        # check if arguments match
+        if run_dict != current_run_dict:
+            raise ValueError('The current run and the one you want to load from have different model architectures')
+
+    return run_name
 
 ########## COPY SOURCE FILES #########
 
@@ -85,13 +403,13 @@ def move_to_folder(folder):
 
     # copy other files in the same directory as this one
     path_to_here = path_to_here.parent
-    shutil.copy(path_to_here / 'config', folder)
+    # shutil.copy(path_to_here / 'config', folder)
 
     # copy files in ../ERA/
     path_to_here = path_to_here.parent / 'ERA'
     shutil.copy(path_to_here / 'cartopy_plots.py', ERA_folder)
     shutil.copy(path_to_here / 'ERA_Fields.py', ERA_folder)
-    shutil.copy(path_to_here / 'TF_fields.py', ERA_folder)
+    shutil.copy(path_to_here / 'TF_Fields.py', ERA_folder)
 
     # copy additional files
     # History.py
@@ -126,15 +444,16 @@ for h in [200,300,500,850]: # geopotential heights
         'label': f'{h} mbar Geopotential',
     }
 
-
-def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', area='France', filter_area='France',
+@execution_time
+@indent_stdout
+def load_data(dataset_years=1000, year_list=None, sampling='', Model='Plasim', area='France', filter_area='France',
               lon_start=0, lon_end=128, lat_start=0, lat_end=22, mylocal='/local/gmiloshe/PLASIM/',fields=['t2m','zg500','mrso_filtered']):
     '''
     Loads the data.
 
     Parameters:
     -----------
-        dataset_years: number of years of te dataset, 8000 or 1000
+        dataset_years: number of years of the dataset, 8000 or 1000
         year_list: list of years to load from the dataset
         sampling: '' (dayly) or '3hrs'
         Model: 'Plasim', 'CESM', ...
@@ -142,15 +461,11 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
         filter_area: area over which to keep filtered fields
         lon_start, lon_end, lat_start, lat_end: longitude and latitude extremes of the data expressed in indices (model specific)
         mylocal: path the the data storage. For speed it is better if it is a local path.
-        fields: list of field to be loaded. Add '_filtered' to the name to have the velues of the field outside `area` set to zero.
+        fields: list of field names to be loaded. Add '_filtered' to the name to have the velues of the field outside `area` set to zero.
 
     Returns:
     --------
         _fields: dictionary of ERA_Fields.Plasim_Field objects
-
-
-    TO IMPROVE:
-        possibility to load less years from a dataset
     '''
 
     if area != filter_area:
@@ -188,9 +503,9 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
                                 Model=Model, lat_start=lat_start, lat_end=lat_end, lon_start=lon_start, lon_end=lon_end,
                                 myprecision='single', mysampling=sampling, years=dataset_years)
         # load the data
-        field.load_data(mylocal+file_suffix, year_list=year_list)
+        field.load_field(mylocal+file_suffix, year_list=year_list)
         # Set area integral
-        field.abs_area_int, field.ano_area_int = field.Set_area_integral(area,mask,'Postproc')
+        field.abs_area_int, field.ano_area_int = field.Set_area_integral(area,mask,containing_folder=None) # don't save area integrals in order to avoid conflicts between different runs
         # filter
         if do_filter: # set to zero all values outside `filter_area`
             filter_mask = ef.create_mask(Model, filter_area, field.var, axes='last 2', return_full_mask=True)
@@ -200,11 +515,21 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
     
     return _fields
 
-
-def assign_labels(field, time_start, time_end, T=14, percent=5, threshold=None):
+@execution_time
+@indent_stdout
+def assign_labels(field, time_start=30, time_end=120, T=14, percent=5, threshold=None):
     '''
     Given a field of anomalies it computes the `T` days forward convolution of the integrated anomaly and assigns label 1 to anomalies above a given `threshold`.
     If `threshold` is not provided, then it is computed from `percent`, namely to identify the `percent` most extreme anomalies.
+
+    Parameters:
+    -----------
+        field: Plasim_Field object
+        time_start: int, first day of the period of interest
+        time_end: int, first day after the end of the period of interst
+        T: width of the window for the running average
+        percent: float, percentage of the most extreme heatwaves
+        threshold: float (optional), if provided overrides `percent`
 
     Returns:
     --------
@@ -213,9 +538,19 @@ def assign_labels(field, time_start, time_end, T=14, percent=5, threshold=None):
     A, A_flattened, threshold =  field.ComputeTimeAverage(time_start, time_end, T=T, percent=percent, threshold=threshold)[:3]
     return np.array(A >= threshold, dtype=int)
 
-def make_X(fields, time_start, time_end, T=14, tau=0):
+@execution_time
+@indent_stdout
+def make_X(fields, time_start=30, time_end=120, T=14, tau=0):
     '''
     Cuts the fields in time and stacks them. The original fields are not modified
+
+    Parameters:
+    -----------
+        fields: list of Plasim_Field objects
+        time_start: int, first day of the period of interest
+        time_end: int, first day after the end of the period of interst
+        T: width of the window for the running average
+        tau: delay between observation and prediction
 
     Returns:
     --------
@@ -227,7 +562,35 @@ def make_X(fields, time_start, time_end, T=14, tau=0):
     X = X.transpose(*range(1,len(X.shape)), 0)
     return X
 
-def roll_X(X, axis='lon', steps=0):
+@execution_time
+@indent_stdout
+def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0, percent=5, threshold=None):
+    '''
+    Combines 'make_X' and 'assign_labels'
+
+    Parameters:
+    -----------
+        fields: dict of Plasim_Field objects
+        label_field: str: key for the field used for computing labels
+        time_start: int, first day of the period of interest
+        time_end: int, first day after the end of the period of interst
+        T: width of the window for the running average
+        tau: delay between observation and prediction
+        percent: float, percentage of the most extreme heatwaves
+        threshold: float (optional), if provided overrides `percent`
+
+    Returns:
+    --------
+        X: array with shape (years, days, lat, lon, field)
+        Y: array with shape (years, days)
+    '''
+    X = make_X(fields, time_start=time_start, time_end=time_end, T=T, tau=tau)
+    Y = assign_labels(fields[label_field], time_start=time_start, time_end=time_end, T=T, percent=percent, threshold=threshold)
+    return X,Y
+
+@execution_time
+@indent_stdout
+def roll_X(X, roll_axis='lon', roll_steps=64):
     '''
     Rolls `X` along a given axis. useful for example for moving France away from the Greenwich meridian
 
@@ -242,39 +605,44 @@ def roll_X(X, axis='lon', steps=0):
             'lat' : southward
             'lon' : eastward
             'field' : forward in the numbering of the fields
+    Returns:
+    --------
+        X_rolled: np.ndarray of the same shape of `X`
     '''
-    if steps == 0:
+    if roll_steps == 0:
         return X
-    if axis.startswith('y'):
-        axis = 0
-    elif axis.startswith('d'):
-        axis = 1
-    elif axis == 'lat':
-        axis = 2
-    elif axis == 'lon':
-        axis = 3
-    elif axis.startswith('f'):
-        axis = 4
+    if roll_axis.startswith('y'):
+        roll_axis = 0
+    elif roll_axis.startswith('d'):
+        roll_axis = 1
+    elif roll_axis == 'lat':
+        roll_axis = 2
+    elif roll_axis == 'lon':
+        roll_axis = 3
+    elif roll_axis.startswith('f'):
+        roll_axis = 4
     else:
-        raise ValueError(f'Unknown valur for axis: {axis}')
-    return np.roll(X,steps,axis=axis)
+        raise ValueError(f'Unknown valur for axis: {roll_axis}')
+    return np.roll(X,roll_steps,axis=roll_axis)
 
 ####### MIXING ########
 
 def invert_permutation(permutation):
     '''
     Inverts a permutation.
-    e.g.:
-        a = np.array([3,4,2,5])
-        p = np.random.permutation(np.arange(4))
-        a_permuted = a[p]
-        p_inverse = invert_permutation(p)
-
-        `a` and `a_permuted[p_inverse]` will be equal
 
     Parameters:
     -----------
         permutation: 1D array that must be a permutation of an array of the kind `np.arange(n)` with `n` integer
+
+    Examples:
+    ---------
+    >>> a = np.array([3,4,2,5])
+    >>> p = np.random.permutation(np.arange(4))
+    >>> a_permuted = a[p]
+    >>> p_inverse = invert_permutation(p)
+    >>> all(a == a_permuted[p_inverse])
+    True
     '''
     return np.argsort(permutation)
 
@@ -295,6 +663,18 @@ def compose_permutations(permutations):
     Parameters:
     -----------
         permutations: list of 1D arrays that must be a permutation of an array of the kind `np.arange(n)` with `n` integer and the same for every permutation
+    
+    Examples:
+    ---------
+    >>> a = np.array([3,4,2,5])
+    >>> p1 = np.random.permutation(np.arange(4))
+    >>> p2 = np.random.permutation(np.arange(4))
+    >>> p_composed = compose_permutations([p1,p2])
+    >>> a_permuted1 = a[p1]
+    >>> a_permuted2 = a_permuted1[p2]
+    >>> a_permuted_c = a[p_composed]
+    >>> all(a_permuted_c == a_permuted2)
+    True
     '''
     l = len(permutations[0])
     for p in permutations[1:]:
@@ -317,6 +697,13 @@ def shuffle_years(X, permutation=None, seed=0, apply=False):
         permutation: None or 1D array that must be a permutation of an array of `np.arange(X.shape[0])`
         seed: int, if `permutation` is None, then it is computed using the provided seed.
         apply: bool, if True the function returns the permuted data, otherwise the permutation is returned
+    
+    Returns:
+    --------
+        if apply:
+            np.ndarray of the same shape of X
+        else:
+            np.ndarray of shape (X.shape[0],)
     '''
     if permutation is None:
         if seed is not None:
@@ -328,6 +715,8 @@ def shuffle_years(X, permutation=None, seed=0, apply=False):
         return X[permutation,...]
     return permutation
 
+@execution_time
+@indent_stdout
 def balance_folds(weights, nfolds=10, verbose=False):
     '''
     Returns a permutation that, once applied to `weights` would make the consecutive `nfolds` pieces of equal length have their sum the most similar to each other.
@@ -354,7 +743,8 @@ def balance_folds(weights, nfolds=10, verbose=False):
             self.indexs.append(a[1])
             self.sum += a[0]
             if self.length == len(self.indexs):
-                print(f'fold {self.name} done!')
+                if verbose:
+                    print(f'fold {self.name} done!')
                 return True
             self.hunger = (self.target_sum - self.sum)/(self.length - len(self.indexs))
             return False
@@ -374,6 +764,8 @@ def balance_folds(weights, nfolds=10, verbose=False):
     ws = ws[::-1]
     
     sums = []
+    if verbose:
+        print('Balancing folds')
     # run over the weights and distribute data to the folds
     for a in ws:
         # determine the hungriest fold, i.e. the one that has its sum the furthest from its target
@@ -400,17 +792,37 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
                  dense_units=[64,2], dense_activations=['relu', None], dense_dropouts=[0.2,False]):
     '''
     Creates a model consisting of a series of convolutional layers followed by fully connected ones
+
+    Parameters:
+    -----------
+        input_shape: tuple
+        conv_channels: list of int, number of channels corresponding to the convolutional layers
+        kernel_sizes: int, 2-tuple or list of ints or 2-tuples. If list must be of the same size of `conv_channels`
+        strides: same as kernel_sizes
+        batch_normalizations: bool or list of bools, whether to add a BatchNormalization layer after each Conv2D layer
+        conv_activations: str or list of str
+        conv_dropouts: float in [0,1] or list of floats in [0,1], dropout to be applied after the BatchNormalization layer. If 0 no dropout is applied
+        max_pool_sizes: int or list of int size of max pooling layer to be applied after dropout. If 0 no max pool is applied
+
+        dense_units: list of int, number of neurons for each fully connected layer
+        dense_activations: str or list of str
+        dense_dropouts: float in [0,1] or list of floats in [0,1]
+
+    Returns:
+    --------
+        model: keras.models.Model
     '''
     model = models.Sequential()
 
     # convolutional layers
     # adjust the shape of the arguments to be of the same length as conv_channels
-    args = kernel_sizes, strides, batch_normalizations, conv_activations, conv_dropouts, max_pool_sizes
-    for j,arg in enumerate(range(len(args))):
+    args = [kernel_sizes, strides, batch_normalizations, conv_activations, conv_dropouts, max_pool_sizes]
+    for j,arg in enumerate(args):
         if not isinstance(arg, list):
             args[j] = [arg]*len(conv_channels)
         elif len(arg) != len(conv_channels):
             raise ValueError(f'Invalid length for argument {arg}')
+    print(f'convolutional args = {args}')
     kernel_sizes, strides, batch_normalizations, conv_activations, conv_dropouts, max_pool_sizes = args
     # build the convolutional layers
     for i in range(len(conv_channels)):
@@ -433,12 +845,13 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
 
     # dense layers
     # adjust the shape of the arguments to be of the same length as conv_channels
-    args = dense_activations, dense_dropouts
-    for j,arg in enumerate(range(len(args))):
+    args = [dense_activations, dense_dropouts]
+    for j,arg in enumerate(args):
         if not isinstance(arg, list):
             args[j] = [arg]*len(dense_units)
         elif len(arg) != len(dense_units):
             raise ValueError(f'Invalid length for argument {arg}')
+    print(f'dense args = {args}')
     dense_activations, dense_dropouts = args
     # build the dense layers
     for i in range(len(dense_units)):
@@ -446,13 +859,14 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
         if dense_dropouts[i]:
             model.add(layers.Dropout(dense_dropouts[i]))
     
-    print(model.summary())
+    model.summary()
 
     return model
 
 
 ###### TRAINING THE NETWORK ############
-
+@execution_time
+@indent_stdout
 def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics,
                 batch_size=1024, checkpoint_every=1, additional_callbacks=None):
     '''
@@ -522,7 +936,9 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     model.save(folder)
     np.save(f'{folder}_history.npy', my_history.history)
 
-def k_fold_cross_val_split(i, X, Y, nfolds, val_folds=1):
+@execution_time
+@indent_stdout
+def k_fold_cross_val_split(i, X, Y, nfolds=10, val_folds=1):
     '''
     Splits X and Y in a training and validation set according to k fold cross validation algorithm
 
@@ -536,15 +952,18 @@ def k_fold_cross_val_split(i, X, Y, nfolds, val_folds=1):
 
     Returns:
     --------
-        X_tr, Y_tr, X_va, Y_va
+        X_tr: training data
+        Y_tr: training labels
+        X_va: validation data
+        Y_va: validation labels
     '''
     if i < 0 or i >= nfolds:
         raise ValueError(f'fold number i is out of the range [0, {nfolds - 1}]')
     if val_folds >= nfolds or val_folds <= 0:
         raise ValueError(f'val_folds out of the range [1, {nfolds - 1}]')
     fold_len = X.shape[0]//nfolds
-    lower = i*fold_len % ndata
-    upper = (i+val_folds) % ndata
+    lower = i*fold_len % X.shape[0]
+    upper = (i+val_folds) % X.shape[0]
     if lower < upper:
         X_va = X[lower:upper]
         Y_va = Y[lower:upper]
@@ -557,24 +976,29 @@ def k_fold_cross_val_split(i, X, Y, nfolds, val_folds=1):
         Y_tr = Y[upper:lower]
     return X_tr, Y_tr, X_va, Y_va
 
-def k_fold_cross_val(nfolds, folder, model_kwargs, X, Y, val_folds=1, u=1,
-                     fullmetrics=True, training_epochs=40, training_epochs_tl=10, lr=1e-4, **kwargs):
+@execution_time
+@indent_stdout
+def k_fold_cross_val(folder, X, Y, create_model_kwargs, load_from='last', nfolds=10, val_folds=1, u=1,
+                     fullmetrics=True, training_epochs=40, training_epochs_tl=10, lr=1e-4, batch_size=1024, **kwargs):
     '''
     Performs k fold cross validation on a model architecture.
 
     Parameters:
     -----------
-    nfolds: int, number of folds
     folder: folder in which to save data related to the folds
-    model_kwargs: dictionary with the parameters to create a model, or dictionary containing the parameter 'load_from' which is the folder from which to load models for transfer learning.
     X: all data (train + val)
     Y: all labels
+    create_model_kwargs: dictionary with the parameters to create a model
+    load_from: None, int, str or 'last': from where to load weights for transfer learning. See the documentation of function `get_run`
+        If not None it overrides `create_model_kwargs` (the model is loaded instead of created)
+    nfolds: int, number of folds
     val_folds: number of folds to be used for the validation set for every split
     u: float, undersampling factor (>=1)
     fullmetrics: bool, whether to use a set of evaluation metrics or just the loss
     training_epochs: number of training epochs when creating a model from scratch
     training_epochs_tl: numer of training epochs when using transfer learning
     lr: learning_rate for Adam optimizer
+    batch_size: int
 
     **kwargs: additional arguments to pass to `train_model` (see its docstring), in particular
         num_epochs: overrides `training_epochs` and `training_epochs_tl`
@@ -582,8 +1006,9 @@ def k_fold_cross_val(nfolds, folder, model_kwargs, X, Y, val_folds=1, u=1,
         loss: overrides the default SparseCrossEntropyLoss
         metrics: overrides `fullmetrics`
     '''
-    load_from = model_kwargs.pop('load_from', None)
     folder = folder.rstrip('/')
+
+    load_from = get_run(load_from, current_run_name=folder.rsplit('/',1)[-1])
 
     my_memory = []
 
@@ -602,6 +1027,9 @@ def k_fold_cross_val(nfolds, folder, model_kwargs, X, Y, val_folds=1, u=1,
 
     # k fold cross validation
     for i in range(nfolds):
+        print('=============')
+        print(f'fold {i} ({i+1}/{nfolds})')
+        print('=============')
         # split data
         X_tr, Y_tr, X_va, Y_va = k_fold_cross_val_split(i, X, Y, nfolds=nfolds, val_folds=val_folds)
 
@@ -612,12 +1040,18 @@ def k_fold_cross_val(nfolds, folder, model_kwargs, X, Y, val_folds=1, u=1,
         # perform undersampling
         if u > 1:
             undersampling_strategy = n_pos_tr/(n_neg_tr/u)
+            if undersampling_strategy > 1:
+                # print(f'Too high undersmapling factor, maximum for this dataset is u={n_neg_tr/n_pos_tr}')
+                # print(f'using the maximum undersampling instead')
+                # undersampling_strategy = 1
+                # u = n_neg_tr/n_pos_tr
+                raise ValueError(f'Too high undersmapling factor, maximum for this dataset is u={n_neg_tr/n_pos_tr}')
             pipeline = Pipeline(steps=[('u', RandomUnderSampler(random_state=42, sampling_strategy=undersampling_strategy))])
             # reshape data to feed it to the pipeline
             X_tr_shape = X_tr.shape
-            X_tr = X_tr.reshape(X_tr_shape[0], np.product(X_tr_shape[1:]))
+            X_tr = X_tr.reshape((X_tr_shape[0], np.product(X_tr_shape[1:])))
             X_tr, Y_tr = pipeline.fit_resample(X_tr, Y_tr)
-            X_tr = X_tr.reshape(X_tr.shape[0], *X_tr_shape[1:])
+            X_tr = X_tr.reshape((X_tr.shape[0], *X_tr_shape[1:]))
             n_pos_tr = np.sum(Y_tr)
             n_neg_tr = len(Y_tr) - n_pos_tr
             print(f'number of training data: {len(Y_tr)} of which {n_neg_tr} negative and {n_pos_tr} positive')
@@ -641,7 +1075,7 @@ def k_fold_cross_val(nfolds, folder, model_kwargs, X, Y, val_folds=1, u=1,
         # check for transfer learning
         model = None        
         if load_from is None:
-            model = create_model(input_shape=X_tr.shape[1:], **model_kwargs)
+            model = create_model(input_shape=X_tr.shape[1:], **create_model_kwargs)
         else:
             model = keras.models.load_model(f'{load_from}/fold_{i}', compile=False)
             model.load_weights(f'{load_from}/fold_{i}/cp-{opt_checkpoint:04d}.ckpt')            
@@ -666,7 +1100,7 @@ def k_fold_cross_val(nfolds, folder, model_kwargs, X, Y, val_folds=1, u=1,
         loss = kwargs.pop('loss',keras.losses.SparseCategoricalCrossentropy(from_logits=True))
 
         train_model(model, X_tr, Y_tr, X_va, Y_va,
-                    folder=fold_folder, num_epochs=num_epochs, optimizer=optimizer, loss=loss, metrics=metrics, **kwargs)
+                    folder=fold_folder, num_epochs=num_epochs, optimizer=optimizer, loss=loss, metrics=metrics, batch_size=batch_size, **kwargs)
 
         my_memory.append(psutil.virtual_memory())
         print('RAM memory:', my_memory[i][3]) # Getting % usage of virtual_memory ( 3rd field)
@@ -677,187 +1111,100 @@ def k_fold_cross_val(nfolds, folder, model_kwargs, X, Y, val_folds=1, u=1,
     np.save(f'{folder}/RAM_stats.npy', my_memory)
 
 
+########## PUTTING THE PIECES TOGETHER ###########
+@execution_time
+@indent_stdout
+def prepare_data(load_data_kwargs, make_XY_kwargs, roll_X_kwargs, premix_seed=0, nfolds=10):
+    '''
+    Combines all the steps from loading the data to the creation of X and Y
 
+    Parameters:
+    -----------
+        load_data_kwargs: dict, arguments to pass to the function `load_data`
+        make_XY_kwargs: dict, arguments to pass to the function `make_XY`
+        roll_X_kwargs: dict, arguments to pass to the function `roll_X`
+        premix_seed: int, seed for premixing. If None premixing is skipped
+        nfolds: int, necessary for balancing folds
 
+    Returns:
+    --------
+        X: np.ndarray with shape (years, days, lat, lon, fields), data
+        Y: np.ndarray with shape (years, days), labels
+        tot_permutation: np.ndarray with shape (years,), final permutaion of the years that reproduces X and Y once applied to the just loaded data
+    '''
+    # load data
+    found = False
+    for field_name in load_data_kwargs['fields']:
+        if field_name.startswith(make_XY_kwargs['label_field']):
+            found = True
+            break
+    if not found:
+        raise KeyError(f"field {make_XY_kwargs['label_field']} is not a loaded field")
 
-######## TRAIN THE NETWORK #########
-if __name__ == '__main__a':
+    fields = load_data(**load_data_kwargs)
+
+    X,Y = make_XY(fields, **make_XY_kwargs)
     
-    print(f"====== running {__file__} ====== ")  
-    print(f"{tf.__version__ = }")
-    if int(tf.__version__[0]) < 2:
-        print(f"{tf.test.is_gpu_available() = }")
+    # move greenwich_meridian
+    X = roll_X(X, **roll_X_kwargs)
+
+    # mixing
+    print('\nMixing')
+    start_time = time.time()
+    if premix_seed is not None:
+        premix_permutation = shuffle_years(X, seed=premix_seed, apply=False)
+        Y = Y[premix_permutation]
+    # balance folds:
+    weights = np.sum(Y, axis=1) # get the number of heatwave events per year
+    balance_permutation = balance_folds(weights,nfolds=nfolds, verbose=True)
+    Y = Y[balance_permutation]
+    tot_permutation = balance_permutation
+    if premix_seed is not None:
+        tot_permutation = compose_permutations([premix_permutation, tot_permutation])
+    X = X[tot_permutation]
+    print(f'Mixing completed in {ef.pretty_time(time.time() - start_time)}\n')
+
+    return X, Y, tot_permutation
+
+
+def run(folder, prepare_data_kwargs, k_fold_cross_val_kwargs):
+    '''
+    Perfroms a full run
+
+    Parameters:
+    -----------
+        folder: folder where to perform the run
+        prepare_data_kwargs: dict, arguments to pass to the `prepare_data` function
+        k_fold_cross_val_kwargs: dict, arguments to pass to the `k_fold_cross_val` function
+    '''
+    start_time = time.time()
+    folder = folder.rstrip('/')
+    if not os.path.exists(folder):
+        os.mkdir(folder)
     else:
-        print(f"{tf.config.list_physical_devices('GPU') = }")
+        raise FileExistsError(f'{folder} already exists')
+    # setup logger
+    old_stdout = sys.stdout
+    sys.stdout = ef.Logger(f'{folder}/')
+    # prepare the data
+    X,Y, permutation = prepare_data(**prepare_data_kwargs)
+    np.save(f'{folder}/year_permutation.npy',permutation)
 
-    start = time.time()
+    print(f'{X.shape = }, {Y.shape = }')
+    # flatten the time axis
+    X = X.reshape((X.shape[0]*X.shape[1],*X.shape[2:]))
+    Y = Y.reshape((Y.shape[0]*Y.shape[1]))
+    print(f'Flattened time: {X.shape = }, {Y.shape = }')
 
+    # run kfold
+    k_fold_cross_val(folder, X, Y, **k_fold_cross_val_kwargs)
 
+    print(f'\ntotal run time: {ef.pretty_time(time.time() - start_time)}')
 
-    X, list_extremes, thefield, sampling, percent, usepipelines, undersampling_factor, new_mixing,  saveweightseveryblaepoch, NUM_EPOCHS, BATCH_SIZE, checkpoint_name, fullmetrics = PrepareData() # The reason it is written as a function is because we want to re-use it when loading the data
+    # restore old stdout
+    sys.stdout = old_stdout
     
-    oversampling_factor = undersampling_factor[1]
-    undersampling_factor = undersampling_factor[0]
-                                
-    print("full dimension of the data is X[0].shape = ", X[0].shape) # do the previous statement in steps so that first we get a list (I extract the necessary sizes)
-    end = time.time()
 
-    # Getting % usage of virtual_memory ( 3rd field)
-    print(f'RAM memory used: {psutil.virtual_memory()[3]}')
-    print(f'Reading time = {end - start}')
-    start = time.time()
-
-    mylabels = np.array(list_extremes)
-    checkpoint_name_previous = usepipelines[2]
-    tau = usepipelines[3]
-
-    if tau < 0: # we can import previous weights
-        # Here we insert analysis of the previous tau with the assessment of the ideal checkpoint
-        history = np.load(checkpoint_name_previous+'/batch_'+str(0)+'_history.npy', allow_pickle=True).item()
-        if ('val_CustomLoss' in history.keys()):
-            print( "'val_CustomLoss' in history.keys()")
-            historyCustom = []
-            for i in range(10): # preemptively compute the optimal score
-                historyCustom.append(np.load(checkpoint_name_previous+'/batch_'+str(i)+'_history.npy', allow_pickle=True).item()['val_CustomLoss'])
-            historyCustom = np.mean(np.array(historyCustom),0)
-            opt_checkpoint = np.argmin(historyCustom) # We will use optimal checkpoint in this case!
-        else:
-            print( "'val_CustomLoss' not in history.keys()")
-            sys.exit("Aborting the program!")
-
-    
-    # do the training 10 times to with 10-fold cross validation
-    my_MCC = np.zeros(10,)
-    my_entropy = np.zeros(10,)
-    my_skill = np.zeros(10,)
-    my_BS = np.zeros(10,)
-    my_WBS = np.zeros(10,)
-    my_freq = np.zeros(10,)
-    my_memory = []
-
-    for i in range(10):
-        print("===============================")
-        print("cross validation i = ", str(i))
-        test_indices, train_indices, train_true_labels_indices, train_false_labels_indices, filename_permutation = TrainTestSplitIndices(i,X, mylabels, 1, sampling, new_mixing, thefield, percent) # 1 implies undersampling_rate=1 indicating that we supress the manual undersampling
-        print("# events in the train sample after TrainTestSplitIndices: ",  len(train_indices))
-        print("original proportion of positive events in the train sample: ",  np.sum(mylabels[train_indices])/len(train_indices))
-        
-        oversampling_strategy = oversampling_factor/(100/percent-1)
-        if oversampling_factor > 1:
-            print("oversampling_strategy = ", oversampling_strategy )
-            over = RandomOverSampler(random_state=42, sampling_strategy=oversampling_strategy) # first oversample the minority class to have 15 percent the number of examples of the majority class
-            #over = SMOTEENN(random_state=42, sampling_strategy=oversampling_strategy) # first oversample the minority class to have 15 percent the number of examples of the majority class
-        
-        undersampling_strategy = undersampling_factor*oversampling_strategy
-        print("undersampling_strategy = ", undersampling_strategy )
-        under = RandomUnderSampler(random_state=42, sampling_strategy=undersampling_strategy)
-                            
-        if oversampling_factor > 1:
-                steps = [('o', over), ('u', under)]
-        else:
-                steps = [('u', under)]
-        pipeline = Pipeline(steps=steps) # The Pipeline can then be applied to a dataset, performing each transformation in turn and returning a final dataset with the accumulation of the transform applied to it, in this case oversampling followed by undersampling.
-        # To make use of the in-built pipelines we need to transform the X into the required dimensions
-        XTrain_indicesShape = X[train_indices].shape
-        print("Original dimension of the train set is X[train_indices].shape = ", XTrain_indicesShape)
-        X_train, Y_train = pipeline.fit_resample(X[train_indices].reshape(XTrain_indicesShape[0],XTrain_indicesShape[1]*XTrain_indicesShape[2]*XTrain_indicesShape[3]),  mylabels[train_indices])
-        X_train = X_train.reshape(X_train.shape[0],XTrain_indicesShape[1],XTrain_indicesShape[2],XTrain_indicesShape[3])
-
-        Y_test = mylabels[test_indices]
-        neg = train_false_labels_indices.shape[0]
-        pos = train_true_labels_indices.shape[0]
-        
-        print("====Dimensions of the data before entering the neural net===")
-        print("dimension of the train set is X[train_indices].shape = ", X_train.shape)
-        
-        # normalize the data with pointwise mean and std
-        X_mean = np.mean(X_train,0)
-        X_std = np.std(X_train,0)
-        
-        print(f'{np.sum(X_std < 1e-5)/np.product(X_std.shape)*100}\% of the data have std below 1e-5')
-        X_std[X_std==0] = 1 # If there is no variance we shouldn't divide by zero ### hmmm: this may create discontinuities
-
-        X_test = (X[test_indices]-X_mean)/X_std
-        Y_test = mylabels[test_indices]
-
-        X_train = (X_train-X_mean)/X_std
-
-
-         
-        print("Y_train.shape = ", Y_train.shape)
-        print("Y_test.shape = ", Y_test.shape)
-         
-        print(f"Train set: # of true labels = {np.sum(Y_train)}, # of false labels = {Y_train.shape[0] - np.sum(Y_train)}")
-        print(f"Train set: effective sampling rate for rare events is {np.sum(Y_train)/Y_train.shape[0]}")
-        
-        np.save(f'{checkpoint_name}/batch_{i}_X_mean', X_mean) # this values must be saved if the neural network is to be tested again, by reloading some other data
-        np.save(f'{checkpoint_name}/batch_{i}_X_std', X_std)
-        
-        if tau < 0: # engagge transfer learning
-            print(f"opt_checkpoint: {opt_checkpoint} ,loading model: {checkpoint_name_previous}")
-            model = (tf.keras.models.load_model(f'{checkpoint_name_previous}/batch_{i}', compile=False)) # if we just want to train
-
-            nb_zeros_c = 4-len(str(opt_checkpoint))
-            cp_checkpoint_name = '/cp-'+nb_zeros_c*'0'+str(opt_checkpoint)+'.ckpt'
-            print(f'loading weights from {checkpoint_name_previous}/batch_{i}{cp_checkpoint_name}')
-            model.load_weights(f'{checkpoint_name_previous}/batch_{i}{cp_checkpoint_name}')
-        else:
-            model_input_dim = X.shape[1:] 
-            model = custom_CNN(model_input_dim) 
-       
-        tf_sampling = tf.cast([0.5*np.log(undersampling_factor), -0.5*np.log(undersampling_factor)], tf.float32)
-        #print("model_input_dim = ",model_input_dim)
-        model.summary()
-        if fullmetrics:
-            METRICS=['accuracy',MCCMetric(2),ConfusionMatrixMetric(2),CustomLoss(tf_sampling)]#tf.keras.metrics.SparseCategoricalCrossentropy(from_logits=True)]#CustomLoss()]   # the last two make the code run longer but give precise discrete prediction benchmarks
-        else:
-            METRICS=['loss']
-        model.compile(
-            optimizer=tf.keras.optimizers.Adam(learning_rate = 2e-4),
-            loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True), #If the predicted labels are not converted to a probability distribution by the last layer of the model (using sigmoid or softmax activation functions), we need to inform these three Cross-Entropy functions by setting their from_logits = True.
-            #One advantage of using sparse categorical cross-entropy is it saves storage in memory as well as time in computation because it simply uses a single integer for a class, rather than a whole one-hot vector. This works despite the fact that the neural network has an one-hot vector output  
-            metrics=METRICS   # the last two make the code run longer but give precise discrete prediction benchmarks
-        )
-        # Create a callback that saves the model's weights every saveweightseveryblaepoch epochs
-        checkpoint_path = checkpoint_name+'/batch_'+str(i)+"/cp-{epoch:04d}.ckpt"
-        if saveweightseveryblaepoch > 0:
-            print("cp_callback save option on")
-            # Create a callback that saves the model's weights
-            cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_path,
-                                                             save_weights_only=True,
-                                                             verbose=1)
-        else:
-            cp_callback=None
-
-        model.save_weights(checkpoint_path.format(epoch=0))
-
-        my_history=model.fit(X_train, Y_train, batch_size=BATCH_SIZE, validation_data=(X_test,Y_test), shuffle=True, callbacks=[cp_callback], epochs=NUM_EPOCHS,verbose=2, class_weight=None)
-
-        model.save(f'{checkpoint_name}/batch_{i}')
-        np.save(f'{checkpoint_name}/batch_{i}_history.npy',my_history.history)
-        
-        my_probability_model=(tf.keras.Sequential([ # softmax output to make a prediction
-              model,
-              tf.keras.layers.Softmax()
-            ]))
-
-        print("======================================")
-        my_memory.append(psutil.virtual_memory())
-        print('RAM memory:', my_memory[i][3])
-
-        tf.keras.backend.clear_session()
-        gc.collect() # Garbage collector which removes some extra references to the object
-
-        # Getting % usage of virtual_memory ( 3rd field)
-
-    np.save(f'{checkpoint_name}/RAM_stats.npy', my_memory)
-
-    end = time.time()
-    print(f'files saved in  {checkpoint_name}')
-    print(f'Learning time = {end - start}')
-
-
-# def run(kwargs, default_kwargs)
 
 if __name__ == '__main__':
     # check if there is a lock:
@@ -871,6 +1218,14 @@ if __name__ == '__main__':
             folder = sys.argv[1]
             print(f'moving code to {folder = }')
             move_to_folder(folder)
+            
+            # config file
+            d = build_config_dict([run])
+            dict2json(d,f'{folder}/config.json')
+
+            # runs file
+            open(f'{folder}/runs.txt', 'a').close()
+
             exit(0)
         else:
             with open(lock) as l:
@@ -879,11 +1234,60 @@ if __name__ == '__main__':
     # if there is a lock, the previous block of code would have ended the run, so the code below is executed only if there is no lock
     
     # load config file
+    config_dict = json2dict('config.json')
+    config_dict_flat = collapse_dict(config_dict)
+    print(f'{config_dict = }')
 
     # parse command line arguments
+    cl_args = sys.argv[1:]
+    i = 0
+    arg_dict = {}
+    while(i < len(cl_args)):
+        key = cl_args[i]
+        if '=' in key:
+            key, value = key.split('=')
+            i += 1
+        else:
+            value = cl_args[i+1]
+            i += 2
+        if key not in config_dict_flat:
+            raise KeyError(f'Unknown argument {key}')
+        # `value` is a string. Here we try to cast it to the correct type
+        value = None if value.lower() == 'none' else value # recognize None values
+        if config_dict_flat[key] is not None:
+            try:
+                dtype = type(config_dict_flat[key])
+                value = dtype(value)
+            except Exception:
+                print(f'Could not convert {value} to {dtype}. Keeping string type')
+        # now check if the provided value is equal to the default one
+        if value == config_dict_flat[key]:
+            print(f'Skipping given argument {key} as it is at its default value {value}')
+        else:
+            arg_dict[key] = value
 
-    # run(kwargs, default_kwargs)
+    # get run number
+    if not os.path.exists('runs.txt'):
+        run_id = 0
+    else:
+        with open('runs.txt', 'r') as r:
+            run_id = len(r.readlines())
 
-    
+    folder = f'{run_id}__'
+    for k in sorted(arg_dict):
+        folder += f'{k}_{arg_dict[k]}__'
+    folder = folder[:-2] # remove the last '__'
+    print(f'{folder = }')
 
-    
+    # set the arguments provided into the nested dictionaries
+    run_kwargs = set_values_recursive(config_dict['run'], arg_dict)
+    print(f'{run_kwargs = }')
+
+    run(folder, **run_kwargs)
+
+    print('\n\nrun completed!!!\n\n')
+
+    # add folder name to the list of runs after the run has completed
+    with open('runs.txt', 'a') as r:
+        r.write(f'{folder}\n')
+    os.mkdir(folder)
