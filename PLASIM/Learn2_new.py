@@ -1186,6 +1186,14 @@ def run(folder, prepare_data_kwargs, k_fold_cross_val_kwargs):
     # setup logger
     old_stdout = sys.stdout
     sys.stdout = ef.Logger(f'{folder}/')
+
+    # check tf version and GPUs
+    print(f"{tf.__version__ = }")
+    if int(tf.__version__[0]) < 2:
+        print(f"{tf.test.is_gpu_available() = }")
+    else:
+        print(f"{tf.config.list_physical_devices('GPU') = }")
+
     # prepare the data
     X,Y, permutation = prepare_data(**prepare_data_kwargs)
     np.save(f'{folder}/year_permutation.npy',permutation)
