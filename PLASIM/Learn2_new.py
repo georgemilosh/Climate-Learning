@@ -30,7 +30,9 @@ Invalid syntaxes are:
     python Learn2_new.py tau=5, lr=1e-4
 '''
 
-# Import librairies
+### IMPORT LIBRARIES #####
+
+## general purpose
 import os as os
 from pathlib import Path
 import sys
@@ -38,12 +40,11 @@ import warnings
 import time
 import shutil
 import gc
-from numpy.lib.arraysetops import isin
-from numpy.random.mtrand import permutation
 import psutil
 import numpy as np
 import inspect
 
+## user defined modules
 this_module = sys.modules[__name__]
 path_to_here = Path(__file__).resolve().parent
 path_to_ERA = path_to_here / 'ERA' # when absolute path, so you can run the script from another folder (outside plasim)
@@ -58,17 +59,15 @@ import ERA_Fields as ef # general routines
 import TF_Fields as tff # tensorflow routines
 import utilities as ut
 
-from imblearn.over_sampling import RandomOverSampler
+## machine learning
+# from imblearn.over_sampling import RandomOverSampler
 from imblearn.under_sampling import RandomUnderSampler
-from imblearn.combine import SMOTEENN
 from imblearn.pipeline import Pipeline
-from operator import mul
-from functools import reduce
 
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers, models
-from tensorflow.python.types.core import Value
+
 
 ########## USAGE ###############################
 def usage():
@@ -260,6 +259,7 @@ def move_to_folder(folder):
     shutil.copy(path_to_here / 'cartopy_plots.py', ERA_folder)
     shutil.copy(path_to_here / 'ERA_Fields.py', ERA_folder)
     shutil.copy(path_to_here / 'TF_Fields.py', ERA_folder)
+    shutil.copy(path_to_here / 'utilities.py', ERA_folder)
 
     # copy additional files
     # History.py

@@ -44,8 +44,18 @@ def pretty_time(t):
     pt += f'{s:.1f} s'
     return pt
 
-###### auto logging execution time  decorator ###
-class indenter():
+###### function decorators for logging ###
+class Indenter():
+    '''
+    Indents the output of `print` statements.
+
+    Usage:
+    ------
+    old_stdout = sys.stdout
+    sys.stdout = Indenter()
+    # do your stuff
+    sys.stdout = old_stdout # restore old output system
+    '''
     def __init__(self):
         self.terminal = sys.stdout
     def write(self, message):
@@ -57,10 +67,13 @@ class indenter():
         pass
 
 def indent_stdout(func):
+    '''
+    Indents the output produced by a function
+    '''
     @wraps(func)
     def wrapper(*args, **kwargs):
         old_std_out = sys.stdout
-        sys.stdout = indenter()
+        sys.stdout = Indenter()
         try:
             r = func(*args, **kwargs)
         except Exception as e:
@@ -71,12 +84,15 @@ def indent_stdout(func):
     return wrapper
 
 def execution_time(func):
+    '''
+    Prints the execution time of a function
+    '''
     @wraps(func)
     def wrapper(*args, **kwargs):
         start_time = time.time()
         print(f'{func.__name__}:')
         r = func(*args, **kwargs)
-        print(f'{func.__name__}: completed in {ef.pretty_time(time.time() - start_time)}')
+        print(f'{func.__name__}: completed in {pretty_time(time.time() - start_time)}')
         return r
     return wrapper
 
