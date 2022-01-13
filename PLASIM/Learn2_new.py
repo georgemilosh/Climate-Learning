@@ -43,9 +43,6 @@ from numpy.random.mtrand import permutation
 import psutil
 import numpy as np
 import inspect
-from functools import wraps
-import json
-from datetime import datetime
 
 this_module = sys.modules[__name__]
 path_to_here = Path(__file__).resolve().parent
@@ -58,7 +55,8 @@ print(f'{path_to_ERA = }')
 sys.path.insert(1, str(path_to_ERA))
 # sys.path.insert(1, '../ERA/')
 import ERA_Fields as ef # general routines
-import TF_Fields as tff # tensorflow routines 
+import TF_Fields as tff # tensorflow routines
+import utilities as ut
 
 from imblearn.over_sampling import RandomOverSampler
 from imblearn.under_sampling import RandomUnderSampler
@@ -75,103 +73,6 @@ from tensorflow.python.types.core import Value
 ########## USAGE ###############################
 def usage():
     return this_module.__doc__
-
-######## now ##########
-def now():
-    return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-###### auto logging execution time  decorator ###
-class indenter():
-    def __init__(self):
-        self.terminal = sys.stdout
-    def write(self, message):
-        if message == '\n'*len(message):
-            self.terminal.write(message)
-        else:
-            self.terminal.write('\t'+'\n\t'.join(message.split('\n')))
-    def flush(self):
-        pass
-
-def indent_stdout(func):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        old_std_out = sys.stdout
-        sys.stdout = indenter()
-        try:
-            r = func(*args, **kwargs)
-        except Exception as e:
-            sys.stdout = old_std_out
-            raise e
-        sys.stdout = old_std_out
-        return r
-    return wrapper
-
-def execution_time(func):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        start_time = time.time()
-        print(f'{func.__name__}:')
-        r = func(*args, **kwargs)
-        print(f'{func.__name__}: completed in {ef.pretty_time(time.time() - start_time)}')
-        return r
-    return wrapper
-
-
-########## ARGUMENT PARSING ####################
-
-def run_smart(func, default_kwargs, **kwargs): # this is not as powerful as it looks like
-    '''
-    Runs a function in a vectorized manner:
-
-    Parameters:
-    -----------
-        func: function with signature func(**kwargs) -> None
-        default_kwargs: dict: default values for the keyword arguments of func
-        **kwargs: non default values of the keyword arguments. If a list is provided, the function is run iterating over the list
-
-    Examples:
-    ---------
-    >>> def add(x, y=0):
-    ...     print(x + y)
-    >>> run_smart(add, {'x': 0, 'y': 0}, x=1)
-    1
-    >>> run_smart(add, {'x': 0, 'y': 0}, x=1, y=[1,2,3]) # iterates over y
-    2
-    3
-    4
-    >>> run_smart(add, {'x': 0, 'y': 0}, x=[0, 10], y=[1,2]) # iterates over x and y
-    1
-    2
-    11
-    12
-    >>> run_smart(add, {'x': [0], 'y': [0]}, x=[1,2], y=[1]) # correctly interprets lists when not supposed to iterate over them
-    [1, 2, 1]
-    >>> run_smart(add, {'x': [0], 'y': [0]}, x=[1,2], y=[[1], [0]]) # to iterate over list arguments, nest the lists
-    [1, 2, 1]
-    [1, 2, 0]
-    '''
-    evaluate = True
-    for k,v in kwargs.items():
-        if k not in default_kwargs:
-            raise KeyError(f'Unknown argument {k}')
-        iterate = False
-        if isinstance(v, list): # possible need to iterate over the argument
-            if isinstance(default_kwargs[k], list):
-                if isinstance(v[0], list):
-                    iterate = True
-            else:
-                iterate = True
-        if iterate:
-            evaluate = False
-            for _v in v:
-                kwargs[k] = _v
-                run_smart(func, default_kwargs, **kwargs)
-            break
-    if evaluate:
-        f_kwargs = default_kwargs
-        for k,v in kwargs.items():
-            f_kwargs[k] = v
-        func(**f_kwargs)
 
 #### CONFIG FILE #####
 
@@ -216,25 +117,6 @@ def get_default_params(func, recursive=False):
                 print(f'Could not find function {func_name}')
     return default_params
 
-def json2dict(filename):
-    '''
-    Reads a json file `filename` as a dictionary
-
-    Returns:
-    --------
-        d: dict
-    '''
-    with open(filename, 'r') as j:
-        d = json.load(j)
-    return d
-
-def dict2json(d, filename):
-    '''
-    Saves a dictionary `d` to a json file `filename`
-    '''
-    with open(filename, 'w') as j:
-        json.dump(d, j, indent=4)
-
 def build_config_dict(functions):
     '''
     Creates a config file with the default arguments of the functions in the list `functions`. See also function `get_default_params`
@@ -256,62 +138,6 @@ def build_config_dict(functions):
             f_name = f.__name__
         d[f_name] = get_default_params(f, recursive=True)
     return d
-
-def collapse_dict(d_nested, d_flat=None):
-    '''
-    Flattens a nested dictionary `d_nested` into a flat one `d_flat`.
-
-    Parameters:
-    -----------
-        d_nested: dict, can contain dictionaries and other types.
-            If a key is present more times the associated values must be the same, otherwise an error will be raised
-        d_flat: dict (optional), flat dictionary into which to store the items of `d_nested`
-    
-    Returns:
-    --------
-        d_flat: dict
-
-    Raises:
-    -------
-        ValueError: if a key appears more than once with different values
-
-    Examples:
-    ---------
-    >>> collapse_dict({'a': 10, 'b': {'a': 10, 'c': 4}})
-    {'a': 10, 'c': 4}
-    >>> collapse_dict({'a': 10, 'b': {'a': 10, 'c': 4}}, d_flat={'a': 10, 'z': 7})
-    {'a': 10, 'z': 7, 'c': 4}
-    '''
-    if d_flat is None:
-        d_flat = {}
-
-    for k,v in d_nested.items():
-        if isinstance(v, dict):
-            d_flat = collapse_dict(v,d_flat)
-        else:
-            if k in d_flat and v != d_flat[k]:
-                raise ValueError(f'Multiple definitions for argument {k}')
-            d_flat[k] = v
-    return d_flat
-
-def set_values_recursive(d_nested, d_flat):
-    '''
-    Given a nested dictionary `d_nested` replaces its values at any level of indentation according according to the ones in `d_flat`.
-
-    Example:
-    --------
-    >>> set_values_recursive({'a': 10, 'b': {'a': 10, 'c': 8}}, {'a': 'hello'})
-    {'a': 'hello', 'b': {'a': 'hello', 'c': 8}}
-    '''
-    if len(d_flat) == 0:
-        return d_nested
-
-    for k,v in d_nested.items():
-        if isinstance(v, dict):
-            d_nested[k] = set_values_recursive(v, d_flat)
-        elif k in d_flat:
-            d_nested[k] = d_flat[k]
-    return d_nested
 
 def parse_run_name(run_name):
     '''
@@ -352,7 +178,7 @@ def get_run(load_from, current_run_name=None):
     if load_from is None:
         return None
     # get run_folder name
-    runs = json2dict('runs.json')
+    runs = ut.json2dict('runs.json')
     if len(runs) == 0:
         print('No runs to load from')
         return None
@@ -468,8 +294,8 @@ for h in [200,300,500,850]: # geopotential heights
         'label': f'{h} mbar Geopotential',
     }
 
-@execution_time
-@indent_stdout
+@ut.execution_time
+@ut.indent_stdout
 def load_data(dataset_years=1000, year_list=None, sampling='', Model='Plasim', area='France', filter_area='France',
               lon_start=0, lon_end=128, lat_start=0, lat_end=22, mylocal='/local/gmiloshe/PLASIM/',fields=['t2m','zg500','mrso_filtered']):
     '''
@@ -539,8 +365,8 @@ def load_data(dataset_years=1000, year_list=None, sampling='', Model='Plasim', a
     
     return _fields
 
-@execution_time
-@indent_stdout
+@ut.execution_time
+@ut.indent_stdout
 def assign_labels(field, time_start=30, time_end=120, T=14, percent=5, threshold=None):
     '''
     Given a field of anomalies it computes the `T` days forward convolution of the integrated anomaly and assigns label 1 to anomalies above a given `threshold`.
@@ -562,8 +388,8 @@ def assign_labels(field, time_start=30, time_end=120, T=14, percent=5, threshold
     A, A_flattened, threshold =  field.ComputeTimeAverage(time_start, time_end, T=T, percent=percent, threshold=threshold)[:3]
     return np.array(A >= threshold, dtype=int)
 
-@execution_time
-@indent_stdout
+@ut.execution_time
+@ut.indent_stdout
 def make_X(fields, time_start=30, time_end=120, T=14, tau=0):
     '''
     Cuts the fields in time and stacks them. The original fields are not modified
@@ -586,8 +412,8 @@ def make_X(fields, time_start=30, time_end=120, T=14, tau=0):
     X = X.transpose(*range(1,len(X.shape)), 0)
     return X
 
-@execution_time
-@indent_stdout
+@ut.execution_time
+@ut.indent_stdout
 def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0, percent=5, threshold=None):
     '''
     Combines 'make_X' and 'assign_labels'
@@ -612,8 +438,8 @@ def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0,
     Y = assign_labels(fields[label_field], time_start=time_start, time_end=time_end, T=T, percent=percent, threshold=threshold)
     return X,Y
 
-@execution_time
-@indent_stdout
+@ut.execution_time
+@ut.indent_stdout
 def roll_X(X, roll_axis='lon', roll_steps=64):
     '''
     Rolls `X` along a given axis. useful for example for moving France away from the Greenwich meridian
@@ -649,67 +475,7 @@ def roll_X(X, roll_axis='lon', roll_steps=64):
         raise ValueError(f'Unknown valur for axis: {roll_axis}')
     return np.roll(X,roll_steps,axis=roll_axis)
 
-####### MIXING ########
-
-def invert_permutation(permutation):
-    '''
-    Inverts a permutation.
-
-    Parameters:
-    -----------
-        permutation: 1D array that must be a permutation of an array of the kind `np.arange(n)` with `n` integer
-
-    Examples:
-    ---------
-    >>> a = np.array([3,4,2,5])
-    >>> p = np.random.permutation(np.arange(4))
-    >>> a_permuted = a[p]
-    >>> p_inverse = invert_permutation(p)
-    >>> all(a == a_permuted[p_inverse])
-    True
-    '''
-    return np.argsort(permutation)
-
-def compose_permutations(permutations):
-    '''
-    Composes a series of permutations
-    e.g.:
-        a = np.array([3,4,2,5])
-        p1 = np.random.permutation(np.arange(4))
-        p2 = np.random.permutation(np.arange(4))
-        p_composed = compose_permutations([p1,p2])
-        a_permuted1 = a[p1]
-        a_permuted2 = a_permuted1[p2]
-        a_permuted_c = a[p_composed]
-
-        `a_permuted_c` and `a_permuted2` will be equal
-
-    Parameters:
-    -----------
-        permutations: list of 1D arrays that must be a permutation of an array of the kind `np.arange(n)` with `n` integer and the same for every permutation
-    
-    Examples:
-    ---------
-    >>> a = np.array([3,4,2,5])
-    >>> p1 = np.random.permutation(np.arange(4))
-    >>> p2 = np.random.permutation(np.arange(4))
-    >>> p_composed = compose_permutations([p1,p2])
-    >>> a_permuted1 = a[p1]
-    >>> a_permuted2 = a_permuted1[p2]
-    >>> a_permuted_c = a[p_composed]
-    >>> all(a_permuted_c == a_permuted2)
-    True
-    '''
-    l = len(permutations[0])
-    for p in permutations[1:]:
-        if len(p) != l:
-            raise ValueError('All permutations must have the same length')
-    ps = permutations[::-1]
-    p = ps[0]
-    for _p in ps[1:]:
-        p = _p[p]
-    return p
-    
+####### MIXING ########    
 
 def shuffle_years(X, permutation=None, seed=0, apply=False):
     '''
@@ -739,8 +505,8 @@ def shuffle_years(X, permutation=None, seed=0, apply=False):
         return X[permutation,...]
     return permutation
 
-@execution_time
-@indent_stdout
+@ut.execution_time
+@ut.indent_stdout
 def balance_folds(weights, nfolds=10, verbose=False):
     '''
     Returns a permutation that, once applied to `weights` would make the consecutive `nfolds` pieces of equal length have their sum the most similar to each other.
@@ -887,8 +653,8 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
 
 
 ###### TRAINING THE NETWORK ############
-@execution_time
-@indent_stdout
+@ut.execution_time
+@ut.indent_stdout
 def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics,
                 batch_size=1024, checkpoint_every=1, additional_callbacks=None):
     '''
@@ -958,8 +724,8 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     model.save(folder)
     np.save(f'{folder}/history.npy', my_history.history)
 
-@execution_time
-@indent_stdout
+@ut.execution_time
+@ut.indent_stdout
 def k_fold_cross_val_split(i, X, Y, nfolds=10, val_folds=1):
     '''
     Splits X and Y in a training and validation set according to k fold cross validation algorithm
@@ -998,8 +764,8 @@ def k_fold_cross_val_split(i, X, Y, nfolds=10, val_folds=1):
         Y_tr = Y[upper:lower]
     return X_tr, Y_tr, X_va, Y_va
 
-@execution_time
-@indent_stdout
+@ut.execution_time
+@ut.indent_stdout
 def k_fold_cross_val(folder, X, Y, create_model_kwargs, load_from='last', nfolds=10, val_folds=1, u=1,
                      fullmetrics=True, training_epochs=40, training_epochs_tl=10, lr=1e-4, batch_size=1024, **kwargs):
     '''
@@ -1137,8 +903,8 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, load_from='last', nfolds
 
 
 ########## PUTTING THE PIECES TOGETHER ###########
-@execution_time
-@indent_stdout
+@ut.execution_time
+@ut.indent_stdout
 def prepare_data(load_data_kwargs, make_XY_kwargs, roll_X_kwargs, premix_seed=0, nfolds=10):
     '''
     Combines all the steps from loading the data to the creation of X and Y
@@ -1185,7 +951,7 @@ def prepare_data(load_data_kwargs, make_XY_kwargs, roll_X_kwargs, premix_seed=0,
     Y = Y[balance_permutation]
     tot_permutation = balance_permutation
     if premix_seed is not None:
-        tot_permutation = compose_permutations([premix_permutation, tot_permutation])
+        tot_permutation = ut.compose_permutations([premix_permutation, tot_permutation])
     X = X[tot_permutation]
     print(f'Mixing completed in {ef.pretty_time(time.time() - start_time)}\n')
 
@@ -1258,10 +1024,10 @@ if __name__ == '__main__':
             
             # config file
             d = build_config_dict([run])
-            dict2json(d,f'{folder}/config.json')
+            ut.dict2json(d,f'{folder}/config.json')
 
             # runs file
-            dict2json({},f'{folder}/runs.json')
+            ut.dict2json({},f'{folder}/runs.json')
 
             exit(0)
         else:
@@ -1271,8 +1037,8 @@ if __name__ == '__main__':
     # if there is a lock, the previous block of code would have ended the run, so the code below is executed only if there is no lock
     
     # load config file
-    config_dict = json2dict('config.json')
-    config_dict_flat = collapse_dict(config_dict)
+    config_dict = ut.json2dict('config.json')
+    config_dict_flat = ut.collapse_dict(config_dict)
     print(f'{config_dict = }')
 
     # parse command line arguments
@@ -1304,7 +1070,7 @@ if __name__ == '__main__':
             arg_dict[key] = value
 
     # get run number
-    runs = json2dict('runs.json')
+    runs = ut.json2dict('runs.json')
     run_id = len(runs)
 
     folder = f'{run_id}__'
@@ -1315,24 +1081,24 @@ if __name__ == '__main__':
     runs[run_id] = {'name': folder, 'args': arg_dict}
 
     # set the arguments provided into the nested dictionaries
-    run_kwargs = set_values_recursive(config_dict['run'], arg_dict)
+    run_kwargs = ut.set_values_recursive(config_dict['run'], arg_dict)
     print(f'{run_kwargs = }')
 
     runs[run_id]['status'] = 'RUNNING'
-    runs[run_id]['start_time'] = now()
-    dict2json(runs, 'runs.json')
+    runs[run_id]['start_time'] = ut.now()
+    ut.dict2json(runs, 'runs.json')
     try:
         run(folder, **run_kwargs)
     except Exception as e:
-        runs = dict2json('runs.json')
+        runs = ut.dict2json('runs.json')
         runs[run_id]['status'] = 'FAILED'
-        runs[run_id]['end_time'] = now()
-        dict2json(runs,'runs.json')
+        runs[run_id]['end_time'] = ut.now()
+        ut.dict2json(runs,'runs.json')
         raise e
 
-    runs = dict2json('runs.json')
+    runs = ut.dict2json('runs.json')
     runs[run_id]['status'] = 'COMPLETED'
-    runs[run_id]['end_time'] = now()
-    dict2json(runs,'runs.json')
+    runs[run_id]['end_time'] = ut.now()
+    ut.dict2json(runs,'runs.json')
 
     print('\n\nrun completed!!!\n\n')
