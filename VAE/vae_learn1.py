@@ -19,13 +19,13 @@ def PrepareParameters(creation):
     print("==Preparing Parameters==")
     WEIGHTS_FOLDER = './models/'
     
-    RESCALE_TYPE = 'rescale' #'nomralize'
-    Z_DIM = 16 #8 #256 # Dimension of the latent vector (z)
+    RESCALE_TYPE =  'rescale' # 'nomralize' # 
+    Z_DIM = 4 #8 #16 #256 # Dimension of the latent vector (z)
     BATCH_SIZE = 128#512
     LEARNING_RATE = 1e-3#5e-4# 1e-3#5e-6
     N_EPOCHS = 20#600#200
-    SET_YEARS = range(1000) # the set of years that variational autoencoder sees
-    SET_YEARS_LABEL = 'range1000'
+    SET_YEARS = range(8000) # the set of years that variational autoencoder sees
+    SET_YEARS_LABEL = 'range8000'
     K1 = 0.9 # 1#100
     K2 = 0.1 #1
     
