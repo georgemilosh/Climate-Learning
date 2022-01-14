@@ -35,6 +35,8 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import confusion_matrix
 from skimage.transform import resize
 
+from utilities import pretty_time
+
 
 global plotter
 plotter = None
@@ -82,29 +84,6 @@ def setup_plotter():
     return False
             
 setup_plotter()
-
-def pretty_time(t):
-    '''
-    Takes a time in seconds and returns it in a string with the format <hours> h <minutes> min <seconds> s
-
-    Examples:
-    ---------
-    >>> pretty_time(124)
-    '2 min 4.0 s'
-    >>> pretty_time(3601.4)
-    '1 h 1.4 s'
-    '''
-    h = t//3600
-    t = t - h*3600
-    m = t//60
-    s = t - m*60
-    pt = ''
-    if h > 0:
-        pt += f'{h:.0f} h '
-    if m > 0:
-        pt += f'{m:.0f} min '
-    pt += f'{s:.1f} s'
-    return pt
 
 
 # Definition des fonctions
