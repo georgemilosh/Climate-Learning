@@ -4,8 +4,9 @@
 # @author: Alessandro Lovo
 # '''
 '''
-
+Set of general purpose functions
 '''
+
 # import libraries
 import numpy as np
 import sys
@@ -13,6 +14,7 @@ from functools import wraps
 import time
 from datetime import datetime
 import json
+import logging
 
 ######## time formatting ##########
 def now():
@@ -44,6 +46,8 @@ def pretty_time(t):
     pt += f'{s:.1f} s'
     return pt
 
+default_formatter = logging.Formatter('%(asctime)s %(message)s', datefmt='%m/%d/%Y %H:%M:%S')
+
 ###### function decorators for logging ###
 class Indenter():
     '''
@@ -56,8 +60,8 @@ class Indenter():
     # do your stuff
     sys.stdout = old_stdout # restore old output system
     '''
-    def __init__(self):
-        self.terminal = sys.stdout
+    def __init__(self, terminal=sys.stdout):
+        self.terminal = terminal
     def write(self, message):
         if message == '\n'*len(message):
             self.terminal.write(message)
@@ -95,6 +99,42 @@ def execution_time(func):
         print(f'{func.__name__}: completed in {pretty_time(time.time() - start_time)}')
         return r
     return wrapper
+
+#### TELEGRAM LOGGER ####
+
+def new_telegram_handler(chat_ID=None, token=None, level=logging.WARNING, formatter=default_formatter, **kwargs):
+    '''
+    Creates a telegram handler object
+
+    Parameters:
+    -----------
+        chat_ID : int or None, optional
+            chat ID of the telegram user or group to whom send the logs. If None it is the last used.
+            To find your chat ID go to telegram and search for 'userinfobot' and type '/start'. The bot will provide you with your chat ID.
+            You can do the same with a telegram group, and, in this case, you will need to invite 'autoJASCObot' to the group.
+            The default is None.
+        token: str, token for the telegram bot or path to a text file where the first line is the token
+        level : logging level: int or logging.(NOTSET, DEBUG, INFO, WARNING, ERROR, CRITICAL), optional
+            The default is logging.WARNING.
+        formatter : logging.Formatter, optional
+            The formatter used to log the messages. The default is default_formatter.
+        **kwargs: additional arguments for telegram_handler.handlers.TelegramHandler
+
+    Returns:
+    --------
+        th: TelegramHandler object
+    '''
+    import telegram_handler # NOTE: to install this package run pip install python-telegram-handler
+    try:
+        with open(token, 'r') as token_file:
+            token = token_file.readline().rstrip('\n')
+    except FileNotFoundError:
+        pass
+    th = telegram_handler.handlers.TelegramHandler(token=token, chat_id=chat_ID, **kwargs)
+    th.setFormatter(formatter)
+    th.setLevel(level)
+    return th
+
 
 ########## ARGUMENT PARSING ####################
 
