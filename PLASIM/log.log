@@ -1,0 +1,10 @@
+	WARNING:root:hi
+	
+	WARNING:root:bulb
+	WARNING:root:bla
+CRITICAL:root:before
+	WARNING:root:hi
+	
+	WARNING:root:bulb
+	WARNING:root:bla
+CRITICAL:root:after

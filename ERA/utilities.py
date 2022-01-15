@@ -8,6 +8,10 @@ Set of general purpose functions
 '''
 
 # import libraries
+from curses import wrapper
+import enum
+from inspect import indentsize
+from os import terminal_size
 import numpy as np
 import sys
 from functools import wraps
@@ -49,43 +53,54 @@ def pretty_time(t):
 default_formatter = logging.Formatter('%(asctime)s %(message)s', datefmt='%m/%d/%Y %H:%M:%S')
 
 ###### function decorators for logging ###
-class Indenter():
-    '''
-    Indents the output of `print` statements.
+def indent_write(write):
+    @wraps(write)
+    def wrapper(message):
+        message = ('\t'+'\n\t'.join(message[:-1].split('\n')) + message[-1])
+        return write(message)
+    return wrapper
 
-    Usage:
-    ------
-    old_stdout = sys.stdout
-    sys.stdout = Indenter()
-    # do your stuff
-    sys.stdout = old_stdout # restore old output system
-    '''
-    def __init__(self, terminal=sys.stdout):
-        self.terminal = terminal
-    def write(self, message):
-        if message == '\n'*len(message):
-            self.terminal.write(message)
-        else:
-            self.terminal.write('\t'+'\n\t'.join(message.split('\n')))
-    def flush(self):
-        pass
+def indent(*streams):
+    def wrapper_outer(func):
+        @wraps(func)
+        def wrapper_inner(*args, **kwargs):
+            # save old write and emit functions
+            old_write = [stream.write if hasattr(stream, 'write') else None for stream in streams]
+            # indent write and emit functions
+            for i,stream in enumerate(streams):
+                if old_write[i] is not None:
+                    stream.write = indent_write(stream.write)
+
+            try:
+                r = func(*args, **kwargs)
+            except Exception as e:
+                # restore original functions
+                for i,stream in enumerate(streams):
+                    if old_write[i] is not None:
+                        stream.write = old_write[i]
+                raise e
+            
+            # restore original functions
+            for i,stream in enumerate(streams):
+                if old_write[i] is not None:
+                    stream.write = old_write[i]
+            return r
+        return wrapper_inner
+    return wrapper_outer
+
+def indent_logger(logger=None):
+    if logger is None:
+        logger = logging.getLogger()
+    if isinstance(logger, str):
+        logger = logging.getLogger(logger)
+    return indent(*[h.stream for h in logger.handlers])
 
 def indent_stdout(func):
     '''
     Indents the output produced by a function
     '''
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        old_std_out = sys.stdout
-        sys.stdout = Indenter()
-        try:
-            r = func(*args, **kwargs)
-        except Exception as e:
-            sys.stdout = old_std_out
-            raise e
-        sys.stdout = old_std_out
-        return r
-    return wrapper
+    return indent(sys.stdout)
+                
 
 def execution_time(func):
     '''
