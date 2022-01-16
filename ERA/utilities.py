@@ -130,20 +130,13 @@ def indent(*streams):
             for i,stream in enumerate(streams):
                 if old_write[i] is not None:
                     stream.write = indent_write(stream.write)
-
             try:
                 r = func(*args, **kwargs)
-            except Exception as e:
+            finally:
                 # restore original functions
                 for i,stream in enumerate(streams):
                     if old_write[i] is not None:
                         stream.write = old_write[i]
-                raise e
-            
-            # restore original functions
-            for i,stream in enumerate(streams):
-                if old_write[i] is not None:
-                    stream.write = old_write[i]
             return r
         return wrapper_inner
     return wrapper_outer
