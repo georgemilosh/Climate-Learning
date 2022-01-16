@@ -4,15 +4,21 @@
 # @author: Alessandro Lovo
 # '''
 '''
-
+Set of general purpose functions
 '''
+
 # import libraries
+from curses import wrapper
+import enum
+from inspect import indentsize
+from os import terminal_size
 import numpy as np
 import sys
 from functools import wraps
 import time
 from datetime import datetime
 import json
+import logging
 
 ######## time formatting ##########
 def now():
@@ -44,44 +50,57 @@ def pretty_time(t):
     pt += f'{s:.1f} s'
     return pt
 
-###### function decorators for logging ###
-class Indenter():
-    '''
-    Indents the output of `print` statements.
+default_formatter = logging.Formatter('%(asctime)s %(message)s', datefmt='%m/%d/%Y %H:%M:%S')
 
-    Usage:
-    ------
-    old_stdout = sys.stdout
-    sys.stdout = Indenter()
-    # do your stuff
-    sys.stdout = old_stdout # restore old output system
-    '''
-    def __init__(self):
-        self.terminal = sys.stdout
-    def write(self, message):
-        if message == '\n'*len(message):
-            self.terminal.write(message)
-        else:
-            self.terminal.write('\t'+'\n\t'.join(message.split('\n')))
-    def flush(self):
-        pass
+###### function decorators for logging ###
+def indent_write(write):
+    @wraps(write)
+    def wrapper(message):
+        message = ('\t'+'\n\t'.join(message[:-1].split('\n')) + message[-1])
+        return write(message)
+    return wrapper
+
+def indent(*streams):
+    def wrapper_outer(func):
+        @wraps(func)
+        def wrapper_inner(*args, **kwargs):
+            # save old write and emit functions
+            old_write = [stream.write if hasattr(stream, 'write') else None for stream in streams]
+            # indent write and emit functions
+            for i,stream in enumerate(streams):
+                if old_write[i] is not None:
+                    stream.write = indent_write(stream.write)
+
+            try:
+                r = func(*args, **kwargs)
+            except Exception as e:
+                # restore original functions
+                for i,stream in enumerate(streams):
+                    if old_write[i] is not None:
+                        stream.write = old_write[i]
+                raise e
+            
+            # restore original functions
+            for i,stream in enumerate(streams):
+                if old_write[i] is not None:
+                    stream.write = old_write[i]
+            return r
+        return wrapper_inner
+    return wrapper_outer
+
+def indent_logger(logger=None):
+    if logger is None:
+        logger = logging.getLogger()
+    if isinstance(logger, str):
+        logger = logging.getLogger(logger)
+    return indent(*[h.stream for h in logger.handlers])
 
 def indent_stdout(func):
     '''
     Indents the output produced by a function
     '''
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        old_std_out = sys.stdout
-        sys.stdout = Indenter()
-        try:
-            r = func(*args, **kwargs)
-        except Exception as e:
-            sys.stdout = old_std_out
-            raise e
-        sys.stdout = old_std_out
-        return r
-    return wrapper
+    return indent(sys.stdout)
+                
 
 def execution_time(func):
     '''
@@ -95,6 +114,42 @@ def execution_time(func):
         print(f'{func.__name__}: completed in {pretty_time(time.time() - start_time)}')
         return r
     return wrapper
+
+#### TELEGRAM LOGGER ####
+
+def new_telegram_handler(chat_ID=None, token=None, level=logging.WARNING, formatter=default_formatter, **kwargs):
+    '''
+    Creates a telegram handler object
+
+    Parameters:
+    -----------
+        chat_ID : int or None, optional
+            chat ID of the telegram user or group to whom send the logs. If None it is the last used.
+            To find your chat ID go to telegram and search for 'userinfobot' and type '/start'. The bot will provide you with your chat ID.
+            You can do the same with a telegram group, and, in this case, you will need to invite 'autoJASCObot' to the group.
+            The default is None.
+        token: str, token for the telegram bot or path to a text file where the first line is the token
+        level : logging level: int or logging.(NOTSET, DEBUG, INFO, WARNING, ERROR, CRITICAL), optional
+            The default is logging.WARNING.
+        formatter : logging.Formatter, optional
+            The formatter used to log the messages. The default is default_formatter.
+        **kwargs: additional arguments for telegram_handler.handlers.TelegramHandler
+
+    Returns:
+    --------
+        th: TelegramHandler object
+    '''
+    import telegram_handler # NOTE: to install this package run pip install python-telegram-handler
+    try:
+        with open(token, 'r') as token_file:
+            token = token_file.readline().rstrip('\n')
+    except FileNotFoundError:
+        pass
+    th = telegram_handler.handlers.TelegramHandler(token=token, chat_id=chat_ID, **kwargs)
+    th.setFormatter(formatter)
+    th.setLevel(level)
+    return th
+
 
 ########## ARGUMENT PARSING ####################
 
