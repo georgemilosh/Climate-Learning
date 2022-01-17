@@ -142,6 +142,23 @@ def build_config_dict(functions):
         d[f_name] = get_default_params(f, recursive=True)
     return d
 
+def check_config_dict(config_dict):
+    '''
+    Checks that the confic dict is consistent
+
+    Raises:
+    -------
+        KeyError: if the config dictionary is inconsistent.
+    '''
+    config_dict_flat = ut.collapse_dict(config_dict) # in itself this checks for multiple values for the same key
+    found = False
+    for field_name in config_dict_flat['fields']:
+        if field_name.startswith(config_dict_flat['label_field']):
+            found = True
+            break
+    if not found:
+        raise KeyError(f"field {config_dict_flat['label_field']} is not a loaded field")
+
 def parse_run_name(run_name):
     '''
     Parses a string into a dictionary
@@ -256,7 +273,6 @@ def move_to_folder(folder):
 
     # copy other files in the same directory as this one
     path_to_here = path_to_here.parent
-    # shutil.copy(path_to_here / 'config', folder)   # GM: a leftover to be suppressed?
 
     # copy useful files from ../ERA/ to folder/ERA/
     path_to_here = path_to_here.parent / 'ERA'
@@ -909,35 +925,25 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, load_from='last', nfolds
 ########## PUTTING THE PIECES TOGETHER ###########
 @ut.execution_time
 @ut.indent_stdout
-def prepare_data(load_data_kwargs, make_XY_kwargs, roll_X_kwargs, premix_seed=0, nfolds=10):
+def prepare_XY(fields, make_XY_kwargs, roll_X_kwargs, premix_seed=0, nfolds=10, flatten_time_axis=True):
     '''
-    Combines all the steps from loading the data to the creation of X and Y
+    Performs all operations to extract from the fields X and Y ready to be fed to the neural network.
 
     Parameters:
     -----------
-        load_data_kwargs: dict, arguments to pass to the function `load_data`
+        fields: dict of ef.Plasim_Field objects
         make_XY_kwargs: dict, arguments to pass to the function `make_XY`
         roll_X_kwargs: dict, arguments to pass to the function `roll_X`
         premix_seed: int, seed for premixing. If None premixing is skipped
         nfolds: int, necessary for balancing folds
+        flatten_time_axis: bool, whether to flatten the time axis consisting of years and days
 
     Returns:
     --------
-        X: np.ndarray with shape (years, days, lat, lon, fields), data
-        Y: np.ndarray with shape (years, days), labels
+        X: np.ndarray with shape, data. If flatten_time_axis with shape (days, lat, lon, fields), else (years, days, lat, lon, fields)
+        Y: np.ndarray with shape, labels. If flatten_time_axis with shape (days,), else (years, days)
         tot_permutation: np.ndarray with shape (years,), final permutaion of the years that reproduces X and Y once applied to the just loaded data
     '''
-    # load data
-    found = False
-    for field_name in load_data_kwargs['fields']:
-        if field_name.startswith(make_XY_kwargs['label_field']):
-            found = True
-            break
-    if not found:
-        raise KeyError(f"field {make_XY_kwargs['label_field']} is not a loaded field")
-
-    fields = load_data(**load_data_kwargs)
-
     X,Y = make_XY(fields, **make_XY_kwargs)
     
     # move greenwich_meridian
@@ -958,8 +964,36 @@ def prepare_data(load_data_kwargs, make_XY_kwargs, roll_X_kwargs, premix_seed=0,
         tot_permutation = ut.compose_permutations([premix_permutation, tot_permutation])
     X = X[tot_permutation]
     print(f'Mixing completed in {ef.pretty_time(time.time() - start_time)}\n')
+    print(f'{X.shape = }, {Y.shape = }')
+
+    if flatten_time_axis:
+        X = X.reshape((X.shape[0]*X.shape[1],*X.shape[2:]))
+        Y = Y.reshape((Y.shape[0]*Y.shape[1]))
+        print(f'Flattened time: {X.shape = }, {Y.shape = }')
 
     return X, Y, tot_permutation
+
+
+@ut.execution_time
+@ut.indent_stdout
+def prepare_data(load_data_kwargs, prepare_XY_kwargs):
+    '''
+    Combines all the steps from loading the data to the creation of X and Y
+
+    Parameters:
+    -----------
+        load_data_kwargs: dict, arguments to pass to the function `load_data`
+        
+    Returns:
+    --------
+        X: np.ndarray with shape (years, days, lat, lon, fields), data
+        Y: np.ndarray with shape (years, days), labels
+        tot_permutation: np.ndarray with shape (years,), final permutaion of the years that reproduces X and Y once applied to the just loaded data
+    '''
+    # load data
+    fields = load_data(**load_data_kwargs)
+
+    return prepare_XY(fields, **prepare_XY_kwargs)
 
 
 def run(folder, prepare_data_kwargs, k_fold_cross_val_kwargs):
@@ -1016,25 +1050,94 @@ def run(folder, prepare_data_kwargs, k_fold_cross_val_kwargs):
 
 # NOTE: this is still pseudo-code
 class Trainer():
-    def __init__(self, config_file):
+    def __init__(self):
         # load config file and parse arguments
+        self.config_dict = ut.json2dict('config.json')
+        
+        self.fields = None
+        self.X = None
+        self.Y = None
+        self.year_permutation = None
+
+        # extract default arguments for each function
+        self.default_load_data_kwargs = ut.extract_nested(self.config_dict, 'load_data_kwargs')
+        self.default_prepare_XY_kwargs = ut.extract_nested(self.config_dict, 'prepare_XY_kwargs')
+        self.default_k_fold_cross_val_kwargs = ut.extract_nested(self.config_dict, 'k_fold_cross_val_kwargs')
 
         # setup last evaluation arguments
         self._load_data_kwargs = None
-        self._create_model_kwargs = None
+        self._prepare_XY_kwargs = None
+
+        # check tf version and GPUs
+        print(f"{tf.__version__ = }")
+        if int(tf.__version__[0]) < 2:
+            print(f"{tf.test.is_gpu_available() = }")
+            GPU = tf.test.is_gpu_available()
+        else:
+            print(f"{tf.config.list_physical_devices('GPU') = }")
+            GPU = len(tf.config.list_physical_devices('GPU'))
+        if not GPU:
+            warnings.warn('\nThis machine does not have a GPU: training may be very slow\n')
 
     def run(self, **kwargs):
-        # parse arguments
+        '''
+        Here kwargs can be iterables. This function schedules several runs and calls on each of them `self._run`
+        '''
+        # TODO
 
-        # do the runs
-        for load_data_kwargs in _:
-            fields = load_data(**load_data_kwargs)
+    def _run(self, **kwargs):
+        '''
+        Performs a single run, kwargs are not interpreted as iterables
+        '''
+        # get run number
+        runs = ut.json2dict('runs.json')
+        run_id = len(runs)
 
-            for build_XY_kwargs in _:
-                X, Y = build_XY(fields, **build_XY_kwargs)
+        folder = f'{run_id}__'
+        for k in sorted(arg_dict):
+            folder += f'{k}_{arg_dict[k]}__'
+        folder = folder[:-2] # remove the last '__'
+        print(f'{folder = }')
+        os.mkdir(folder)
 
-                for k_fold_cross_val_kwargs in _:
-                    k_fold_cross_val(folder, X, Y, **k_fold_cross_val)
+        runs[run_id] = {'name': folder, 'args': arg_dict, 'status': 'RUNNING', 'start_time': ut.now()}
+        ut.dict2json(runs, 'runs.json')
+
+        # TODO setup logger here
+
+        try:
+            # load the fields
+            load_data_kwargs = ut.set_values_recursive(self.default_load_data_kwargs, kwargs)
+            if self._load_data_kwargs != load_data_kwargs:
+                self._load_data_kwargs = load_data_kwargs
+                self.fields = load_data(load_data_kwargs)
+
+            # prepare XY
+            prepare_XY_kwargs = ut.set_values_recursive(self.default_prepare_XY_kwargs, kwargs)
+            if self._prepare_XY_kwargs != prepare_XY_kwargs:
+                self._prepare_XY_kwargs = prepare_XY_kwargs
+                self.X, self.Y, self.year_permutation = prepare_XY(**prepare_XY_kwargs)
+            np.save(f'{folder}/year_permutation.npy',self.year_permutation)
+
+            # do kfold
+            k_fold_cross_val_kwargs = ut.set_values_recursive(self.default_k_fold_cross_val_kwargs, kwargs)
+            k_fold_cross_val(folder, self.X, self.Y, **k_fold_cross_val_kwargs)
+
+        except Exception as e:
+            runs = ut.dict2json('runs.json')
+            runs[run_id]['status'] = 'FAILED'
+            runs[run_id]['end_time'] = ut.now()
+            ut.dict2json(runs,'runs.json')
+            raise RuntimeError('Run failed') from e
+
+        runs = ut.dict2json('runs.json')
+        runs[run_id]['status'] = 'COMPLETED'
+        runs[run_id]['end_time'] = ut.now()
+        ut.dict2json(runs,'runs.json')
+
+        print('\n\nrun completed!!!\n\n')
+
+        
 
 
     

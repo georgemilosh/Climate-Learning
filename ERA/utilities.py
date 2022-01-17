@@ -335,24 +335,78 @@ def collapse_dict(d_nested, d_flat=None):
             d_flat[k] = v
     return d_flat
 
-def set_values_recursive(d_nested, d_flat):
+def extract_nested(d_nested, key):
     '''
-    Given a nested dictionary `d_nested` replaces its values at any level of indentation according according to the ones in `d_flat`.
+    Method to access items in a nested dictionary
+
+    Parameters:
+    -----------
+        d_nested: nested dictionary
+        key: str
+    
+    Raises:
+    -------
+        KeyError: if `key` is not a key of `d_nested` or the dictionaries inside it at every nested level
+    
+    Returns:
+    --------
+        The value corresponding to `key` at the highest hierarchical level
+
+    Examples:
+    ---------
+    >>> d = {'a': 10, 'b': {'z': 1, 'w': {'q': 20}}}
+    >>> extract_nested(d, 'a')
+    10
+    >>> extract_nested(d, 'b')
+    {'z': 1, 'w': {'q': 20}}
+    >>> extract_nested(d, 'q')
+    20
+    '''
+    try: 
+        return d_nested[key]
+    except KeyError:
+        for v in d_nested.values():
+            if isinstance(v, dict):
+                try:
+                    return extract_nested(v, key)
+                except KeyError:
+                    continue
+        raise KeyError(f'{key} is not a valid key')
+
+
+def set_values_recursive(d_nested, d_flat, inplace=False):
+    '''
+    Given a nested dictionary `d_nested` replaces its values at any level of indentation according to the ones in `d_flat`.
+    keys in `d_flat` that do not appear in `d_nested` are ignored.
+    If `inplace`, `d_nested` is modified and returned, otherwise a copy is returned (i.e. the variable `d_nested` keeps its original value)
 
     Example:
     --------
-    >>> set_values_recursive({'a': 10, 'b': {'a': 10, 'c': 8}}, {'a': 'hello'})
+    >>> d = {'a': 10, 'b': {'a': 10, 'c': 8}}
+    >>> set_values_recursive(d, {'a': 'hello', 'z': 42}, inplace=True)
     {'a': 'hello', 'b': {'a': 'hello', 'c': 8}}
+    >>> d
+    {'a': 'hello', 'b': {'a': 'hello', 'c': 8}}
+    >>> d = {'a': 10, 'b': {'a': 10, 'c': 8}}
+    >>> set_values_recursive(d, {'a': 'hello', 'z': 42}, inplace=False)
+    {'a': 'hello', 'b': {'a': 'hello', 'c': 8}}
+    >>> d
+    {'a': 10, 'b': {'a': 10, 'c': 8}}
     '''
     if len(d_flat) == 0:
         return d_nested
+    
+    if inplace:
+        d_n = d_nested
+    else:
+        d_n = d_nested.copy()
 
-    for k,v in d_nested.items():
+    for k,v in d_n.items():
         if isinstance(v, dict):
-            d_nested[k] = set_values_recursive(v, d_flat)
+            d_n[k] = set_values_recursive(v, d_flat, inplace=inplace)
         elif k in d_flat:
-            d_nested[k] = d_flat[k]
-    return d_nested
+            d_n[k] = d_flat[k]
+    return d_n
 
 #### PERMUTATIONS ####
 
