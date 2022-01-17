@@ -14,8 +14,7 @@ First you need to move the code to a desired folder by running
 
 This will copy this code and its dependencies to your desired location and will create a config file from the default values in the functions specified in this module.
 
-`cd` into your folder and have a look at the config file, modify all the parameters you want BEFORE the first run, but AFTER you run the code DO NOT MODIFY the config file.
-# GM: Maybe we can set a read-only property to the config file?
+`cd` into your folder and have a look at the config file, modify all the parameters you want BEFORE the first run, but AFTER the first successful run the config file becomes read-only. There is a reason for it, so don't try to modify it anyways!
 
 The config file will store the default values for the arguments of the functions.
 
@@ -35,9 +34,9 @@ Invalid syntaxes are:
 ### IMPORT LIBRARIES #####
 
 ## general purpose
-import enum
 import os as os
 from pathlib import Path
+from stat import S_IREAD
 import sys
 import warnings
 import time
@@ -1186,6 +1185,8 @@ class Trainer():
         ut.dict2json(runs, 'runs.json')
 
         # TODO setup logger here
+        old_stdout = sys.stdout
+        sys.stdout = ef.Logger(f'{folder}/')
 
         try:
             # load the fields
@@ -1205,19 +1206,27 @@ class Trainer():
             k_fold_cross_val_kwargs = ut.set_values_recursive(self.default_k_fold_cross_val_kwargs, kwargs)
             k_fold_cross_val(folder, self.X, self.Y, **k_fold_cross_val_kwargs)
 
+            runs = ut.json2dict('runs.json')
+            runs[run_id]['status'] = 'COMPLETED'
+            print('\n\nrun completed!!!\n\n')
+
+            # make the config file read only after the first successful run
+            if os.access('config.json', os.W_OK): # the file is writeable
+                os.chmod('config.json', S_IREAD)
+
         except Exception as e:
             runs = ut.json2dict('runs.json')
             runs[run_id]['status'] = 'FAILED'
-            runs[run_id]['end_time'] = ut.now()
-            ut.dict2json(runs,'runs.json')
             raise RuntimeError('Run failed') from e
 
-        runs = ut.json2dict('runs.json')
-        runs[run_id]['status'] = 'COMPLETED'
-        runs[run_id]['end_time'] = ut.now()
-        ut.dict2json(runs,'runs.json')
+        finally:
+            sys.stdout = old_stdout
+            runs[run_id]['end_time'] = ut.now()
+            ut.dict2json(runs,'runs.json')
 
-        print('\n\nrun completed!!!\n\n')
+        
+
+        
 
         
 
