@@ -155,7 +155,7 @@ def indent_stdout(func):
     '''
     Indents the stdout output produced by a function
     '''
-    return indent(sys.stdout)
+    return indent(sys.stdout)(func)
 
 ## execution time    
 

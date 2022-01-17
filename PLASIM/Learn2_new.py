@@ -41,6 +41,7 @@ Invalid syntaxes are:
 ### IMPORT LIBRARIES #####
 
 ## general purpose
+import enum
 import os as os
 from pathlib import Path
 import sys
@@ -52,6 +53,7 @@ import psutil
 import numpy as np
 import inspect
 from functools import wraps
+import ast
 
 ## user defined modules
 this_module = sys.modules[__name__]
@@ -118,7 +120,7 @@ def get_default_params(func, recursive=False):
         k:v.default for k,v in s.parameters.items()
         if v.default is not inspect.Parameter.empty
     }
-    if recursive: # look for parameters ending in '_kwagrs' and extract further default arguments
+    if recursive: # look for parameters ending in '_kwargs' and extract further default arguments
         possible_other_params = [k for k,v in s.parameters.items() if (v.default is inspect.Parameter.empty and k.endswith('_kwargs'))]
         for k in possible_other_params:
             func_name = k.rsplit('_',1)[0] # remove '_kwargs'
@@ -158,14 +160,18 @@ def check_config_dict(config_dict):
     -------
         KeyError: if the config dictionary is inconsistent.
     '''
-    config_dict_flat = ut.collapse_dict(config_dict) # in itself this checks for multiple values for the same key
-    found = False
-    for field_name in config_dict_flat['fields']:
-        if field_name.startswith(config_dict_flat['label_field']):
-            found = True
-            break
-    if not found:
-        raise KeyError(f"field {config_dict_flat['label_field']} is not a loaded field")
+    try:
+        config_dict_flat = ut.collapse_dict(config_dict) # in itself this checks for multiple values for the same key
+        found = False
+        for field_name in config_dict_flat['fields']:
+            if field_name.startswith(config_dict_flat['label_field']):
+                found = True
+                break
+        if not found:
+            raise KeyError(f"field {config_dict_flat['label_field']} is not a loaded field")
+    except Exception as e:
+        raise KeyError('Invalid config dictionary') from e
+    return config_dict_flat
 
 def parse_run_name(run_name):
     '''
@@ -244,6 +250,8 @@ def get_run(load_from, current_run_name=None):
                     raise KeyError(f'No previous run has {load_from_dict}')
     else:
         raise TypeError(f'Unsupported type {type(load_from)} for load_from')
+    if runs[l]['status'] != 'COMPLETED':
+        raise ValueError(f"The run {l} (corresponding to {load_from = }) has status {runs[l]['status']}")
     run_name = runs[l]['name']
     
     if current_run_name is not None: # check for compatibility issues when loading
@@ -354,7 +362,7 @@ def load_data(dataset_years=1000, year_list=None, sampling='', Model='Plasim', a
     elif dataset_years == 8000:
         dataset_suffix = '_LONG'
     else:
-        raise ValueError('Invalid number of dataset years')
+        raise ValueError(f'Invalid number of {dataset_years = }')
    
 
     mask, cell_area, lsm = ef.ExtractAreaWithMask(mylocal,Model,area) # extract land-sea mask and multiply it by cell area
@@ -1014,6 +1022,13 @@ def run(folder, prepare_data_kwargs, k_fold_cross_val_kwargs):
         prepare_data_kwargs: dict, arguments to pass to the `prepare_data` function
         k_fold_cross_val_kwargs: dict, arguments to pass to the `k_fold_cross_val` function
     '''
+    label_field = ut.extract_nested(prepare_data_kwargs, 'label_field')
+    for field_name in prepare_data_kwargs['load_data_kwargs']['fields']:
+        if field_name.startswith(label_field):
+            found = True
+            break
+    if not found:
+        raise KeyError(f"field {label_field} is not a loaded field")
     start_time = time.time()
     folder = folder.rstrip('/')
     if not os.path.exists(folder):
@@ -1061,6 +1076,7 @@ class Trainer():
     def __init__(self):
         # load config file and parse arguments
         self.config_dict = ut.json2dict('config.json')
+        self.config_dict_flat = check_config_dict(self.config_dict)
         
         self.fields = None
         self.X = None
@@ -1076,6 +1092,8 @@ class Trainer():
         self._load_data_kwargs = None
         self._prepare_XY_kwargs = None
 
+        self.scheduled_kwargs = None
+
         # check tf version and GPUs
         print(f"{tf.__version__ = }")
         if int(tf.__version__[0]) < 2:
@@ -1087,11 +1105,71 @@ class Trainer():
         if not GPU:
             warnings.warn('\nThis machine does not have a GPU: training may be very slow\n')
 
-    def run(self, **kwargs):
+    def schedule(self, **kwargs):
         '''
         Here kwargs can be iterables. This function schedules several runs and calls on each of them `self._run`
         '''
-        # TODO
+        # TODO: set general logger and telegram logger
+
+        # detect variables over which to iterate
+        iterate_over = []
+        non_iterative_kwargs = {}
+        for k,v in kwargs.items():
+            if k not in self.config_dict_flat:
+                raise KeyError(f'Invalid argument {k}')
+            iterate = False
+            if isinstance(v, list): # possible need to iterate over the argument
+                if isinstance(self.config_dict_flat[k], list):
+                    if isinstance(v[0], list):
+                        iterate = True
+                else:
+                    iterate = True
+            if iterate:
+                iterate_over.append(k)
+            elif v != self.config_dict_flat[k]: # skip parameters already at their default value
+                non_iterative_kwargs[k] = v
+
+        # TODO: permute iterate_over to have more efficiency. The last element in iterate_over is the ones that varies faster
+        new_iterate_over = []
+        # arguments for loading fields
+        to_add = []
+        for k in iterate_over:
+            if k in self.default_load_data_kwargs:
+                to_add.append(k)
+        new_iterate_over += to_add
+        for k in to_add:
+            iterate_over.remove(k)
+        # arguments for preparing XY
+        to_add = []
+        for k in iterate_over:
+            if k in self.default_prepare_XY_kwargs:
+                to_add.append(k)
+        new_iterate_over += to_add
+        for k in to_add:
+            iterate_over.remove(k)
+        # remaining arguments
+        new_iterate_over += iterate_over
+        
+        iterate_over = new_iterate_over
+
+        iteration_values = [kwargs[k] for k in iterate_over]
+        # expand the iterations into a list
+        iteration_values = list(zip(*[m.flatten() for m in np.meshgrid(*iteration_values, indexing='ij')]))
+
+        self.scheduled_kwargs = [{**non_iterative_kwargs, **{k: l[i] for i,k in enumerate(iterate_over)}} for l in iteration_values]
+
+        if len(self.scheduled_kwargs) == 0:
+            self.scheduled_kwargs = [{}]
+            print('Scheduling 1 run at default values')
+        else:
+            print(f'Scheduled the following {len(self.scheduled_kwargs)} runs:')
+            for i,kw in enumerate(self.scheduled_kwargs):
+                print(f'{i}: {kw}')
+        
+    def run(self):
+        for kwargs in self.scheduled_kwargs:
+            self._run(**kwargs)
+
 
     def _run(self, **kwargs):
         '''
@@ -1099,16 +1177,16 @@ class Trainer():
         '''
         # get run number
         runs = ut.json2dict('runs.json')
-        run_id = len(runs)
+        run_id = str(len(runs))
 
         folder = f'{run_id}__'
-        for k in sorted(arg_dict):
-            folder += f'{k}_{arg_dict[k]}__'
+        for k in sorted(kwargs):
+            folder += f'{k}_{kwargs[k]}__'
         folder = folder[:-2] # remove the last '__'
         print(f'{folder = }')
         os.mkdir(folder)
 
-        runs[run_id] = {'name': folder, 'args': arg_dict, 'status': 'RUNNING', 'start_time': ut.now()}
+        runs[run_id] = {'name': folder, 'args': kwargs, 'status': 'RUNNING', 'start_time': ut.now()}
         ut.dict2json(runs, 'runs.json')
 
         # TODO setup logger here
@@ -1118,7 +1196,7 @@ class Trainer():
             load_data_kwargs = ut.set_values_recursive(self.default_load_data_kwargs, kwargs)
             if self._load_data_kwargs != load_data_kwargs:
                 self._load_data_kwargs = load_data_kwargs
-                self.fields = load_data(load_data_kwargs)
+                self.fields = load_data(**load_data_kwargs)
 
             # prepare XY
             prepare_XY_kwargs = ut.set_values_recursive(self.default_prepare_XY_kwargs, kwargs)
@@ -1132,13 +1210,13 @@ class Trainer():
             k_fold_cross_val(folder, self.X, self.Y, **k_fold_cross_val_kwargs)
 
         except Exception as e:
-            runs = ut.dict2json('runs.json')
+            runs = ut.json2dict('runs.json')
             runs[run_id]['status'] = 'FAILED'
             runs[run_id]['end_time'] = ut.now()
             ut.dict2json(runs,'runs.json')
             raise RuntimeError('Run failed') from e
 
-        runs = ut.dict2json('runs.json')
+        runs = ut.json2dict('runs.json')
         runs[run_id]['status'] = 'COMPLETED'
         runs[run_id]['end_time'] = ut.now()
         ut.dict2json(runs,'runs.json')
@@ -1166,7 +1244,7 @@ if __name__ == '__main__':
             
             # config file
             d = build_config_dict([run])
-            print("d = ", d) # GM: Doing some tests
+            print(f"{d = }") # GM: Doing some tests
             ut.dict2json(d,f'{folder}/config.json')
 
             # runs file
@@ -1179,14 +1257,7 @@ if __name__ == '__main__':
     
     # if there is a lock, the previous block of code would have ended the run, so the code below is executed only if there is no lock
     
-    # load config file
-    config_dict = ut.json2dict('config.json')
-    config_dict_flat = ut.collapse_dict(config_dict) # GM: flatten the dictionary
-    print(f'{config_dict = }')
-
-    
-    
-    # parse command line arguments
+    #parse command line arguments
     cl_args = sys.argv[1:]
     i = 0
     arg_dict = {}
@@ -1198,57 +1269,100 @@ if __name__ == '__main__':
         else:
             value = cl_args[i+1]
             i += 2
-        if key not in config_dict_flat:
-            raise KeyError(f'Unknown argument {key}')
         # `value` is a string. Here we try to cast it to the correct type
-        value = None if value == 'None' else value # recognize None values
-        if config_dict_flat[key] is not None:
-            try:
-                dtype = type(config_dict_flat[key])
-                value = dtype(value)
-            except:
-                print(f'Could not convert {value} to {dtype}. Keeping string type')
-        # now check if the provided value is equal to the default one
-        if value == config_dict_flat[key]:
-            print(f'Skipping given argument {key} as it is at its default value {value}')
-        else:
-            arg_dict[key] = value
+        try:
+            value = ast.literal_eval(value)
+        except:
+            print(f'Could not evaluate {value}. Keeping string type')
+        arg_dict[key] = value
 
-    print("arg_dict = ", arg_dict)
-    # get run number
-    runs = ut.json2dict('runs.json')
-    run_id = len(runs)
-    print("run_id = ", run_id)
+    # create trainer
+    trainer = Trainer()
+
+    # schedule runs
+    trainer.schedule(**arg_dict)
+
+    o = input('Start training? (Y/[n]) ')
+    if o != 'Y':
+        print('Aborting')
+        sys.exit(0)
+    
+    trainer.run()
+
+    print('\n\n\n\n\n\nALL RUNS COMPLETED\n\n')
+
+
+
+
+    ### THIS OLD CODE USES THE FUNCTION run instead of the Trainer object. Hence it is suited only for 1 run
+
+    # # load config file
+    # config_dict = ut.json2dict('config.json')
+    # config_dict_flat = ut.collapse_dict(config_dict) # GM: flatten the dictionary
+    # print(f'{config_dict = }')
+
+    
+    # # parse command line arguments
+    # cl_args = sys.argv[1:]
+    # i = 0
+    # arg_dict = {}
+    # while(i < len(cl_args)):
+    #     key = cl_args[i]
+    #     if '=' in key:
+    #         key, value = key.split('=')
+    #         i += 1
+    #     else:
+    #         value = cl_args[i+1]
+    #         i += 2
+    #     if key not in config_dict_flat:
+    #         raise KeyError(f'Unknown argument {key}')
+    #     # `value` is a string. Here we try to cast it to the correct type
+    #     if config_dict_flat[key] is not None:
+    #         try:
+    #             value = ast.literal_eval(value)
+    #         except:
+    #             print(f'Could not evaluate {value}. Keeping string type')
+    #     # now check if the provided value is equal to the default one
+    #     if value == config_dict_flat[key]:
+    #         print(f'Skipping given argument {key} as it is at its default value {value}')
+    #     else:
+    #         arg_dict[key] = value
+
+    # print("arg_dict = ", arg_dict)
+    # # get run number
+    # runs = ut.json2dict('runs.json')
+    # run_id = len(runs)
+    # print("run_id = ", run_id)
     
 
-    folder = f'{run_id}__'
-    for k in sorted(arg_dict):
-        folder += f'{k}_{arg_dict[k]}__'
-    folder = folder[:-2] # remove the last '__'
-    print(f'{folder = }')
-    runs[run_id] = {'name': folder, 'args': arg_dict}
+    # folder = f'{run_id}__'
+    # for k in sorted(arg_dict):
+    #     folder += f'{k}_{arg_dict[k]}__'
+    # folder = folder[:-2] # remove the last '__'
+    # print(f'{folder = }')
+    # runs[run_id] = {'name': folder, 'args': arg_dict}
     
-    print(f'{runs = }')
-    # set the arguments provided into the nested dictionaries
-    run_kwargs = ut.set_values_recursive(config_dict['run'], arg_dict) # GM: set the values of arg_dict to config_dict['run']
-    print(f'{run_kwargs = }')
+    # print(f'{runs = }')
+    # # set the arguments provided into the nested dictionaries
+    # run_kwargs = ut.set_values_recursive(config_dict['run'], arg_dict) # GM: set the values of arg_dict to config_dict['run']
+    # print(f'{run_kwargs = }')
 
-    runs[run_id]['status'] = 'RUNNING'
-    runs[run_id]['start_time'] = ut.now()
-    ut.dict2json(runs, 'runs.json')
+    # runs[run_id]['status'] = 'RUNNING'
+    # runs[run_id]['start_time'] = ut.now()
+    # ut.dict2json(runs, 'runs.json')
 
-    try:
-        run(folder, **run_kwargs)
-    except Exception as e:
-        runs = ut.dict2json('runs.json')
-        runs[run_id]['status'] = 'FAILED'
-        runs[run_id]['end_time'] = ut.now()
-        ut.dict2json(runs,'runs.json')
-        raise RuntimeError('Run failed') from e
+    # try:
+    #     run(folder, **run_kwargs)
+    # except Exception as e:
+    #     runs = ut.dict2json('runs.json')
+    #     runs[run_id]['status'] = 'FAILED'
+    #     runs[run_id]['end_time'] = ut.now()
+    #     ut.dict2json(runs,'runs.json')
+    #     raise RuntimeError('Run failed') from e
     
-    runs = ut.dict2json('runs.json')
-    runs[run_id]['status'] = 'COMPLETED'
-    runs[run_id]['end_time'] = ut.now()
-    ut.dict2json(runs,'runs.json')
+    # runs = ut.dict2json('runs.json')
+    # runs[run_id]['status'] = 'COMPLETED'
+    # runs[run_id]['end_time'] = ut.now()
+    # ut.dict2json(runs,'runs.json')
 
-    print('\n\nrun completed!!!\n\n')
+    # print('\n\nrun completed!!!\n\n')
