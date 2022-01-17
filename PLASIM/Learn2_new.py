@@ -29,6 +29,28 @@ Beware that arguments are parsed with spaces, so valid syntaxes are
 Invalid syntaxes are:
     python Learn2_new.py tau=5 lr = 1e-4
     python Learn2_new.py tau=5, lr=1e-4
+
+You can also provide arguments as lists, in that case the program will iterate over them. For example:
+    python Learn2_new.py tau='[0,1,2]'
+
+will perfor three runs with tau=1, tau=2, tau=3.
+
+Beware that you need to enclose the list inside a string or the terminal will complain. If you are passing a list of strings, use double apices, i.e.
+    python Learn2.py area="['France', 'Scandinavia']"
+
+If by default an argument is already a list, the provided list is not interpreted as to iterate over, for example the argument `fields` has default value ['t2m','zg500','mrso_filtered']. So running
+    python Learn2.py fields="['t2m', 'zg500']"
+
+will result in a single run performed with fields=['t2m', 'zg500']
+
+If you provide more than an argument to iterate over, all combinations will be performed, e.g.:
+    python Learn2.py fields="[['t2m'], ['t2m', 'zg500']]" tau='[1,2]'
+
+will result in 4 runs:
+    fields=['t2m'], tau=1
+    fields=['t2m'], tau=2
+    fields=['t2m', 'zg500'], tau=1
+    fields=['t2m', 'zg500'], tau=2
 '''
 
 ### IMPORT LIBRARIES #####
@@ -1193,13 +1215,14 @@ class Trainer():
             load_data_kwargs = ut.set_values_recursive(self.default_load_data_kwargs, kwargs)
             if self._load_data_kwargs != load_data_kwargs:
                 self._load_data_kwargs = load_data_kwargs
+                self._prepare_XY_kwargs = None # force the computation of prepare_XY
                 self.fields = load_data(**load_data_kwargs)
 
             # prepare XY
             prepare_XY_kwargs = ut.set_values_recursive(self.default_prepare_XY_kwargs, kwargs)
             if self._prepare_XY_kwargs != prepare_XY_kwargs:
                 self._prepare_XY_kwargs = prepare_XY_kwargs
-                self.X, self.Y, self.year_permutation = prepare_XY(**prepare_XY_kwargs)
+                self.X, self.Y, self.year_permutation = prepare_XY(self.fields, **prepare_XY_kwargs)
             np.save(f'{folder}/year_permutation.npy',self.year_permutation)
 
             # do kfold
