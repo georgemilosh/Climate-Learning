@@ -71,14 +71,10 @@ from tensorflow.keras import layers, models
 
 
 ########## USAGE ###############################
-<<<<<<< HEAD
-def usage(): # GM: define the use of this function, I guess display documentation of the file. At the moment I get the message: "The name must be a string; the optional doc argument can have any type." when I launch a simplified version of this code without most of the function defined here
-=======
-def usage(): # GM: define the use of this function, I guess display documentation of the file. At the moment I get the message: "The name must be a string; the optional doc argument can have any type." when I launch a simplified version of this code without arguments
+def usage(): 
     '''
     Returns the documentation of this module that explains how to use it.
     '''
->>>>>>> ab08e4afd37f87b1197309ae0b041c1aadcc3a79
     return this_module.__doc__
 
 #### CONFIG FILE #####
