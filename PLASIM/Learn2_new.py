@@ -71,7 +71,7 @@ from tensorflow.keras import layers, models
 
 
 ########## USAGE ###############################
-def usage(): # GM: define the use of this function, I guess display documentation of the file. At the moment I get the message: "The name must be a string; the optional doc argument can have any type." when I launch a simplified version of this code without arguments
+def usage(): # GM: define the use of this function, I guess display documentation of the file. At the moment I get the message: "The name must be a string; the optional doc argument can have any type." when I launch a simplified version of this code without most of the function defined here
     return this_module.__doc__
 
 #### CONFIG FILE #####
@@ -89,7 +89,7 @@ def get_default_params(func, recursive=False):
     --------
         default_params: dict
 
-    Examples:
+    Examples:  (See: balance_folds)
     ---------
     >>> get_default_params(balance_folds)
     {'nfolds': 10, 'verbose': False}
@@ -114,7 +114,7 @@ def get_default_params(func, recursive=False):
             try:
                 default_params[k] = get_default_params(getattr(this_module, func_name), recursive=True)
             except:
-                print(f'Could not find function {func_name}')
+                print(f'From get_default_params:  Could not find function {func_name}')
     return default_params
 
 def build_config_dict(functions):
@@ -241,7 +241,7 @@ def move_to_folder(folder):
     Copies this file and its dependencies to a given folder.
     '''
     folder = Path(folder).resolve()
-    ERA_folder = folder / 'ERA'
+    ERA_folder = folder / 'ERA' # GM: container of the useful routines in a subfolder "folder/ERA". The abbreviation comes from the original routines deveoped for ERA5 reanalysis
 
     if os.path.exists(ERA_folder):
         raise FileExistsError(f'Cannot copy scripts to {folder}: you already have some there')
@@ -253,9 +253,9 @@ def move_to_folder(folder):
 
     # copy other files in the same directory as this one
     path_to_here = path_to_here.parent
-    # shutil.copy(path_to_here / 'config', folder)
+    # shutil.copy(path_to_here / 'config', folder)   # GM: a leftover to be suppressed?
 
-    # copy files in ../ERA/
+    # copy useful files from ../ERA/ to folder/ERA/
     path_to_here = path_to_here.parent / 'ERA'
     shutil.copy(path_to_here / 'cartopy_plots.py', ERA_folder)
     shutil.copy(path_to_here / 'ERA_Fields.py', ERA_folder)
@@ -443,7 +443,7 @@ def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0,
 @ut.indent_stdout
 def roll_X(X, roll_axis='lon', roll_steps=64):
     '''
-    Rolls `X` along a given axis. useful for example for moving France away from the Greenwich meridian
+    Rolls `X` along a given axis. useful for example for moving France away from the Greenwich meridian. In other words this allows one, for example, to shift the grid so that desired areas are not found at the boundary. In principle this function allows us to roll along arbitrary axis, including days or years.
 
     Parameters:
     -----------
@@ -988,7 +988,7 @@ def run(folder, prepare_data_kwargs, k_fold_cross_val_kwargs):
         print(f"{tf.config.list_physical_devices('GPU') = }")
         GPU = len(tf.config.list_physical_devices('GPU'))
     if not GPU:
-        warnings.warn('\nThis machine does not have a GPU: training will be very slow\n')
+        warnings.warn('\nThis machine does not have a GPU: training may be very slow\n')
 
     # prepare the data
     X,Y, permutation = prepare_data(**prepare_data_kwargs)
