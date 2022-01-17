@@ -1013,10 +1013,17 @@ def run(folder, prepare_data_kwargs, k_fold_cross_val_kwargs):
 
 # NOTE: this is still pseudo-code
 class Trainer():
-    def __init__(self, **kwargs):
-        pass
+    def __init__(self, config_file):
+        # load config file and parse arguments
 
-    def run(self):
+        # setup last evaluation arguments
+        self._load_data_kwargs = None
+        self._create_model_kwargs = None
+
+    def run(self, **kwargs):
+        # parse arguments
+
+        # do the runs
         for load_data_kwargs in _:
             fields = load_data(**load_data_kwargs)
 
@@ -1082,7 +1089,7 @@ if __name__ == '__main__':
             try:
                 dtype = type(config_dict_flat[key])
                 value = dtype(value)
-            except Exception:
+            except:
                 print(f'Could not convert {value} to {dtype}. Keeping string type')
         # now check if the provided value is equal to the default one
         if value == config_dict_flat[key]:
@@ -1115,7 +1122,7 @@ if __name__ == '__main__':
         runs[run_id]['status'] = 'FAILED'
         runs[run_id]['end_time'] = ut.now()
         ut.dict2json(runs,'runs.json')
-        raise e
+        raise RuntimeError('Run failed') from e
 
     runs = ut.dict2json('runs.json')
     runs[run_id]['status'] = 'COMPLETED'

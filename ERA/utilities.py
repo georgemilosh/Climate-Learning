@@ -53,7 +53,28 @@ def pretty_time(t):
 default_formatter = logging.Formatter('%(asctime)s %(message)s', datefmt='%m/%d/%Y %H:%M:%S')
 
 ###### function decorators for logging ###
+
+## indenting ####
+
 def indent_write(write):
+    '''
+    decorator for a function that writes to a stream, e.g. sys.stdout or a file. Indents the message.
+
+    Examples:
+    ---------
+    >>> def test():
+    ...     print('before')
+    ...     old_write = sys.stdout.write
+    ...     sys.stdout.write = indent_write(sys.stdout.write)
+    ...     print('Hello!')
+    ...     sys.stdout.write = old_write
+    ...     print('after')
+
+    Will give output
+    before
+        Hello!
+    after
+    '''
     @wraps(write)
     def wrapper(message):
         message = ('\t'+'\n\t'.join(message[:-1].split('\n')) + message[-1])
@@ -61,6 +82,45 @@ def indent_write(write):
     return wrapper
 
 def indent(*streams):
+    '''
+    Returns a decorator that indents the output produced by the decorated function on the streams provided
+
+    Examples:
+    ---------
+    >>> @indent(sys.stdout)
+    ... def show(a=0):
+    ...     print(f'{a = }')
+    >>> def test(a=0):
+    ...     print('before')
+    ...     show(a)
+    ...     print('after')
+    
+    When running `test(24)` you will get
+    before
+        a = 24
+    after
+
+    Indentation can be chained
+
+    >>> @indent(sys.stdout)
+    ... def test_innner(a=0):
+    ...     print('before inner')
+    ...     show(a)
+    ...     print('after inner')
+    >>> def test_outer(a=0):
+    ...     print('before outer')
+    ...     test_inner(a)
+    ...     print('after outer')
+
+    test_outer(24) will give
+    before outer
+        before inner
+            a = 24
+        after inner
+    after outer
+
+    You can also indent a handler `h` of the logging module by creating a decorator @indent(h.stream)
+    '''
     def wrapper_outer(func):
         @wraps(func)
         def wrapper_inner(*args, **kwargs):
@@ -70,25 +130,21 @@ def indent(*streams):
             for i,stream in enumerate(streams):
                 if old_write[i] is not None:
                     stream.write = indent_write(stream.write)
-
             try:
                 r = func(*args, **kwargs)
-            except Exception as e:
+            finally:
                 # restore original functions
                 for i,stream in enumerate(streams):
                     if old_write[i] is not None:
                         stream.write = old_write[i]
-                raise e
-            
-            # restore original functions
-            for i,stream in enumerate(streams):
-                if old_write[i] is not None:
-                    stream.write = old_write[i]
             return r
         return wrapper_inner
     return wrapper_outer
 
 def indent_logger(logger=None):
+    '''
+    Indents all handlers of a given logger when the decorated function is running
+    '''
     if logger is None:
         logger = logging.getLogger()
     if isinstance(logger, str):
@@ -97,10 +153,11 @@ def indent_logger(logger=None):
 
 def indent_stdout(func):
     '''
-    Indents the output produced by a function
+    Indents the stdout output produced by a function
     '''
     return indent(sys.stdout)
-                
+
+## execution time    
 
 def execution_time(func):
     '''
