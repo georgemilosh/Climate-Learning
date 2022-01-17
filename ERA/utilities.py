@@ -162,6 +162,17 @@ def indent_stdout(func):
 def execution_time(func):
     '''
     Prints the execution time of a function
+
+    Examples:
+    ---------
+    >>> @execution_time
+    ... def test(a):
+    ...     time.sleep(1)
+    ...     print(a)
+    >>> test('Hi')
+    test:
+    Hi
+    test: completed in 1.0 s
     '''
     @wraps(func)
     def wrapper(*args, **kwargs):
