@@ -15,11 +15,19 @@ First you need to move the code to a desired folder by running
 This will copy this code and its dependencies to your desired location and will create a config file from the default values in the functions specified in this module.
 
 `cd` into your folder and have a look at the config file, modify all the parameters you want BEFORE the first run, but AFTER you run the code DO NOT MODIFY the config file.
+# GM: Maybe we can set a read-only property to the config file?
 
 The config file will store the default values for the arguments of the functions.
 
 When running the code you can specify some parameters to deviate from their default value, for example running
     python Learn2_new.py tau=5
+    
+# GM: I get an error at the moment: Traceback (most recent call last):
+  File "Learn2_new.py", line 1093, in <module>
+    raise KeyError(f'Unknown argument {key}')
+KeyError: 'Unknown argument tau'
+
+
 will run the code with all parameters at their default values but `tau` which will now be 5
 
 Beware that arguments are parsed with spaces, so valid syntaxes are
@@ -1148,7 +1156,7 @@ if __name__ == '__main__':
     lock = Path(__file__).resolve().parent / 'lock.txt'
     if os.path.exists(lock): # there is a lock
         # check for folder argument
-        if len(sys.argv) < 2: # GM: specify that we need the folder name to be provided -> AL: it is explained in usage
+        if len(sys.argv) < 2: 
             print(usage())
             sys.exit(0)
         if len(sys.argv) == 2:
@@ -1158,6 +1166,7 @@ if __name__ == '__main__':
             
             # config file
             d = build_config_dict([run])
+            print("d = ", d) # GM: Doing some tests
             ut.dict2json(d,f'{folder}/config.json')
 
             # runs file
@@ -1172,9 +1181,11 @@ if __name__ == '__main__':
     
     # load config file
     config_dict = ut.json2dict('config.json')
-    config_dict_flat = ut.collapse_dict(config_dict)
+    config_dict_flat = ut.collapse_dict(config_dict) # GM: flatten the dictionary
     print(f'{config_dict = }')
 
+    
+    
     # parse command line arguments
     cl_args = sys.argv[1:]
     i = 0
@@ -1203,9 +1214,12 @@ if __name__ == '__main__':
         else:
             arg_dict[key] = value
 
+    print("arg_dict = ", arg_dict)
     # get run number
     runs = ut.json2dict('runs.json')
     run_id = len(runs)
+    print("run_id = ", run_id)
+    
 
     folder = f'{run_id}__'
     for k in sorted(arg_dict):
@@ -1213,14 +1227,16 @@ if __name__ == '__main__':
     folder = folder[:-2] # remove the last '__'
     print(f'{folder = }')
     runs[run_id] = {'name': folder, 'args': arg_dict}
-
+    
+    print(f'{runs = }')
     # set the arguments provided into the nested dictionaries
-    run_kwargs = ut.set_values_recursive(config_dict['run'], arg_dict)
+    run_kwargs = ut.set_values_recursive(config_dict['run'], arg_dict) # GM: set the values of arg_dict to config_dict['run']
     print(f'{run_kwargs = }')
 
     runs[run_id]['status'] = 'RUNNING'
     runs[run_id]['start_time'] = ut.now()
     ut.dict2json(runs, 'runs.json')
+
     try:
         run(folder, **run_kwargs)
     except Exception as e:
@@ -1229,7 +1245,7 @@ if __name__ == '__main__':
         runs[run_id]['end_time'] = ut.now()
         ut.dict2json(runs,'runs.json')
         raise RuntimeError('Run failed') from e
-
+    
     runs = ut.dict2json('runs.json')
     runs[run_id]['status'] = 'COMPLETED'
     runs[run_id]['end_time'] = ut.now()
