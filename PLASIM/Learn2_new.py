@@ -72,6 +72,9 @@ from tensorflow.keras import layers, models
 
 ########## USAGE ###############################
 def usage(): # GM: define the use of this function, I guess display documentation of the file. At the moment I get the message: "The name must be a string; the optional doc argument can have any type." when I launch a simplified version of this code without arguments
+    '''
+    Returns the documentation of this module that explains how to use it.
+    '''
     return this_module.__doc__
 
 #### CONFIG FILE #####
@@ -1042,9 +1045,9 @@ if __name__ == '__main__':
     lock = Path(__file__).resolve().parent / 'lock.txt'
     if os.path.exists(lock): # there is a lock
         # check for folder argument
-        if len(sys.argv) < 2: # GM: specify that we need the folder name to be provided
+        if len(sys.argv) < 2: # GM: specify that we need the folder name to be provided -> AL: it is explained in usage
             print(usage())
-            exit(0)            # GM: Are you sure this shouldn't be sys.exit?
+            sys.exit(0)
         if len(sys.argv) == 2:
             folder = sys.argv[1]
             print(f'moving code to {folder = }')
@@ -1057,7 +1060,7 @@ if __name__ == '__main__':
             # runs file
             ut.dict2json({},f'{folder}/runs.json')
 
-            exit(0)
+            sys.exit(0)
         else:
             with open(lock) as l:
                 raise ValueError(l.read())
