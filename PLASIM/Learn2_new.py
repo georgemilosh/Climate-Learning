@@ -71,7 +71,7 @@ from tensorflow.keras import layers, models
 
 
 ########## USAGE ###############################
-def usage():
+def usage(): # GM: define the use of this function, I guess display documentation of the file. At the moment I get the message: "The name must be a string; the optional doc argument can have any type." when I launch a simplified version of this code without arguments
     return this_module.__doc__
 
 #### CONFIG FILE #####
@@ -295,8 +295,8 @@ for h in [200,300,500,850]: # geopotential heights
         'label': f'{h} mbar Geopotential',
     }
 
-@ut.execution_time
-@ut.indent_stdout
+@ut.execution_time  # GM: I guess the point is to measure elapsed time but the way this works is not transparent to me yet
+@ut.indent_stdout   # GM: same, I guess the idea is to ensure something about print statements
 def load_data(dataset_years=1000, year_list=None, sampling='', Model='Plasim', area='France', filter_area='France',
               lon_start=0, lon_end=128, lat_start=0, lat_end=22, mylocal='/local/gmiloshe/PLASIM/',fields=['t2m','zg500','mrso_filtered']):
     '''
@@ -1035,9 +1035,9 @@ if __name__ == '__main__':
     lock = Path(__file__).resolve().parent / 'lock.txt'
     if os.path.exists(lock): # there is a lock
         # check for folder argument
-        if len(sys.argv) < 2:
+        if len(sys.argv) < 2: # GM: specify that we need the folder name to be provided
             print(usage())
-            exit(0)
+            exit(0)            # GM: Are you sure this shouldn't be sys.exit?
         if len(sys.argv) == 2:
             folder = sys.argv[1]
             print(f'moving code to {folder = }')
