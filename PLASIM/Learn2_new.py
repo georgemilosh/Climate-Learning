@@ -21,12 +21,6 @@ The config file will store the default values for the arguments of the functions
 
 When running the code you can specify some parameters to deviate from their default value, for example running
     python Learn2_new.py tau=5
-    
-# GM: I get an error at the moment: Traceback (most recent call last):
-  File "Learn2_new.py", line 1093, in <module>
-    raise KeyError(f'Unknown argument {key}')
-KeyError: 'Unknown argument tau'
-
 
 will run the code with all parameters at their default values but `tau` which will now be 5
 
@@ -1129,7 +1123,6 @@ class Trainer():
             elif v != self.config_dict_flat[k]: # skip parameters already at their default value
                 non_iterative_kwargs[k] = v
 
-        # TODO: permute iterate_over to have more efficiency. The last element in iterate_over is the ones that varies faster
         new_iterate_over = []
         # arguments for loading fields
         to_add = []
@@ -1159,8 +1152,11 @@ class Trainer():
         self.scheduled_kwargs = [{**non_iterative_kwargs, **{k: l[i] for i,k in enumerate(iterate_over)}} for l in iteration_values]
 
         if len(self.scheduled_kwargs) == 0:
-            self.scheduled_kwargs = [{}]
-            print('Scheduling 1 run at default values')
+            self.scheduled_kwargs = [non_iterative_kwargs]
+            if len(non_iterative_kwargs) == 0:
+                print('Scheduling 1 run at default values')
+            else:
+                print(f'Scheduling 1 run at values {non_iterative_kwargs}')
         else:
             print(f'Scheduled the following {len(self.scheduled_kwargs)} runs:')
             for i,kw in enumerate(self.scheduled_kwargs):
@@ -1275,6 +1271,8 @@ if __name__ == '__main__':
         except:
             print(f'Could not evaluate {value}. Keeping string type')
         arg_dict[key] = value
+
+    print(f'{arg_dict = }')
 
     # create trainer
     trainer = Trainer()
