@@ -59,35 +59,6 @@ will result in 4 runs:
 
 # GM: Later I tried running $python Learn2_new.py tau=5
 
-# GM: I got:
-
-'''
-k_fold_cross_val:
-Traceback (most recent call last):
-  File "Learn2_new.py", line 1370, in _run
-    k_fold_cross_val(folder, self.X, self.Y, **k_fold_cross_val_kwargs)
-  File "/ClimateDynamics/MediumSpace/ClimateLearningFR/gmiloshe/PLASIM/newtest/ERA/utilities.py", line 186, in wrapper
-    r = func(*args, **kwargs)
-  File "/ClimateDynamics/MediumSpace/ClimateLearningFR/gmiloshe/PLASIM/newtest/ERA/utilities.py", line 134, in wrapper_inner
-    r = func(*args, **kwargs)
-  File "Learn2_new.py", line 973, in k_fold_cross_val
-    load_from = get_run(load_from, current_run_name=folder.rsplit('/',1)[-1])
-  File "Learn2_new.py", line 308, in get_run
-    r = list(runs.value())[l]
-AttributeError: 'dict' object has no attribute 'value'
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "Learn2_new.py", line 1462, in <module>
-    trainer.run()
-  File "Learn2_new.py", line 1328, in run
-    self._run(**kwargs)
-  File "Learn2_new.py", line 1383, in _run
-    raise RuntimeError('Run failed') from e
-RuntimeError: Run failed
-'''
-
 # Also next run failed when I added: $python Learn2_new.py
 
 ### IMPORT LIBRARIES #####
