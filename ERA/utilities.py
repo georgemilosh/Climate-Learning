@@ -31,8 +31,8 @@ def pretty_time(t):
     '''
     Takes a time in seconds and returns it in a string with the format <hours> h <minutes> min <seconds> s
 
-    Examples:
-    ---------
+    Examples
+    --------
     >>> pretty_time(124)
     '2 min 4.0 s'
     >>> pretty_time(3601.4)
@@ -60,8 +60,8 @@ def indent_write(write):
     '''
     decorator for a function that writes to a stream, e.g. sys.stdout or a file. Indents the message.
 
-    Examples:
-    ---------
+    Examples
+    --------
     >>> def test():
     ...     print('before')
     ...     old_write = sys.stdout.write
@@ -85,8 +85,8 @@ def indent(*streams):
     '''
     Returns a decorator that indents the output produced by the decorated function on the streams provided
 
-    Examples:
-    ---------
+    Examples
+    --------
     >>> @indent(sys.stdout)
     ... def show(a=0):
     ...     print(f'{a = }')
@@ -144,6 +144,11 @@ def indent(*streams):
 def indent_logger(logger=None):
     '''
     Indents all handlers of a given logger when the decorated function is running
+
+    Parameters
+    ----------
+    logger : logging.loggers.Logger, optional
+        logger, if None the root logger is used. The default is None
     '''
     if logger is None:
         logger = logging.getLogger()
@@ -163,8 +168,8 @@ def execution_time(func):
     '''
     Prints the execution time of a function
 
-    Examples:
-    ---------
+    Examples
+    --------
     >>> @execution_time
     ... def test(a):
     ...     time.sleep(1)
@@ -189,23 +194,26 @@ def new_telegram_handler(chat_ID=None, token=None, level=logging.WARNING, format
     '''
     Creates a telegram handler object
 
-    Parameters:
-    -----------
-        chat_ID : int or None, optional
-            chat ID of the telegram user or group to whom send the logs. If None it is the last used.
-            To find your chat ID go to telegram and search for 'userinfobot' and type '/start'. The bot will provide you with your chat ID.
-            You can do the same with a telegram group, and, in this case, you will need to invite 'autoJASCObot' to the group.
-            The default is None.
-        token: str, token for the telegram bot or path to a text file where the first line is the token
-        level : logging level: int or logging.(NOTSET, DEBUG, INFO, WARNING, ERROR, CRITICAL), optional
-            The default is logging.WARNING.
-        formatter : logging.Formatter, optional
-            The formatter used to log the messages. The default is default_formatter.
-        **kwargs: additional arguments for telegram_handler.handlers.TelegramHandler
+    Parameters
+    ----------
+    chat_ID : int or None, optional
+        chat ID of the telegram user or group to whom send the logs. If None it is the last used.
+        To find your chat ID go to telegram and search for 'userinfobot' and type '/start'. The bot will provide you with your chat ID.
+        You can do the same with a telegram group, and, in this case, you will need to invite 'autoJASCObot' to the group.
+        The default is None.
+    token: str
+        token for the telegram bot or path to a text file where the first line is the token
+    level : int or logging.(NOTSET, DEBUG, INFO, WARNING, ERROR, CRITICAL), optional
+        The default is logging.WARNING.
+    formatter : logging.Formatter, optional
+        The formatter used to log the messages. The default is default_formatter.
+    **kwargs :
+        additional arguments for telegram_handler.handlers.TelegramHandler
 
-    Returns:
-    --------
-        th: TelegramHandler object
+    Returns
+    -------
+    th: telegram_handler.handlers.TelegramHandler
+        handler that logs to telegram
     '''
     import telegram_handler # NOTE: to install this package run pip install python-telegram-handler
     try:
@@ -225,14 +233,16 @@ def run_smart(func, default_kwargs, **kwargs): # this is not as powerful as it l
     '''
     Runs a function in a vectorized manner:
 
-    Parameters:
-    -----------
-        func: function with signature func(**kwargs) -> None
-        default_kwargs: dict: default values for the keyword arguments of func
-        **kwargs: non default values of the keyword arguments. If a list is provided, the function is run iterating over the list
+    Parameters
+    ----------
+    func : function with signature func(**kwargs) -> None
+    default_kwargs : dict
+        default values for the keyword arguments of func
+    **kwargs : 
+        non default values of the keyword arguments. If a list is provided, the function is run iterating over the list
 
-    Examples:
-    ---------
+    Examples
+    --------
     >>> def add(x, y=0):
     ...     print(x + y)
     >>> run_smart(add, {'x': 0, 'y': 0}, x=1)
@@ -281,9 +291,9 @@ def json2dict(filename):
     '''
     Reads a json file `filename` as a dictionary
 
-    Returns:
-    --------
-        d: dict
+    Returns
+    -------
+    d : dict
     '''
     with open(filename, 'r') as j:
         d = json.load(j)
@@ -302,22 +312,26 @@ def collapse_dict(d_nested, d_flat=None):
     '''
     Flattens a nested dictionary `d_nested` into a flat one `d_flat`.
 
-    Parameters:
-    -----------
-        d_nested: dict, can contain dictionaries and other types.
-            If a key is present more times the associated values must be the same, otherwise an error will be raised
-        d_flat: dict (optional), flat dictionary into which to store the items of `d_nested`
+    Parameters
+    ----------
+    d_nested : dict, can contain dictionaries and other types.
+        If a key is present more times the associated values must be the same, otherwise an error will be raised
+    d_flat : dict, optional
+        flat dictionary into which to store the items of `d_nested`. If None an empty one is created.
+        WARNING: If provided the variable passed as d_flat is modified inplace.
+        The default is None
     
-    Returns:
-    --------
-        d_flat: dict
-
-    Raises:
+    Returns
     -------
-        ValueError: if a key appears more than once with different values
+    d_flat: dict
 
-    Examples:
-    ---------
+    Raises
+    ------
+    ValueError
+        if a key appears more than once with different values
+
+    Examples
+    --------
     >>> collapse_dict({'a': 10, 'b': {'a': 10, 'c': 4}})
     {'a': 10, 'c': 4}
     >>> collapse_dict({'a': 10, 'b': {'a': 10, 'c': 4}}, d_flat={'a': 10, 'z': 7})
@@ -339,21 +353,24 @@ def extract_nested(d_nested, key):
     '''
     Method to access items in a nested dictionary
 
-    Parameters:
-    -----------
-        d_nested: nested dictionary
-        key: str
+    Parameters
+    ----------
+    d_nested : dict
+        nested dictionary
+    key : str
     
-    Raises:
+    Returns
     -------
-        KeyError: if `key` is not a key of `d_nested` or the dictionaries inside it at every nested level
-    
-    Returns:
-    --------
+    v : Any
         The value corresponding to `key` at the highest hierarchical level
 
-    Examples:
-    ---------
+    Raises
+    ------
+    KeyError
+        if `key` is not a key of `d_nested` or the dictionaries inside it at every nested level
+
+    Examples
+    --------
     >>> d = {'a': 10, 'b': {'z': 1, 'w': {'q': 20}}}
     >>> extract_nested(d, 'a')
     10
@@ -380,7 +397,7 @@ def set_values_recursive(d_nested, d_flat, inplace=False):
     keys in `d_flat` that do not appear in `d_nested` are ignored.
     If `inplace`, `d_nested` is modified and returned, otherwise a copy is returned (i.e. the variable `d_nested` keeps its original value)
 
-    Example:
+    Examples
     --------
     >>> d = {'a': 10, 'b': {'a': 10, 'c': 8}}
     >>> set_values_recursive(d, {'a': 'hello', 'z': 42}, inplace=True)
@@ -414,12 +431,18 @@ def invert_permutation(permutation):
     '''
     Inverts a permutation.
 
-    Parameters:
-    -----------
-        permutation: 1D array that must be a permutation of an array of the kind `np.arange(n)` with `n` integer
+    Parameters
+    ----------
+    permutation : 1D array-like
+        permutation of an array of the kind `np.arange(n)` with `n` integer
 
-    Examples:
-    ---------
+    Returns
+    -------
+    np.ndarray
+        inverted permutation
+
+    Examples
+    --------
     >>> a = np.array([3,4,2,5])
     >>> p = np.random.permutation(np.arange(4))
     >>> a_permuted = a[p]
@@ -432,23 +455,14 @@ def invert_permutation(permutation):
 def compose_permutations(permutations):
     '''
     Composes a series of permutations
-    e.g.:
-        a = np.array([3,4,2,5])
-        p1 = np.random.permutation(np.arange(4))
-        p2 = np.random.permutation(np.arange(4))
-        p_composed = compose_permutations([p1,p2])
-        a_permuted1 = a[p1]
-        a_permuted2 = a_permuted1[p2]
-        a_permuted_c = a[p_composed]
 
-        `a_permuted_c` and `a_permuted2` will be equal
-
-    Parameters:
-    -----------
-        permutations: list of 1D arrays that must be a permutation of an array of the kind `np.arange(n)` with `n` integer and the same for every permutation
+    Parameters
+    ----------
+    permutations : list
+        list of 1D array-like that must be a permutation of an array of the kind `np.arange(n)` with `n` integer and the same for every permutation
     
-    Examples:
-    ---------
+    Examples
+    --------
     >>> a = np.array([3,4,2,5])
     >>> p1 = np.random.permutation(np.arange(4))
     >>> p2 = np.random.permutation(np.arange(4))

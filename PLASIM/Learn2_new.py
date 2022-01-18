@@ -7,8 +7,8 @@
 '''
 Module for training a Convolutional Neural Network on climate data.
 
-Usage:
-------
+Usage
+-----
 First you need to move the code to a desired folder by running
     python Learn2_new.py <folder>
 
@@ -108,26 +108,27 @@ def get_default_params(func, recursive=False):
     '''
     Given a function returns a dictionary with the default values of its parameters
 
-    Parameters:
-    -----------
-        func: function inside this module
-        recursive: bool, if True arguments of the type '*_kwargs' will be interpreted as kwargs to pass to function * and `get_default_params` will be applied to * as well to retrieve the default values
+    Parameters
+    ----------
+    func : callable
+        to be able to use the recursive feature, the function must be defined inside this module
+    recursive : bool, optional
+        if True arguments of the type '*_kwargs' will be interpreted as kwargs to pass to function * and `get_default_params` will be applied to * as well to retrieve the default values
     
-    Returns:
-    --------
-        default_params: dict
+    Returns
+    -------
+    default_params : dict
+        dictionary of the default parameter values
 
-    Examples:  (See: balance_folds)
-    ---------
-    >>> get_default_params(balance_folds)
+    Examples
+    --------
+    >>> get_default_params(balance_folds) # see function balance_folds
     {'nfolds': 10, 'verbose': False}
 
     >>> def pnroll(X, roll_X_kwargs, greeting='Hello there!'):
     ...     print(greeting)
     ...     return roll_X(X, **roll_X_kwargs)
-    ... 
     >>> get_default_params(pnroll, recursive=True)
-    ... 
     {'greeting': 'Hello there!', 'roll_X_kwargs': {'roll_axis': 'lon', 'roll_steps': 64}}
     '''
     s = inspect.signature(func)
@@ -151,11 +152,20 @@ def build_config_dict(functions):
 
     Parameters:
     -----------
-        functions: list of functions or string with the function name
+    functions : list
+        list of functions or string with the function name
     
-    Returns:
+    Returns
+    -------
+    d : dict
+
+    Examples
     --------
-        d: dictionary
+    If calling on one function only it is the same as to use get_default_params recursively
+    >>> d1 = build_config_dict([k_fold_cross_val])
+    >>> d2 = get_default_params(k_fold_cross_val, recursive=True)
+    >>> d1 == {'k_fold_cross_val': d2}
+    True
     '''
     d = {}
     for f in functions:
@@ -169,11 +179,17 @@ def build_config_dict(functions):
 
 def check_config_dict(config_dict):
     '''
-    Checks that the confic dict is consistent
+    Checks that the confic dictionary is consistent
 
-    Raises:
+    Returns
     -------
-        KeyError: if the config dictionary is inconsistent.
+    config_dict_flat : dict
+        flattened config_dict
+
+    Raises
+    ------
+    KeyError
+        if the config dictionary is inconsistent.
     '''
     try:
         config_dict_flat = ut.collapse_dict(config_dict) # in itself this checks for multiple values for the same key
@@ -192,16 +208,18 @@ def parse_run_name(run_name):
     '''
     Parses a string into a dictionary
 
-    Parameters:
-    -----------
-        run_name: str with format <param_name>_<param_value>__...
+    Parameters
+    ----------
+    run_name: str
+        run name formatted as *<param_name>_<param_value>__*
     
-    Returns:
+    Returns
+    -------
+    d: dict
+        Values of the dictionary are strings
+    
+    Examples
     --------
-        d: dict
-    
-    Examples:
-    ---------
     >>> parse_run_name('a_5__b_7')
     {'a': '5', 'b': '7'}
     >>> parse_run_name('test_arg_bla__b_7')
@@ -218,16 +236,34 @@ def parse_run_name(run_name):
 
 def get_run(load_from, current_run_name=None):
     '''
-    Parameters:
-    -----------
-        load_from: dict, int, str or 'last'. If dict it is a dictionary with arguments of the run. If int it is the number of the run. If 'last' it is the last completed run. Otherwise it can be a piece of the run name.
-            If the choice is ambiguous an error will be raised.
-        current_run_name: optional, used to check for compatibility issues when loading a model
+    Parameters
+    ----------
+    load_from : dict, int, str, 'last' or None
+        If dict it is a dictionary with arguments of the run. If int it is the number of the run.
+        If 'last' it is the last completed run. Otherwise it can be a piece of the run name. If None the function returns None
+        If the choice is ambiguous an error will be raised.
+    current_run_name : str, optional
+        used to check for compatibility issues when loading a model
+    
+    Returns
+    -------
+    run_name : str
+        name of the run from which to load
+        If there are no runs to load from or `load_from` = None, None is returned instead of raising an error
+
+    Raises
+    ------
+    KeyError
+        if run_name is not found or the choice is ambiguous
     '''
     if load_from is None:
         return None
-    # get run_folder name
+    
     runs = ut.json2dict('runs.json')
+
+    # select only completed runs
+    runs = {k: v for k,v in runs.items() if v['status'] == 'COMPLETED'}
+
     if len(runs) == 0:
         print('No runs to load from')
         return None
@@ -237,9 +273,9 @@ def get_run(load_from, current_run_name=None):
             if load_from.items() <= r['args']: # check if the provided arguments are a subset of the run argument
                 if not found:
                     found = True
-                    l = i
+                    l = int(i)
                 else: # ambiguity
-                    raise KeyError(f'Multiple runs contain {load_from}, at least {l} and {i}')
+                    raise KeyError(f"Multiple runs contain {load_from}, at least {l} and {i}")
         if not found:
             raise KeyError(f'No previous run has {load_from}')
     elif isinstance(load_from, int):
@@ -258,16 +294,19 @@ def get_run(load_from, current_run_name=None):
                     if load_from_dict.items() <= r_dict.items(): # check if the provided arguments are a subset of the run argument
                         if not found:
                             found = True
-                            l = i
+                            l = int(i)
                         else: # ambiguity
                             raise KeyError(f'Multiple runs contain {load_from_dict}, at least {l} and {i}')
                 if not found:
                     raise KeyError(f'No previous run has {load_from_dict}')
     else:
         raise TypeError(f'Unsupported type {type(load_from)} for load_from')
-    if runs[l]['status'] != 'COMPLETED':
-        raise ValueError(f"The run {l} (corresponding to {load_from = }) has status {runs[l]['status']}")
-    run_name = runs[l]['name']
+    # now l is an int
+    if l < 0:
+        r = list(runs.value())[l]
+    else:
+        r = runs[str(l)]
+    run_name = r['name']
     
     if current_run_name is not None: # check for compatibility issues when loading
         # parse run_name for arguments
@@ -350,23 +389,33 @@ for h in [200,300,500,850]: # geopotential heights
 def load_data(dataset_years=1000, year_list=None, sampling='', Model='Plasim', area='France', filter_area='France',
               lon_start=0, lon_end=128, lat_start=0, lat_end=22, mylocal='/local/gmiloshe/PLASIM/',fields=['t2m','zg500','mrso_filtered']):
     '''
-    Loads the data.
+    Loads the data into Plasim_Fields objects
 
-    Parameters:
-    -----------
-        dataset_years: number of years of the dataset, 8000 or 1000
-        year_list: list of years to load from the dataset
-        sampling: '' (dayly) or '3hrs'
-        Model: 'Plasim', 'CESM', ...
-        area: region of interest, e.g. 'France'
-        filter_area: area over which to keep filtered fields
-        lon_start, lon_end, lat_start, lat_end: longitude and latitude extremes of the data expressed in indices (model specific)
-        mylocal: path the the data storage. For speed it is better if it is a local path.
-        fields: list of field names to be loaded. Add '_filtered' to the name to have the velues of the field outside `area` set to zero.
+    Parameters
+    ----------
+    dataset_years : int, optional
+        number of years of the dataset, for now 8000 or 1000.
+    year_list : list or None, optional
+        list of years to load from the dataset. If None all years are loaded
+    sampling : str, optional
+        '' (dayly) or '3hrs'
+    Model : str, optional
+        'Plasim', 'CESM', ... For now only Plasim is implemented
+    area : str, optional
+        region of interest, e.g. 'France'
+    filter_area : str, optionla
+        area over which to keep filtered fields, ususlly the same of `area`
+    lon_start, lon_end, lat_start, lat_end : int
+        longitude and latitude extremes of the data expressed in indices (model specific)
+    mylocal : str or Path, optional
+        path the the data storage. For speed it is better if it is a local path.
+    fields : list, optional
+        list of field names to be loaded. Add '_filtered' to the name to have the values of the field outside `filter_area` set to zero.
 
-    Returns:
-    --------
-        _fields: dictionary of ERA_Fields.Plasim_Field objects
+    Returns
+    -------
+    _fields: dict
+        dictionary of ERA_Fields.Plasim_Field objects
     '''
 
     if area != filter_area:
@@ -423,18 +472,24 @@ def assign_labels(field, time_start=30, time_end=120, T=14, percent=5, threshold
     Given a field of anomalies it computes the `T` days forward convolution of the integrated anomaly and assigns label 1 to anomalies above a given `threshold`.
     If `threshold` is not provided, then it is computed from `percent`, namely to identify the `percent` most extreme anomalies.
 
-    Parameters:
-    -----------
-        field: Plasim_Field object
-        time_start: int, first day of the period of interest
-        time_end: int, first day after the end of the period of interst
-        T: width of the window for the running average
-        percent: float, percentage of the most extreme heatwaves
-        threshold: float (optional), if provided overrides `percent`
+    Parameters
+    ----------
+    field : Plasim_Field object
+    time_start : int, optional
+        first day of the period of interest
+    time_end : int, optional
+        first day after the end of the period of interst
+    T : int, optional
+        width of the window for the running average
+    percent : float, optional
+        percentage of the most extreme heatwaves
+    threshold : float, optional
+        if provided overrides `percent`.
 
     Returns:
     --------
-        labels: 2D array with shape (years, days) and values 0 or 1
+    labels : np.ndarray
+        2D array with shape (years, days) and values 0 or 1
     '''
     A, A_flattened, threshold =  field.ComputeTimeAverage(time_start, time_end, T=T, percent=percent, threshold=threshold)[:3]
     return np.array(A >= threshold, dtype=int)
@@ -445,20 +500,25 @@ def make_X(fields, time_start=30, time_end=120, T=14, tau=0):
     '''
     Cuts the fields in time and stacks them. The original fields are not modified
 
-    Parameters:
-    -----------
-        fields: list of Plasim_Field objects
-        time_start: int, first day of the period of interest
-        time_end: int, first day after the end of the period of interst
-        T: width of the window for the running average
-        tau: delay between observation and prediction
+    Parameters
+    ----------
+    fields : dict of Plasim_Field objects
+    time_start : int, optional
+        first day of the period of interest
+    time_end : int, optional
+        first day after the end of the period of interst
+    T : int, optional
+        width of the window for the running average
+    tau : int, optional
+        delay between observation and prediction
 
-    Returns:
-    --------
-        X: array with shape (years, days, lat, lon, field)
+    Returns
+    -------
+    X : np.ndarray
+        with shape (years, days, lat, lon, field)
     '''
     # stack the fields
-    X = np.array([field.var[:, time_start+tau:time_end+tau-T+1, ...] for field in fields.values()])
+    X = np.array([field.var[:, time_start+tau:time_end+tau-T+1, ...] for field in fields.values()]) # NOTE: maybe chenge to -tau
     # now transpose the array so the field index becomes the last
     X = X.transpose(*range(1,len(X.shape)), 0)
     return X
@@ -467,23 +527,32 @@ def make_X(fields, time_start=30, time_end=120, T=14, tau=0):
 @ut.indent_stdout
 def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0, percent=5, threshold=None):
     '''
-    Combines 'make_X' and 'assign_labels'
+    Combines `make_X` and `assign_labels`
 
     Parameters:
     -----------
-        fields: dict of Plasim_Field objects
-        label_field: str: key for the field used for computing labels
-        time_start: int, first day of the period of interest
-        time_end: int, first day after the end of the period of interst
-        T: width of the window for the running average
-        tau: delay between observation and prediction
-        percent: float, percentage of the most extreme heatwaves
-        threshold: float (optional), if provided overrides `percent`
+    fields : dict of Plasim_Field objects
+    label_field : str, optional
+        key for the field used for computing labels
+    time_start : int, optional
+        first day of the period of interest
+    time_end : int, optional
+        first day after the end of the period of interst
+    T : int, optional
+        width of the window for the running average
+    tau : int, optional
+        delay between observation and prediction
+    percent : float, optional
+        percentage of the most extreme heatwaves
+    threshold : float, optional
+        if provided overrides `percent`
 
     Returns:
     --------
-        X: array with shape (years, days, lat, lon, field)
-        Y: array with shape (years, days)
+    X : np.ndarray
+        with shape (years, days, lat, lon, field)
+    Y : np.ndarray
+        with shape (years, days)
     '''
     X = make_X(fields, time_start=time_start, time_end=time_end, T=T, tau=tau)
     Y = assign_labels(fields[label_field], time_start=time_start, time_end=time_end, T=T, percent=percent, threshold=threshold)
@@ -493,22 +562,29 @@ def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0,
 @ut.indent_stdout
 def roll_X(X, roll_axis='lon', roll_steps=64):
     '''
-    Rolls `X` along a given axis. useful for example for moving France away from the Greenwich meridian. In other words this allows one, for example, to shift the grid so that desired areas are not found at the boundary. In principle this function allows us to roll along arbitrary axis, including days or years.
+    Rolls `X` along a given axis. useful for example for moving France away from the Greenwich meridian.
+    In other words this allows one, for example, to shift the grid so that desired areas are not found at the boundary.
+    In principle this function allows us to roll along arbitrary axis, including days or years.
 
-    Parameters:
-    -----------
-        X: array with shape (years, days, lat, lon, field)
-        axis: 'year' (or 'y'), 'day' (or 'd'), 'lat', 'lon', 'field' (or 'f')
-        steps: number of gridsteps to roll
-            a positive value for 'steps' means that the elements of the array are moved forward in it, e.g. `steps` = 1 means that the old first element is now in the second place
-            This means that for every axis a positive value of `steps` yields a shift of the array
-            'year', 'day' : forward in time
-            'lat' : southward
-            'lon' : eastward
-            'field' : forward in the numbering of the fields
-    Returns:
-    --------
-        X_rolled: np.ndarray of the same shape of `X`
+    Parameters
+    ----------
+    X : np.ndarray
+        with shape (years, days, lat, lon, field)
+    axis : str, optional
+        'year' (or 'y'), 'day' (or 'd'), 'lat', 'lon', 'field' (or 'f')
+    steps : int, optional
+        number of gridsteps to roll: a positive value for 'steps' means that the elements of the array are moved forward in it,
+        e.g. `steps` = 1 means that the old first element is now in the second place
+        This means that for every axis a positive value of `steps` yields a shift of the array
+        'year', 'day' : forward in time
+        'lat' : southward
+        'lon' : eastward
+        'field' : forward in the numbering of the fields
+    
+    Returns
+    -------
+    X_rolled : np.ndarray
+        of the same shape of `X`
     '''
     if roll_steps == 0:
         return X
@@ -532,19 +608,23 @@ def shuffle_years(X, permutation=None, seed=0, apply=False):
     '''
     Permutes `X` along the first axis
 
-    Parameters:
-    -----------
-        X: array with the data to permute
-        permutation: None or 1D array that must be a permutation of an array of `np.arange(X.shape[0])`
-        seed: int, if `permutation` is None, then it is computed using the provided seed.
-        apply: bool, if True the function returns the permuted data, otherwise the permutation is returned
+    Parameters
+    ----------
+    X : np.ndarray
+        array with the data to permute
+    permutation : None or 1D np.ndarray, optional,
+        must be a permutation of an array of `np.arange(X.shape[0])`
+    seed : int, optional
+        if `permutation` is None, then it is computed using the provided seed.
+    apply : bool, optional
+        if True the function returns the permuted data, otherwise the permutation is returned
     
-    Returns:
-    --------
-        if apply:
-            np.ndarray of the same shape of X
-        else:
-            np.ndarray of shape (X.shape[0],)
+    Returns
+    -------
+    if apply:
+        np.ndarray of the same shape of X
+    else:
+        np.ndarray of shape (X.shape[0],)
     '''
     if permutation is None:
         if seed is not None:
@@ -562,14 +642,16 @@ def balance_folds(weights, nfolds=10, verbose=False):
     '''
     Returns a permutation that, once applied to `weights` would make the consecutive `nfolds` pieces of equal length have their sum the most similar to each other.
 
-    Parameters:
-    -----------
-        weights: 1D array
-        nfolds: int, must be a divisor of `len(weights)`
+    Parameters
+    ----------
+    weights : 1D array-like
+    nfolds : int, optional
+        must be a divisor of `len(weights)`
+    verbose : bool, optional
 
-    Returns:
-    --------
-        permutation: permutation of `np.arange(len(weights))`
+    Returns
+    -------
+    permutation : permutation of `np.arange(len(weights))`
     '''
     class Fold():
         def __init__(self, target_length, target_sum, name=None):
@@ -634,24 +716,34 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
     '''
     Creates a model consisting of a series of convolutional layers followed by fully connected ones
 
-    Parameters:
-    -----------
-        input_shape: tuple
-        conv_channels: list of int, number of channels corresponding to the convolutional layers
-        kernel_sizes: int, 2-tuple or list of ints or 2-tuples. If list must be of the same size of `conv_channels`
-        strides: same as kernel_sizes
-        batch_normalizations: bool or list of bools, whether to add a BatchNormalization layer after each Conv2D layer
-        conv_activations: str or list of str
-        conv_dropouts: float in [0,1] or list of floats in [0,1], dropout to be applied after the BatchNormalization layer. If 0 no dropout is applied
-        max_pool_sizes: int or list of int size of max pooling layer to be applied after dropout. If 0 no max pool is applied
+    Parameters
+    ----------
+    input_shape : tuple
+        shape of input data excluding the data_ID axis
+    conv_channels : list of int, optional
+        number of channels corresponding to the convolutional layers
+    kernel_sizes : int, 2-tuple or list of ints or 2-tuples, optional
+        If list must be of the same size of `conv_channels`
+    strides : int, 2-tuple or list of ints or 2-tuples, optional
+        same as kernel_sizes
+    batch_normalizations : bool or list of bools, optional
+        whether to add a BatchNormalization layer after each Conv2D layer
+    conv_activations : str or list of str, optional
+        activation functions after each convolutional layer
+    conv_dropouts : float in [0,1] or list of floats in [0,1], optional
+        dropout to be applied after the BatchNormalization layer. If 0 no dropout is applied
+    max_pool_sizes : int or list of int, optional
+        size of max pooling layer to be applied after dropout. If 0 no max pool is applied
 
-        dense_units: list of int, number of neurons for each fully connected layer
-        dense_activations: str or list of str
-        dense_dropouts: float in [0,1] or list of floats in [0,1]
+    dense_units : list of int, optional
+        number of neurons for each fully connected layer
+    dense_activations : str or list of str, optional
+        activation functions after each fully connected layer
+    dense_dropouts : float in [0,1] or list of floats in [0,1], optional
 
-    Returns:
-    --------
-        model: keras.models.Model
+    Returns
+    -------
+    model : keras.models.Model
     '''
     model = models.Sequential()
 
@@ -711,25 +803,33 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     '''
     Trains a given model checkpointing its weights
 
-    Parameters:
-    -----------
-        model: keras.models.Model object
-        X_tr: training data
-        Y_tr: training labels
-        X_va: validation data
-        Y_va: validation labels
-        folder: loaction where to save the checkpoints of the model
-        num_epochs: int, number of maximum epochs for the training
-        optimizer: keras.Optimizer object
-        loss: keras.losses.Loss object
-        metrics: list of keras.metrics.Metric or str
-        batch_size: int, default 1024
-        checkpoint_every: int or str. Examples:
-            0: disabled
-            5 or '5 epochs' or '5 e': every 5 epochs
-            '100 batches' or '100 b': every 100 batches
-            'best custom_loss': every time 'custom_loss' reaches a new minimum. 'custom_loss' must be in the list of metrics
-        additional_callbacks: list of keras.callbacks.Callback objects, for example EarlyStopping
+    Parameters
+    ----------
+    model : keras.models.Model
+    X_tr : np.ndarray
+        training data
+    Y_tr : np.ndarray
+        training labels
+    X_va : np.ndarray
+        validation data
+    Y_va : np.ndarray
+        validation labels
+    folder : str or Path
+        loaction where to save the checkpoints of the model
+    num_epochs : int
+        number of maximum epochs for the training
+    optimizer : keras.Optimizer object
+    loss : keras.losses.Loss object
+    metrics : list of keras.metrics.Metric or str
+    batch_size : int, optional
+    checkpoint_every : int or str, optional
+        Examples:
+        0: disabled
+        5 or '5 epochs' or '5 e': every 5 epochs
+        '100 batches' or '100 b': every 100 batches
+        'best custom_loss': every time 'custom_loss' reaches a new minimum. 'custom_loss' must be in the list of metrics
+    additional_callbacks : list of keras.callbacks.Callback objects
+        for example EarlyStopping
     '''
     folder = folder.rstrip('/')
     ckpt_name = folder + '/cp-{epoch:04d}.ckpt'
@@ -781,20 +881,29 @@ def k_fold_cross_val_split(i, X, Y, nfolds=10, val_folds=1):
     '''
     Splits X and Y in a training and validation set according to k fold cross validation algorithm
 
-    Parameters:
-    -----------
-        i: int, fold number from 0 to `nfolds`-1
-        X: data
-        Y: labels
-        nfolds: number of folds
-        val_folds: number of consecutive folds for the validation set (between 1 and `nfolds`-1). Default 1.
+    Parameters
+    ----------
+    i : int
+        fold number from 0 to `nfolds`-1
+    X : np.ndarray
+        data
+    Y : np.ndarray
+        labels
+    nfolds : int, optional
+        number of folds
+    val_folds : int, optional
+        number of consecutive folds for the validation set (between 1 and `nfolds`-1). Default 1.
 
-    Returns:
-    --------
-        X_tr: training data
-        Y_tr: training labels
-        X_va: validation data
-        Y_va: validation labels
+    Returns
+    -------
+    X_tr : np.ndarray
+        training data
+    Y_tr : np.ndarray
+        training labels
+    X_va : np.ndarray
+        validation data
+    Y_va : np.ndarray
+        validation labels
     '''
     if i < 0 or i >= nfolds:
         raise ValueError(f'fold number i is out of the range [0, {nfolds - 1}]')
@@ -822,24 +931,36 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, load_from='last', nfolds
     '''
     Performs k fold cross validation on a model architecture.
 
-    Parameters:
-    -----------
-    folder: folder in which to save data related to the folds
-    X: all data (train + val)
-    Y: all labels
-    create_model_kwargs: dictionary with the parameters to create a model
-    load_from: None, int, str or 'last': from where to load weights for transfer learning. See the documentation of function `get_run`
+    Parameters
+    ----------
+    folder : str
+        folder in which to save data related to the folds
+    X : np.ndarray
+        all data (train + val)
+    Y : np.ndarray
+        all labels
+    create_model_kwargs : dict
+        dictionary with the parameters to create a model
+    load_from : None, int, str or 'last', optional
+        from where to load weights for transfer learning. See the documentation of function `get_run`
         If not None it overrides `create_model_kwargs` (the model is loaded instead of created)
-    nfolds: int, number of folds
-    val_folds: number of folds to be used for the validation set for every split
-    u: float, undersampling factor (>=1)
-    fullmetrics: bool, whether to use a set of evaluation metrics or just the loss
-    training_epochs: number of training epochs when creating a model from scratch
-    training_epochs_tl: numer of training epochs when using transfer learning
-    lr: learning_rate for Adam optimizer
-    batch_size: int
+    nfolds : int, optional
+        number of folds
+    val_folds : int, optional
+        number of folds to be used for the validation set for every split
+    u : float, optional
+        undersampling factor (>=1). If = 1 no undersampling is performed
+    fullmetrics : bool, optional
+        whether to use a set of evaluation metrics or just the loss
+    training_epochs : int, optional
+        number of training epochs when creating a model from scratch
+    training_epochs_tl : int, optional 
+        numer of training epochs when using transfer learning
+    lr : float, optional
+        learning_rate for Adam optimizer
+    batch_size : int, optional
 
-    **kwargs: additional arguments to pass to `train_model` (see its docstring), in particular
+    **kwargs : additional arguments to pass to `train_model` (see its docstring), in particular
         num_epochs: overrides `training_epochs` and `training_epochs_tl`
         optimizer: overrides `lr`
         loss: overrides the default SparseCrossEntropyLoss
@@ -960,20 +1081,28 @@ def prepare_XY(fields, make_XY_kwargs, roll_X_kwargs, premix_seed=0, nfolds=10, 
     '''
     Performs all operations to extract from the fields X and Y ready to be fed to the neural network.
 
-    Parameters:
-    -----------
-        fields: dict of ef.Plasim_Field objects
-        make_XY_kwargs: dict, arguments to pass to the function `make_XY`
-        roll_X_kwargs: dict, arguments to pass to the function `roll_X`
-        premix_seed: int, seed for premixing. If None premixing is skipped
-        nfolds: int, necessary for balancing folds
-        flatten_time_axis: bool, whether to flatten the time axis consisting of years and days
+    Parameters
+    ----------
+    fields : dict of ef.Plasim_Field objects
+    make_XY_kwargs : dict
+        arguments to pass to the function `make_XY`
+    roll_X_kwargs : dict
+        arguments to pass to the function `roll_X`
+    premix_seed : int, optional
+        seed for premixing. If None premixing is skipped
+    nfolds : int, optional
+        necessary for balancing folds
+    flatten_time_axis : bool, optional
+        whether to flatten the time axis consisting of years and days
 
-    Returns:
-    --------
-        X: np.ndarray with shape, data. If flatten_time_axis with shape (days, lat, lon, fields), else (years, days, lat, lon, fields)
-        Y: np.ndarray with shape, labels. If flatten_time_axis with shape (days,), else (years, days)
-        tot_permutation: np.ndarray with shape (years,), final permutaion of the years that reproduces X and Y once applied to the just loaded data
+    Returns
+    -------
+    X : np.ndarray
+        data. If flatten_time_axis with shape (days, lat, lon, fields), else (years, days, lat, lon, fields)
+    Y : np.ndarray 
+        labels. If flatten_time_axis with shape (days,), else (years, days)
+    tot_permutation : np.ndarray
+        with shape (years,), final permutaion of the years that reproduces X and Y once applied to the just loaded data
     '''
     X,Y = make_XY(fields, **make_XY_kwargs)
     
@@ -1011,15 +1140,21 @@ def prepare_data(load_data_kwargs, prepare_XY_kwargs):
     '''
     Combines all the steps from loading the data to the creation of X and Y
 
-    Parameters:
-    -----------
-        load_data_kwargs: dict, arguments to pass to the function `load_data`
+    Parameters
+    ----------
+    load_data_kwargs: dict
+        arguments to pass to the function `load_data`
+    prepare_XY_kwargs: dict
+        arguments to pass to the function `prepare_XY`
         
-    Returns:
-    --------
-        X: np.ndarray with shape (years, days, lat, lon, fields), data
-        Y: np.ndarray with shape (years, days), labels
-        tot_permutation: np.ndarray with shape (years,), final permutaion of the years that reproduces X and Y once applied to the just loaded data
+    Returns
+    -------
+    X : np.ndarray
+        data. If flatten_time_axis with shape (days, lat, lon, fields), else (years, days, lat, lon, fields)
+    Y : np.ndarray 
+        labels. If flatten_time_axis with shape (days,), else (years, days)
+    tot_permutation : np.ndarray
+        with shape (years,), final permutaion of the years that reproduces X and Y once applied to the just loaded data
     '''
     # load data
     fields = load_data(**load_data_kwargs)
@@ -1033,9 +1168,12 @@ def run(folder, prepare_data_kwargs, k_fold_cross_val_kwargs):
 
     Parameters:
     -----------
-        folder: folder where to perform the run
-        prepare_data_kwargs: dict, arguments to pass to the `prepare_data` function
-        k_fold_cross_val_kwargs: dict, arguments to pass to the `k_fold_cross_val` function
+    folder : str
+        folder where to perform the run
+    prepare_data_kwargs : dict
+        arguments to pass to the `prepare_data` function
+    k_fold_cross_val_kwargs : dict
+        arguments to pass to the `k_fold_cross_val` function
     '''
     label_field = ut.extract_nested(prepare_data_kwargs, 'label_field')
     for field_name in prepare_data_kwargs['load_data_kwargs']['fields']:
