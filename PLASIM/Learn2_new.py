@@ -33,17 +33,19 @@ Invalid syntaxes are:
 You can also provide arguments as lists, in that case the program will iterate over them. For example:
     python Learn2_new.py tau='[0,1,2]'
 
-will perfor three runs with tau=1, tau=2, tau=3.
+will perform three runs with tau=1, tau=2, tau=3.
 
 Beware that you need to enclose the list inside a string or the terminal will complain. If you are passing a list of strings, use double apices, i.e.
     python Learn2.py area="['France', 'Scandinavia']"
+
+#GM: the sentence below is a bit strange
 
 If by default an argument is already a list, the provided list is not interpreted as to iterate over, for example the argument `fields` has default value ['t2m','zg500','mrso_filtered']. So running
     python Learn2.py fields="['t2m', 'zg500']"
 
 will result in a single run performed with fields=['t2m', 'zg500']
 
-If you provide more than an argument to iterate over, all combinations will be performed, e.g.:
+If you provide more than one argument to iterate over, all combinations will be performed, e.g.:
     python Learn2.py fields="[['t2m'], ['t2m', 'zg500']]" tau='[1,2]'
 
 will result in 4 runs:
@@ -51,6 +53,37 @@ will result in 4 runs:
     fields=['t2m'], tau=2
     fields=['t2m', 'zg500'], tau=1
     fields=['t2m', 'zg500'], tau=2
+'''
+
+
+# GM: at the moment when cd to the created directory and run this script I get an error:
+
+'''
+k_fold_cross_val:
+Traceback (most recent call last):
+  File "Learn2_new.py", line 1232, in _run
+    k_fold_cross_val(folder, self.X, self.Y, **k_fold_cross_val_kwargs)
+  File "/ClimateDynamics/MediumSpace/ClimateLearningFR/gmiloshe/PLASIM/newtest/ERA/utilities.py", line 181, in wrapper
+    r = func(*args, **kwargs)
+  File "/ClimateDynamics/MediumSpace/ClimateLearningFR/gmiloshe/PLASIM/newtest/ERA/utilities.py", line 134, in wrapper_inner
+    r = func(*args, **kwargs)
+  File "Learn2_new.py", line 852, in k_fold_cross_val
+    load_from = get_run(load_from, current_run_name=folder.rsplit('/',1)[-1])
+  File "Learn2_new.py", line 270, in get_run
+    if runs[l]['status'] != 'COMPLETED':
+KeyError: -1
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "Learn2_new.py", line 1322, in <module>
+    trainer.run()
+  File "Learn2_new.py", line 1190, in run
+    self._run(**kwargs)
+  File "Learn2_new.py", line 1245, in _run
+    raise RuntimeError('Run failed') from e
+RuntimeError: Run failed
+
 '''
 
 ### IMPORT LIBRARIES #####
@@ -1408,12 +1441,14 @@ if __name__ == '__main__':
             print(f'moving code to {folder = }')
             move_to_folder(folder)
             
-            # config file
-            d = build_config_dict([run])
+            # config file will be built from the default parameters of the functions given here
+            # GM: build_config_dict will recursively find the keyword parameters of function run (including the functions it calls) and build a corresponding dictionary tree in config file
+            # GM: Can some of these functions be moved to ../ERA/utilities.py later at some point?
+            d = build_config_dict([run]) 
             print(f"{d = }") # GM: Doing some tests
             ut.dict2json(d,f'{folder}/config.json')
 
-            # runs file
+            # runs file (which will keep track of various runs performed in newly created folder)
             ut.dict2json({},f'{folder}/runs.json')
 
             sys.exit(0)
