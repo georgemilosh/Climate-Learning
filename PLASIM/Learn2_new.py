@@ -316,7 +316,7 @@ def get_run(load_from, current_run_name=None):
         raise TypeError(f'Unsupported type {type(load_from)} for load_from')
     # now l is an int
     if l < 0:
-        r = list(runs.value())[l]
+        r = list(runs.values())[l]
     else:
         r = runs[str(l)]
     run_name = r['name']
