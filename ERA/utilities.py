@@ -20,6 +20,9 @@ from datetime import datetime
 import json
 import logging
 
+logger = logging.getLogger(__name__)
+logger.level = logging.INFO
+
 ######## time formatting ##########
 def now():
     '''
@@ -182,9 +185,9 @@ def execution_time(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
         start_time = time.time()
-        print(f'{func.__name__}:')
+        logger.info(f'{func.__name__}:')
         r = func(*args, **kwargs)
-        print(f'{func.__name__}: completed in {pretty_time(time.time() - start_time)}')
+        logger.info(f'{func.__name__}: completed in {pretty_time(time.time() - start_time)}')
         return r
     return wrapper
 
@@ -205,8 +208,9 @@ def new_telegram_handler(chat_ID=None, token=None, level=logging.WARNING, format
         token for the telegram bot or path to a text file where the first line is the token
     level : int or logging.(NOTSET, DEBUG, INFO, WARNING, ERROR, CRITICAL), optional
         The default is logging.WARNING.
-    formatter : logging.Formatter, optional
+    formatter : logging.Formatter, str or None, optional
         The formatter used to log the messages. The default is default_formatter.
+        If string it can be for example '%(levelname)s: %(message)s'
     **kwargs :
         additional arguments for telegram_handler.handlers.TelegramHandler
 
@@ -222,7 +226,13 @@ def new_telegram_handler(chat_ID=None, token=None, level=logging.WARNING, format
     except FileNotFoundError:
         pass
     th = telegram_handler.handlers.TelegramHandler(token=token, chat_id=chat_ID, **kwargs)
-    th.setFormatter(formatter)
+    if isinstance(formatter, str):
+        if formatter == 'default':
+            formatter = default_formatter
+        else:
+            formatter = logging.Formatter(formatter)
+    if formatter is not None:
+        th.setFormatter(formatter)
     th.setLevel(level)
     return th
 

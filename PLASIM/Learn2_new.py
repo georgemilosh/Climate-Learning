@@ -58,8 +58,10 @@ will result in 4 runs:
 ### IMPORT LIBRARIES #####
 
 ## general purpose
+from lib2to3.pgen2 import token
 import os as os
 from pathlib import Path
+from signal import pthread_kill
 from stat import S_IREAD
 import sys
 import warnings
@@ -71,21 +73,15 @@ import numpy as np
 import inspect
 from functools import wraps
 import ast
+import logging
 
-## user defined modules
-this_module = sys.modules[__name__]
-path_to_here = Path(__file__).resolve().parent
-path_to_ERA = path_to_here / 'ERA' # when absolute path, so you can run the script from another folder (outside plasim)
-if not os.path.exists(path_to_ERA):
-    path_to_ERA = path_to_here.parent / 'ERA'
-    if not os.path.exists(path_to_ERA):
-        raise FileNotFoundError('Could not find ERA folder')
-print(f'{path_to_ERA = }')
-sys.path.insert(1, str(path_to_ERA))
-# sys.path.insert(1, '../ERA/')
-import ERA_Fields as ef # general routines
-import TF_Fields as tff # tensorflow routines
-import utilities as ut
+if __name__ == '__main__':
+    logger = logging.getLogger()
+    logger.handlers = [logging.StreamHandler(sys.stdout)]
+else:
+    logger = logging.getLogger(__name__)
+logger.level = logging.INFO
+
 
 ## machine learning
 # from imblearn.over_sampling import RandomOverSampler
@@ -96,6 +92,21 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers, models
 
+## user defined modules
+this_module = sys.modules[__name__]
+path_to_here = Path(__file__).resolve().parent
+path_to_ERA = path_to_here / 'ERA' # when absolute path, so you can run the script from another folder (outside plasim)
+if not os.path.exists(path_to_ERA):
+    path_to_ERA = path_to_here.parent / 'ERA'
+    if not os.path.exists(path_to_ERA):
+        raise FileNotFoundError('Could not find ERA folder')
+path_to_ERA = str(path_to_ERA)
+logger.info(f'{path_to_ERA = }')
+sys.path.insert(1, path_to_ERA)
+# sys.path.insert(1, '../ERA/')
+import ERA_Fields as ef # general routines
+import TF_Fields as tff # tensorflow routines
+import utilities as ut
 
 ########## USAGE ###############################
 def usage(): 
@@ -145,7 +156,7 @@ def get_default_params(func, recursive=False):
             try:
                 default_params[k] = get_default_params(getattr(this_module, func_name), recursive=True)
             except:
-                print(f'From get_default_params:  Could not find function {func_name}')
+                logger.warning(f'From get_default_params:  Could not find function {func_name}')
     return default_params
 
 def build_config_dict(functions):
@@ -176,7 +187,7 @@ def build_config_dict(functions):
             f = getattr(this_module, f_name)
         else:
             f_name = f.__name__
-        d[f_name] = get_default_params(f, recursive=True)
+        d[f'{f_name}_kwargs'] = get_default_params(f, recursive=True)
     return d
 
 def check_config_dict(config_dict):
@@ -267,7 +278,7 @@ def get_run(load_from, current_run_name=None):
     runs = {k: v for k,v in runs.items() if v['status'] == 'COMPLETED'}
 
     if len(runs) == 0:
-        print('No runs to load from')
+        logger.warning('No runs to load from')
         return None
     if isinstance(load_from, dict):
         found = False
@@ -387,7 +398,7 @@ for h in [200,300,500,850]: # geopotential heights
     }
 
 @ut.execution_time  # GM: I guess the point is to measure elapsed time but the way this works is not transparent to me yet
-@ut.indent_stdout   # GM: same, I guess the idea is to ensure something about print statements
+@ut.indent_logger(logger)   # GM: same, I guess the idea is to ensure something about print statements
 def load_data(dataset_years=1000, year_list=None, sampling='', Model='Plasim', area='France', filter_area='France',
               lon_start=0, lon_end=128, lat_start=0, lat_end=22, mylocal='/local/gmiloshe/PLASIM/',fields=['t2m','zg500','mrso_filtered']):
     '''
@@ -468,7 +479,7 @@ def load_data(dataset_years=1000, year_list=None, sampling='', Model='Plasim', a
     return _fields
 
 @ut.execution_time
-@ut.indent_stdout
+@ut.indent_logger(logger)
 def assign_labels(field, time_start=30, time_end=120, T=14, percent=5, threshold=None):
     '''
     Given a field of anomalies it computes the `T` days forward convolution of the integrated anomaly and assigns label 1 to anomalies above a given `threshold`.
@@ -497,7 +508,7 @@ def assign_labels(field, time_start=30, time_end=120, T=14, percent=5, threshold
     return np.array(A >= threshold, dtype=int)
 
 @ut.execution_time
-@ut.indent_stdout
+@ut.indent_logger(logger)
 def make_X(fields, time_start=30, time_end=120, T=14, tau=0):
     '''
     Cuts the fields in time and stacks them. The original fields are not modified
@@ -526,7 +537,7 @@ def make_X(fields, time_start=30, time_end=120, T=14, tau=0):
     return X
 
 @ut.execution_time
-@ut.indent_stdout
+@ut.indent_logger(logger)
 def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0, percent=5, threshold=None):
     '''
     Combines `make_X` and `assign_labels`
@@ -561,7 +572,7 @@ def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0,
     return X,Y
 
 @ut.execution_time
-@ut.indent_stdout
+@ut.indent_logger(logger)
 def roll_X(X, roll_axis='lon', roll_steps=64):
     '''
     Rolls `X` along a given axis. useful for example for moving France away from the Greenwich meridian.
@@ -639,7 +650,7 @@ def shuffle_years(X, permutation=None, seed=0, apply=False):
     return permutation
 
 @ut.execution_time
-@ut.indent_stdout
+@ut.indent_logger(logger)
 def balance_folds(weights, nfolds=10, verbose=False):
     '''
     Returns a permutation that, once applied to `weights` would make the consecutive `nfolds` pieces of equal length have their sum the most similar to each other.
@@ -669,7 +680,7 @@ def balance_folds(weights, nfolds=10, verbose=False):
             self.sum += a[0]
             if self.length == len(self.indexs):
                 if verbose:
-                    print(f'fold {self.name} done!')
+                    logger.info(f'fold {self.name} done!')
                 return True
             self.hunger = (self.target_sum - self.sum)/(self.length - len(self.indexs))
             return False
@@ -690,7 +701,7 @@ def balance_folds(weights, nfolds=10, verbose=False):
     
     sums = []
     if verbose:
-        print('Balancing folds')
+        logger.info('Balancing folds')
     # run over the weights and distribute data to the folds
     for a in ws:
         # determine the hungriest fold, i.e. the one that has its sum the furthest from its target
@@ -705,7 +716,7 @@ def balance_folds(weights, nfolds=10, verbose=False):
 
     if verbose:
         sums = np.array(sums)
-        print(f'Sums of the balanced {nfolds} folds:\n{sums}\nstd/avg = {np.std(sums)/target_sum}\nmax relative deviation = {np.max(np.abs(sums - target_sum))/target_sum*100}\%')
+        logger.info(f'Sums of the balanced {nfolds} folds:\n{sums}\nstd/avg = {np.std(sums)/target_sum}\nmax relative deviation = {np.max(np.abs(sums - target_sum))/target_sum*100}\%')
 
     return permutation
 
@@ -757,7 +768,7 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
             args[j] = [arg]*len(conv_channels)
         elif len(arg) != len(conv_channels):
             raise ValueError(f'Invalid length for argument {arg}')
-    print(f'convolutional args = {args}')
+    logger.info(f'convolutional args = {args}')
     kernel_sizes, strides, batch_normalizations, conv_activations, conv_dropouts, max_pool_sizes = args
     # build the convolutional layers
     for i in range(len(conv_channels)):
@@ -786,7 +797,7 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
             args[j] = [arg]*len(dense_units)
         elif len(arg) != len(dense_units):
             raise ValueError(f'Invalid length for argument {arg}')
-    print(f'dense args = {args}')
+    logger.info(f'dense args = {args}')
     dense_activations, dense_dropouts = args
     # build the dense layers
     for i in range(len(dense_units)):
@@ -799,7 +810,7 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
 
 ###### TRAINING THE NETWORK ############
 @ut.execution_time
-@ut.indent_stdout
+@ut.indent_logger(logger)
 def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics,
                 batch_size=1024, checkpoint_every=1, additional_callbacks=None):
     '''
@@ -878,7 +889,7 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     np.save(f'{folder}/history.npy', my_history.history)
 
 @ut.execution_time
-@ut.indent_stdout
+@ut.indent_logger(logger)
 def k_fold_cross_val_split(i, X, Y, nfolds=10, val_folds=1):
     '''
     Splits X and Y in a training and validation set according to k fold cross validation algorithm
@@ -927,7 +938,7 @@ def k_fold_cross_val_split(i, X, Y, nfolds=10, val_folds=1):
     return X_tr, Y_tr, X_va, Y_va
 
 @ut.execution_time
-@ut.indent_stdout
+@ut.indent_logger(logger)
 def k_fold_cross_val(folder, X, Y, create_model_kwargs, load_from='last', nfolds=10, val_folds=1, u=1,
                      fullmetrics=True, training_epochs=40, training_epochs_tl=10, lr=1e-4, batch_size=1024, **kwargs):
     '''
@@ -985,13 +996,13 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, load_from='last', nfolds
         historyCustom = [np.load(f'{load_from}/fold_{i}/history.npy', allow_pickle=True).item()['val_CustomLoss'] for i in range(nfolds)]
         historyCustom = np.mean(np.array(historyCustom),axis=0)
         opt_checkpoint = np.argmin(historyCustom) # We will use optimal checkpoint in this case!
-        print(f'{opt_checkpoint = }')
+        logger.info(f'{opt_checkpoint = }')
 
     # k fold cross validation
     for i in range(nfolds):
-        print('=============')
-        print(f'fold {i} ({i+1}/{nfolds})')
-        print('=============')
+        logger.info('=============')
+        logger.log(35, f'fold {i} ({i+1}/{nfolds})')
+        logger.info('=============')
         # create fold_folder
         fold_folder = f'{folder}/fold_{i}'
         os.mkdir(fold_folder)
@@ -1001,7 +1012,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, load_from='last', nfolds
 
         n_pos_tr = np.sum(Y_tr)
         n_neg_tr = len(Y_tr) - n_pos_tr
-        print(f'number of training data: {len(Y_tr)} of which {n_neg_tr} negative and {n_pos_tr} positive')
+        logger.info(f'number of training data: {len(Y_tr)} of which {n_neg_tr} negative and {n_pos_tr} positive')
 
         # perform undersampling
         if u > 1:
@@ -1020,12 +1031,12 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, load_from='last', nfolds
             X_tr = X_tr.reshape((X_tr.shape[0], *X_tr_shape[1:]))
             n_pos_tr = np.sum(Y_tr)
             n_neg_tr = len(Y_tr) - n_pos_tr
-            print(f'number of training data: {len(Y_tr)} of which {n_neg_tr} negative and {n_pos_tr} positive')
+            logger.info(f'number of training data: {len(Y_tr)} of which {n_neg_tr} negative and {n_pos_tr} positive')
 
         # renormalize data with pointwise mean and std
         X_mean = np.mean(X_tr, axis=0)
         X_std = np.std(X_tr, axis=0)
-        print(f'{np.sum(X_std < 1e-5)/np.product(X_std.shape)*100}\% of the data have std below 1e-5')
+        logger.info(f'{np.sum(X_std < 1e-5)/np.product(X_std.shape)*100}\% of the data have std below 1e-5')
         X_std[X_std==0] = 1 # If there is no variance we shouldn't divide by zero ### hmmm: this may create discontinuities
 
         # save X_mean and X_std
@@ -1035,7 +1046,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, load_from='last', nfolds
         X_tr = (X_tr - X_mean)/X_std
         X_va = (X_va - X_mean)/X_std
 
-        print(f'{X_tr.shape = }, {X_va.shape = }')
+        logger.info(f'{X_tr.shape = }, {X_va.shape = }')
 
 
         # check for transfer learning
@@ -1045,7 +1056,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, load_from='last', nfolds
         else:
             model = keras.models.load_model(f'{load_from}/fold_{i}', compile=False)
             model.load_weights(f'{load_from}/fold_{i}/cp-{opt_checkpoint:04d}.ckpt')            
-        print(model.summary())
+        logger.info(model.summary())
 
         num_epochs = kwargs.pop('num_epochs', None)
         if num_epochs is None:
@@ -1068,7 +1079,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, load_from='last', nfolds
                     folder=fold_folder, num_epochs=num_epochs, optimizer=optimizer, loss=loss, metrics=metrics, batch_size=batch_size, **kwargs)
 
         my_memory.append(psutil.virtual_memory())
-        print(f'RAM memory: {my_memory[i][3]:.3e}') # Getting % usage of virtual_memory ( 3rd field)
+        logger.info(f'RAM memory: {my_memory[i][3]:.3e}') # Getting % usage of virtual_memory ( 3rd field)
 
         keras.backend.clear_session()
         gc.collect() # Garbage collector which removes some extra references to the objects
@@ -1078,7 +1089,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, load_from='last', nfolds
 
 ########## PUTTING THE PIECES TOGETHER ###########
 @ut.execution_time
-@ut.indent_stdout
+@ut.indent_logger(logger)
 def prepare_XY(fields, make_XY_kwargs, roll_X_kwargs, premix_seed=0, nfolds=10, flatten_time_axis=True):
     '''
     Performs all operations to extract from the fields X and Y ready to be fed to the neural network.
@@ -1112,7 +1123,7 @@ def prepare_XY(fields, make_XY_kwargs, roll_X_kwargs, premix_seed=0, nfolds=10, 
     X = roll_X(X, **roll_X_kwargs)
 
     # mixing
-    print('\nMixing')
+    logger.info('Mixing')
     start_time = time.time()
     if premix_seed is not None:
         premix_permutation = shuffle_years(X, seed=premix_seed, apply=False)
@@ -1125,19 +1136,19 @@ def prepare_XY(fields, make_XY_kwargs, roll_X_kwargs, premix_seed=0, nfolds=10, 
     if premix_seed is not None:
         tot_permutation = ut.compose_permutations([premix_permutation, tot_permutation])
     X = X[tot_permutation]
-    print(f'Mixing completed in {ef.pretty_time(time.time() - start_time)}\n')
-    print(f'{X.shape = }, {Y.shape = }')
+    logger.info(f'Mixing completed in {ef.pretty_time(time.time() - start_time)}\n')
+    logger.info(f'{X.shape = }, {Y.shape = }')
 
     if flatten_time_axis:
         X = X.reshape((X.shape[0]*X.shape[1],*X.shape[2:]))
         Y = Y.reshape((Y.shape[0]*Y.shape[1]))
-        print(f'Flattened time: {X.shape = }, {Y.shape = }')
+        logger.info(f'Flattened time: {X.shape = }, {Y.shape = }')
 
     return X, Y, tot_permutation
 
 
 @ut.execution_time
-@ut.indent_stdout
+@ut.indent_logger(logger)
 def prepare_data(load_data_kwargs, prepare_XY_kwargs):
     '''
     Combines all the steps from loading the data to the creation of X and Y
@@ -1164,7 +1175,7 @@ def prepare_data(load_data_kwargs, prepare_XY_kwargs):
     return prepare_XY(fields, **prepare_XY_kwargs)
 
 
-def run(folder, prepare_data_kwargs, k_fold_cross_val_kwargs):
+def run(folder, prepare_data_kwargs, k_fold_cross_val_kwargs, log_level=logging.INFO):
     '''
     Perfroms a single full run
 
@@ -1191,16 +1202,17 @@ def run(folder, prepare_data_kwargs, k_fold_cross_val_kwargs):
     else:
         raise FileExistsError(f'{folder} already exists')
     # setup logger
-    old_stdout = sys.stdout
-    sys.stdout = ef.Logger(f'{folder}/')
+    fh = logging.FileHandler(f'{folder}/log.log')
+    fh.setLevel(log_level)
+    logger.handlers.append(fh)
 
     # check tf version and GPUs
-    print(f"{tf.__version__ = }")
+    logger.info(f"{tf.__version__ = }")
     if int(tf.__version__[0]) < 2:
-        print(f"{tf.test.is_gpu_available() = }")
+        logger.info(f"{tf.test.is_gpu_available() = }")
         GPU = tf.test.is_gpu_available()
     else:
-        print(f"{tf.config.list_physical_devices('GPU') = }")
+        logger.info(f"{tf.config.list_physical_devices('GPU') = }")
         GPU = len(tf.config.list_physical_devices('GPU'))
     if not GPU:
         warnings.warn('\nThis machine does not have a GPU: training may be very slow\n')
@@ -1209,19 +1221,19 @@ def run(folder, prepare_data_kwargs, k_fold_cross_val_kwargs):
     X,Y, permutation = prepare_data(**prepare_data_kwargs)
     np.save(f'{folder}/year_permutation.npy',permutation)
 
-    print(f'{X.shape = }, {Y.shape = }')
+    logger.info(f'{X.shape = }, {Y.shape = }')
     # flatten the time axis
     X = X.reshape((X.shape[0]*X.shape[1],*X.shape[2:]))
     Y = Y.reshape((Y.shape[0]*Y.shape[1]))
-    print(f'Flattened time: {X.shape = }, {Y.shape = }')
+    logger.info(f'Flattened time: {X.shape = }, {Y.shape = }')
 
     # run kfold
     k_fold_cross_val(folder, X, Y, **k_fold_cross_val_kwargs)
 
-    print(f'\ntotal run time: {ef.pretty_time(time.time() - start_time)}')
+    logger.info(f'\ntotal run time: {ef.pretty_time(time.time() - start_time)}')
 
-    # restore old stdout
-    sys.stdout = old_stdout
+    # remove logger
+    logger.handlers.remove(fh)
 
 
 ###### EFFICIENT MANAGEMENT OF MULTIPLE RUNS #######
@@ -1239,9 +1251,8 @@ class Trainer():
         self.year_permutation = None
 
         # extract default arguments for each function
-        self.default_load_data_kwargs = ut.extract_nested(self.config_dict, 'load_data_kwargs')
-        self.default_prepare_XY_kwargs = ut.extract_nested(self.config_dict, 'prepare_XY_kwargs')
-        self.default_k_fold_cross_val_kwargs = ut.extract_nested(self.config_dict, 'k_fold_cross_val_kwargs')
+        self.default_run_kwargs = ut.extract_nested(self.config_dict, 'run_kwargs')
+        self.telegram_kwargs = ut.extract_nested(self.config_dict, 'telegram_kwargs')
 
         # setup last evaluation arguments
         self._load_data_kwargs = None
@@ -1263,8 +1274,8 @@ class Trainer():
     def schedule(self, **kwargs):
         '''
         Here kwargs can be iterables. This function schedules several runs and calls on each of them `self._run`
+        You can also set telegram kwargs with this function.
         '''
-        # TODO: set general logger and telegram logger
 
         # detect variables over which to iterate
         iterate_over = []
@@ -1272,6 +1283,9 @@ class Trainer():
         for k,v in kwargs.items():
             if k not in self.config_dict_flat:
                 raise KeyError(f'Invalid argument {k}')
+            if k in self.telegram_kwargs:
+                self.telegram_kwargs[k] = v
+                continue
             iterate = False
             if isinstance(v, list): # possible need to iterate over the argument
                 if isinstance(self.config_dict_flat[k], list):
@@ -1315,22 +1329,72 @@ class Trainer():
         if len(self.scheduled_kwargs) == 0:
             self.scheduled_kwargs = [non_iterative_kwargs]
             if len(non_iterative_kwargs) == 0:
-                print('Scheduling 1 run at default values')
+                logger.info('Scheduling 1 run at default values')
             else:
-                print(f'Scheduling 1 run at values {non_iterative_kwargs}')
+                logger.info(f'Scheduling 1 run at values {non_iterative_kwargs}')
         else:
-            print(f'Scheduled the following {len(self.scheduled_kwargs)} runs:')
+            logger.info(f'Scheduled the following {len(self.scheduled_kwargs)} runs:')
             for i,kw in enumerate(self.scheduled_kwargs):
-                print(f'{i}: {kw}')
+                logger.info(f'{i}: {kw}')
+    
+    def telegram(self, telegram_bot_token=None, chat_ID=None, telegram_logging_level=logging.WARNING, telegram_logging_format=None):
+        th = None
+        if telegram_bot_token is not None:
+            th = ut.new_telegram_handler(chat_ID=chat_ID, token=telegram_bot_token, level=telegram_logging_level, formatter=telegram_logging_format)
+            logger.handlers.append(th)
+            logger.log(45, 'Added telegram logger: you should receive this message on telegram.')
+        return th
+
+    def run_multiple(self):
+        th = self.telegram(**self.telegram_kwargs)
+        logger.log(45, f'Starting {len(self.scheduled_kwargs)} runs')
+        try:
+            for kwargs in self.scheduled_kwargs:
+                self._run(**kwargs)
+        finally:
+            if th is not None:
+                logger.handlers.remove(th)
+                logger.log(45, 'Removed telegram logger')
+
+    def run(self, folder, load_data_kwargs, prepare_XY_kwargs, k_fold_cross_val_kwargs, log_level=logging.INFO):
+        os.mkdir(folder)
+
+        # setup logger
+        fh = logging.FileHandler(f'{folder}/log.log')
+        fh.setLevel(log_level)
+        logger.handlers.append(fh)
+
+        try:
+            # load the fields
+            if self._load_data_kwargs != load_data_kwargs:
+                self._load_data_kwargs = load_data_kwargs
+                self._prepare_XY_kwargs = None # force the computation of prepare_XY
+                self.fields = load_data(**load_data_kwargs)
+
+            # prepare XY
+            if self._prepare_XY_kwargs != prepare_XY_kwargs:
+                self._prepare_XY_kwargs = prepare_XY_kwargs
+                self.X, self.Y, self.year_permutation = prepare_XY(self.fields, **prepare_XY_kwargs)
+            np.save(f'{folder}/year_permutation.npy',self.year_permutation)
+
+            # do kfold
+            k_fold_cross_val(folder, self.X, self.Y, **k_fold_cross_val_kwargs)
+
+            # make the config file read-only after the first successful run
+            if os.access('config.json', os.W_OK): # the file is writeable
+                os.chmod('config.json', S_IREAD)
         
-    def run(self):
-        for kwargs in self.scheduled_kwargs:
-            self._run(**kwargs)
+        except Exception as e:
+            logger.critical(f'Run on {folder = } failed!')
+            raise RuntimeError('Run failed') from e
+
+        finally:
+            logger.handlers.remove(fh)
 
 
     def _run(self, **kwargs):
         '''
-        Performs a single run, kwargs are not interpreted as iterables
+        Parses kwargs and performs a single run, kwargs are not interpreted as iterables
         '''
         # get run number
         runs = ut.json2dict('runs.json')
@@ -1340,50 +1404,26 @@ class Trainer():
         for k in sorted(kwargs):
             folder += f'{k}_{kwargs[k]}__'
         folder = folder[:-2] # remove the last '__'
-        print(f'{folder = }')
-        os.mkdir(folder)
-
+        logger.log(42, f'{folder = }\n')
+        
         runs[run_id] = {'name': folder, 'args': kwargs, 'status': 'RUNNING', 'start_time': ut.now()}
         ut.dict2json(runs, 'runs.json')
 
-        # TODO setup logger here
-        old_stdout = sys.stdout
-        sys.stdout = ef.Logger(f'{folder}/')
-
         try:
-            # load the fields
-            load_data_kwargs = ut.set_values_recursive(self.default_load_data_kwargs, kwargs)
-            if self._load_data_kwargs != load_data_kwargs:
-                self._load_data_kwargs = load_data_kwargs
-                self._prepare_XY_kwargs = None # force the computation of prepare_XY
-                self.fields = load_data(**load_data_kwargs)
-
-            # prepare XY
-            prepare_XY_kwargs = ut.set_values_recursive(self.default_prepare_XY_kwargs, kwargs)
-            if self._prepare_XY_kwargs != prepare_XY_kwargs:
-                self._prepare_XY_kwargs = prepare_XY_kwargs
-                self.X, self.Y, self.year_permutation = prepare_XY(self.fields, **prepare_XY_kwargs)
-            np.save(f'{folder}/year_permutation.npy',self.year_permutation)
-
-            # do kfold
-            k_fold_cross_val_kwargs = ut.set_values_recursive(self.default_k_fold_cross_val_kwargs, kwargs)
-            k_fold_cross_val(folder, self.X, self.Y, **k_fold_cross_val_kwargs)
+            run_kwargs = ut.set_values_recursive(self.default_run_kwargs, kwargs)
+            
+            self.run(folder, **run_kwargs)
 
             runs = ut.json2dict('runs.json')
             runs[run_id]['status'] = 'COMPLETED'
-            print('\n\nrun completed!!!\n\n')
+            logger.log(42, 'run completed!!!\n\n')
 
-            # make the config file read only after the first successful run
-            if os.access('config.json', os.W_OK): # the file is writeable
-                os.chmod('config.json', S_IREAD)
-
-        except Exception as e:
+        except:
             runs = ut.json2dict('runs.json')
             runs[run_id]['status'] = 'FAILED'
-            raise RuntimeError('Run failed') from e
+            raise
 
         finally:
-            sys.stdout = old_stdout
             runs[run_id]['end_time'] = ut.now()
             ut.dict2json(runs,'runs.json')
 
@@ -1413,7 +1453,7 @@ if __name__ == '__main__':
             # config file will be built from the default parameters of the functions given here
             # GM: build_config_dict will recursively find the keyword parameters of function run (including the functions it calls) and build a corresponding dictionary tree in config file
             # GM: Can some of these functions be moved to ../ERA/utilities.py later at some point?
-            d = build_config_dict([run]) 
+            d = build_config_dict([Trainer.run, Trainer.telegram]) 
             print(f"{d = }") # GM: Doing some tests
             ut.dict2json(d,f'{folder}/config.json')
 
@@ -1443,10 +1483,10 @@ if __name__ == '__main__':
         try:
             value = ast.literal_eval(value)
         except:
-            print(f'Could not evaluate {value}. Keeping string type')
+            logger.warning(f'Could not evaluate {value}. Keeping string type')
         arg_dict[key] = value
 
-    print(f'{arg_dict = }')
+    logger.info(f'{arg_dict = }')
 
     # create trainer
     trainer = Trainer()
@@ -1456,12 +1496,12 @@ if __name__ == '__main__':
 
     o = input('Start training? (Y/[n]) ')
     if o != 'Y':
-        print('Aborting')
+        logger.error('Aborting')
         sys.exit(0)
     
-    trainer.run()
+    trainer.run_multiple()
 
-    print('\n\n\n\n\n\nALL RUNS COMPLETED\n\n')
+    logger.log(45, '\n\n\n\n\n\nALL RUNS COMPLETED\n\n')
 
 
 

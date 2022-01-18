@@ -10,6 +10,7 @@ import pylab as p
 import sys
 import os
 import time
+import logging
 
 import matplotlib.gridspec as gridspec
 import matplotlib.patheffects as PathEffects
@@ -35,7 +36,10 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import confusion_matrix
 from skimage.transform import resize
 
-from utilities import pretty_time
+from utilities import pretty_time, execution_time
+
+logger = logging.getLogger(__name__)
+logger.level = logging.INFO
 
 
 global plotter
@@ -47,40 +51,40 @@ def import_basemap():
         os.environ['PROJ_LIB'] = '../usr/share/proj' # This one we need to import Basemap 
         global Basemap
         from mpl_toolkits.basemap import Basemap
-        print('Successfully imported basemap')
+        logger.info('Successfully imported basemap')
         return True
     except (ImportError, FileNotFoundError):
         # revert to old proj_lib
         if old_proj_lib is not None:
             os.environ['PROJ_LIB'] = old_proj_lib
-        print('In this environment you cannot import Basemap')
+        logger.warning('In this environment you cannot import Basemap')
         return False
     
 def import_cartopy():
     try:
         global cplt
         import cartopy_plots as cplt
-        print('Successfully imported cartopy')
+        logger.info('Successfully imported cartopy')
         return True
     except (ImportError, FileNotFoundError):
-        print('In this environment you cannot import cartopy')
+        logger.warning('In this environment you cannot import cartopy')
         return False
 
 # set up the plotter:
 def setup_plotter():
     global plotter
     if plotter is not None:
-        print(f'Plotter already set to {plotter}')
+        logger.info(f'Plotter already set to {plotter}')
         return True
-    print('Trying to import basemap')
+    logger.info('Trying to import basemap')
     if import_basemap():
         plotter = 'basemap'
         return True
-    print('Trying to import cartopy')
+    logger.info('Trying to import cartopy')
     if import_cartopy():
         plotter = 'cartopy'
         return True
-    print('No valid plotter found')
+    logger.error('No valid plotter found')
     return False
             
 setup_plotter()
@@ -172,7 +176,7 @@ def animate(i, m, Center_map, Nb_frame, Lon, Lat, T_value, data_colorbar_value, 
     fmt = '%1.0f'
     temp_sign, ts_taken = significative_data(data_colorbar_value[i], data_colorbar_t[i], T_value, False)
     zg_sign, zg_not, zg_taken = significative_data2(data_contour_value[i], data_contour_t[i], T_value, True)
-    if ts_taken != 8192 and zg_taken != 8192:
+    if ts_taken != 8192 and zg_taken != 8192: #AL what is this???
         print('i:', i, 'ts_taken:', ts_taken, 'zg_taken:', zg_taken)
     plt.cla()
     m.contourf(Lon, Lat, temp_sign, levels=data_colorbar_level, cmap=plt.cm.seismic, extend='both', latlon=True)
@@ -800,7 +804,7 @@ def a_max_and_ti_postproc(A, length=None):
         max_index = np.argmax(A_summer[j])  # the time during season when we have a maximum this year
         max_value = A_summer[j][max_index]  # the corresponding value of the maximum of A
         just_max_index.append(max_index)  # collect t_i
-        #print("max_index = ", max_index, ", is compared to ", length - 1)
+        logger.debug(f"{max_index = } is compared to {length - 1}")
         if max_index == 0:
             if A[j][0] > max_value:  # check if the maximum is a false maximum
                 a_max, ti = maximum_inside(A_summer[j]) # find another true maximum that is a local maximum inside
@@ -813,7 +817,7 @@ def a_max_and_ti_postproc(A, length=None):
                 year_with_before.append(j)
                 start_true += 1
         elif max_index == length - 1:  # do the same on the other side
-            #print("max index = ", max_index, " triggered")
+            logger.debug(f"{max_index = } triggered")
             if A[j][-1] > max_value:
                 #print("year ",j," end rejected")
                 a_max, ti = maximum_inside(A_summer[j])
@@ -864,7 +868,7 @@ def a_decrese(in_A_max, in_Ti, in_year_a):
         for i in range(len(in_A_max)):
             D[in_A_max[i]] = [in_Ti[i], in_year_a[i]]
     else:
-        print('    size mismatch',len(in_A_max),len(in_Ti),len(in_year_a))
+        logger.warning(f'size mismatch: {len(in_A_max) = },{len(in_Ti) = },{len(in_year_a) = }')
     D_sorted = sorted(D.items(), key=lambda kv: kv[0], reverse=True)
     return D_sorted
 
@@ -961,7 +965,7 @@ def create_mask(model,area, data, axes='first 2', return_full_mask=False): # car
                 return mask
             return data[...,44:60, 18:43]
         else:
-            print(f'Unknown area {area}')
+            logger.error(f'Unknown area {area}')
             return None
     elif model == "CESM":
         if area == "France":
@@ -991,7 +995,7 @@ def create_mask(model,area, data, axes='first 2', return_full_mask=False): # car
                 return mask
             return data[...,-48:-35, 11:26]
         else:
-            print(f'Unknown area {area}')
+            logger.error(f'Unknown area {area}')
             return None
     elif model == "Plasim":
         if area == "NW_Europe":
@@ -1067,10 +1071,10 @@ def create_mask(model,area, data, axes='first 2', return_full_mask=False): # car
                 return np.ones_like(data, dtype=bool)
             return data
         else:
-            print(f'Unknown area {area}')
+            logger.error(f'Unknown area {area}')
             return None
     else:
-        print(f'Unknown model {model}')
+        logger.error(f'Unknown model {model}')
         return None
 
 def Greenwich(Myarray):
@@ -1128,7 +1132,7 @@ class Field:
         
     def add_year(self, year):   # Load the year from the database
         dataset = Dataset('Data_ERA5/'+self.prefix+'ERA5_'+self.filename+'_'+str(year+self.start_year)+'.nc')
-        print("Loading field " + self.name + ", year ", year, ", dataset.variables["+self.name+"].shape = ", dataset.variables[self.name].shape)
+        logger.info(f"Loading field {self.name}, {year = }, dataset.variables[{self.name}].shape = {dataset.variables[self.name].shape}")
         if ((year + self.start_year)%4): # if not divisible by 4 it is not a leap year
             if len(dataset.variables[self.name].shape) < 4: 
                 self.var[year] = np.asarray(dataset.variables[self.name][self.day_start:self.day_end,self.lat_start:self.lat_end,self.lon_start:self.lon_end], dtype=self.np_precision)
@@ -1185,7 +1189,7 @@ class Field:
             self.intercept = np.asarray(dataset.variables[self.name][:], dtype=self.np_precision)[self.lat_start:self.lat_end,self.lon_start:self.lon_end]
             dataset.close()
             for y in range(self.var.shape[0]):
-                print("loading year ", y)
+                logger.debug(f"loading year {y}")
                 dataset = Dataset('ERA5/'+FitKind+'/'+self.prefix+self.name+'_detrended_fields_'+str(self.start_year+y)+'.nc')
                 self.detrended[y] = np.asarray(dataset.variables[self.name+'_det'][:,self.lat_start:self.lat_end,self.lon_start:self.lon_end], dtype=self.np_precision)
                 dataset.close()
@@ -1193,7 +1197,7 @@ class Field:
             summer_mean = np.mean(self.var[:,period[0]:period[1],:,:],1) # yearly mean over each summer defined by the period[0] - period[1]
             X =  np.mean(self.fit_time[:,period[0]:period[1]],1).reshape((-1, 1))    # corresponding time
             for lat_loop in range(self.coef.shape[0]):
-                print("latitude index ",lat_loop)
+                logger.debug(f"latitude index {lat_loop}")
                 for lon_loop in range(self.coef.shape[1]):  # perform a linear fit for each grid point
                     if FitKind == 'linear': 
                         model = LinearRegression().fit(X, summer_mean[:,lat_loop,lon_loop])
@@ -1232,14 +1236,15 @@ class Field:
             NCinter[:,:] = self.intercept
             # first print the Dataset object to see what we've got
             print(ncfile)
-            ncfile.close(); print('Dataset is closed!')
+            ncfile.close()
+            logger.info('Dataset is closed!')
 
             for y in range(self.var.shape[0]):
-                print(y)
+                logger.debug(f'{y = }')
                 try: ncfile.close()  # just to be safe, make sure dataset is not already open.
                 except: pass
                 ncfile = Dataset('ERA5/'+FitKind+'/'+self.prefix+self.name+'_detrended_fields_'+str(self.start_year+y)+'.nc',mode='w',format='NETCDF4_CLASSIC') 
-                print(ncfile)
+                logger.debug(ncfile)
                 lat_dim = ncfile.createDimension('lat', len(lat))     # latitude axis
                 lon_dim = ncfile.createDimension('lon', len(lon))    # longitude axis
                 time_dim = ncfile.createDimension('time', None) # unlimited axis (can be appended to).
@@ -1262,8 +1267,9 @@ class Field:
                 NC_det[:,:,:] = self.detrended[y]
 
                 # first print the Dataset object to see what we've got
-                print(ncfile)
-                ncfile.close(); print('Dataset is closed!')
+                # print(ncfile)
+                ncfile.close()
+                logger.debug('Dataset is closed!')
         #### In the end compute the means #####
         self.detr_mean = np.mean(self.detrended,0)    # Evaluate detrended grid-point climatological mean
         self.detr_std = np.std(self.detrended,0)    # Evaluate detrended grid-point climatological std  
@@ -1302,18 +1308,18 @@ class Plasim_Field:
             self.np_precision = np.float32
             self.np_precision_complex = np.complex64
         
+    @execution_time
     def load_field(self, folder, year_list=None):
         '''
         Load the file from the database stored in `folder`
         
         `year_list` allows to load only a subset of data. If not provided all years are loaded
         '''
-        print(f'Loading field {self.name}')
-        start_time = time.time()
+        logger.info(f'Loading field {self.name}')
         if self.sampling == '3hrs':
             self.var = np.zeros((self.years,1200,self.lat_end-self.lat_start,self.lon_end-self.lon_start), dtype=self.np_precision)
             for b in range(1, self.years//100 + 1):
-                print("b = ",b)
+                logger.debug("b = ",b)
                 for y in range(1,101):
                     for m in range(5,10):
                         temp_time, temp_var = self.load_month(folder,b,y,m)
@@ -1331,7 +1337,7 @@ class Plasim_Field:
                 if dataset.variables['time'].shape[0] != self.years*units_per_year:
                     raise ValueError(f"{self.filename} doesn't have {self.years} years") 
                 self.time = np.concatenate([dataset.variables['time'][y*units_per_year:(y+1)*units_per_year,...] for y in year_list], axis=0).reshape(len(year_list),-1)
-            print('Loaded time array')
+            logger.info('Loaded time array')
             if (self.name == 'zg') or (self.name == 'ua') or (self.name == 'va'): # we need to take out dimension that is useless (created by extracting a level)
                 if year_list is None:
                     self.var = np.asarray(dataset.variables[self.name][:,0,self.lat_start:self.lat_end,self.lon_start:self.lon_end],  dtype=self.np_precision)
@@ -1344,7 +1350,7 @@ class Plasim_Field:
                 else:
                     self.var = [np.asarray(dataset.variables[self.name][y*units_per_year:(y+1)*units_per_year,self.lat_start:self.lat_end,self.lon_start:self.lon_end],  dtype=self.np_precision) for y in year_list]
                     self.var = np.concatenate(self.var, axis=0)
-            print(f"input {self.var.shape = }")
+            logger.info(f"input {self.var.shape = }")
             if year_list is None:
                 self.var = self.var.reshape(self.years, self.var.shape[0]//self.years, *self.var.shape[1:])
             else:
@@ -1352,11 +1358,10 @@ class Plasim_Field:
             self.lon = dataset.variables["lon"][self.lon_start:self.lon_end]
             self.lat = dataset.variables["lat"][self.lat_start:self.lat_end]
             self.LON, self.LAT = np.meshgrid(self.lon, self.lat)
-            print(f"output {self.var.shape = }")
-            print(f"{self.time.shape = }")
-            print(f'{np.min(np.diff(self.time))} < np.diff(self.time) < {np.max(np.diff(self.time))}')
+            logger.info(f"output {self.var.shape = }")
+            logger.debug(f"{self.time.shape = }")
+            logger.debug(f'{np.min(np.diff(self.time))} < np.diff(self.time) < {np.max(np.diff(self.time))}')
             dataset.close()
-            print(f'total time: {pretty_time(time.time() - start_time)}\n')
             
             
         
@@ -1399,6 +1404,7 @@ class Plasim_Field:
             raise NotImplementedError('if you specify a day, you must also specify a year')
         return Greenwich(self.var[year,day])
     
+    @execution_time
     def Set_area_integral(self, input_area, input_mask, containing_folder='Postproc', delta=1, force_computation=False):
         '''
         Evaluate area integral and (possibly if delta is not 1) coarse grain it in time
@@ -1418,17 +1424,9 @@ class Plasim_Field:
         if (not force_computation) and containing_folder and os.path.exists(filename_abs): # load integrals
             self.abs_mask = np.load(filename_abs)
             self.ano_abs_mask = np.load(filename_ano_abs)
-            print(f'file {filename_abs} loaded')
-            print(f'file {filename_ano_abs} loaded')
-        else: # compute integrals
-            
-            # # OLD VERSION TO BE IMPROVED
-            #print("self.abs_mask = np.zeros((self.var.shape[0],self.var.shape[1]))    # integral over the area")
-            # self.abs_mask = np.zeros((self.var.shape[0],self.var.shape[1]),  dtype=self.np_precision)    # integral over the area
-            # for y in range(self.var.shape[0]):
-            #     for i in range(self.var.shape[1]):
-            #         self.abs_mask[y,i] = np.sum(np.sum(create_mask(self.Model,input_area,self.var[y,i,:,:])*input_mask))
-            
+            logger.info(f'file {filename_abs} loaded')
+            logger.info(f'file {filename_ano_abs} loaded')
+        else: # compute integrals            
             self.abs_mask = np.tensordot(create_mask(self.Model,input_area,self.var, axes='last 2'), input_mask)
             
             #print("self.ano_abs_mask = self.abs_mask - np.mean(self.abs_mask,0)")
@@ -1450,8 +1448,8 @@ class Plasim_Field:
 
                 np.save(filename_abs,self.abs_mask)
                 np.save(filename_ano_abs,self.ano_abs_mask)
-                print(f'saved file {filename_abs}')
-                print(f'saved file {filename_ano_abs}')
+                logger.info(f'saved file {filename_abs}')
+                logger.info(f'saved file {filename_ano_abs}')
         anomaly_series = self.ano_abs_mask.copy()
         series = self.abs_mask.copy()
         
@@ -1466,33 +1464,33 @@ class Plasim_Field:
         if num_years is None: 
             num_years = self.years
         #print(type(containing_folder),type(self.sampling), type(self.Model))
-        print(f"{containing_folder = }, {self.sampling = }, {self.Model = }")
+        logger.info(f"{containing_folder = }, {self.sampling = }, {self.Model = }")
         filename = f'{containing_folder}/PreMixing_{self.sampling}_{self.Model}.npy'
         if ((new_mixing) or (not os.path.exists(filename))): # if we order new mixing or the mixing file doesn't exist
             mixing = np.random.permutation(self.var.shape[0])
             np.save(filename, mixing)
-            print(f'saved file {filename}')
+            logger.info(f'saved file {filename}')
         else:
             mixing = np.load(filename)
-            print(f'file {filename} loaded')
+            logger.info(f'file {filename} loaded')
         
-        print(f"{mixing.shape = }")
+        logger.info(f"{mixing.shape = }")
         mixing = mixing[num_years*select_group:num_years*(select_group+1)] # This will select the right number of years
-        print(f"Selected group {select_group}: {mixing.shape = }")
+        logger.info(f"Selected group {select_group}: {mixing.shape = }")
         self.var = self.var[mixing,...]  # This will apply permutation on all years
-        print(f'mixed {self.var.shape = }')
+        logger.info(f'mixed {self.var.shape = }')
         if hasattr(self, 'abs_mask'):
             self.abs_mask = self.abs_mask[mixing,...]
-            print(f'mixed {self.abs_mask.shape = }')
+            logger.info(f'mixed {self.abs_mask.shape = }')
         if hasattr(self, 'ano_abs_mask'):
             self.ano_abs_mask = self.ano_abs_mask[mixing,...]
-            print(f'mixed {self.ano_abs_mask.shape = }')
+            logger.info(f'mixed {self.ano_abs_mask.shape = }')
         if hasattr(self, 'abs_area_int'):
             self.abs_area_int = self.abs_area_int[mixing,...]
-            print(f'mixed {self.abs_area_int.shape = }')
+            logger.info(f'mixed {self.abs_area_int.shape = }')
         if hasattr(self, 'ano_area_int'):
             self.ano_area_int = self.ano_area_int[mixing,...]
-            print(f'mixed {self.ano_area_int.shape = }')
+            logger.info(f'mixed {self.ano_area_int.shape = }')
             
             
         self.new_mixing = new_mixing
@@ -1539,8 +1537,8 @@ class Plasim_Field:
             #number_per_century=np.sum(mixed_event_per_year.reshape((10,-1)),1)#/ (A.shape[1]*A.shape[0]//10)
             #norm_per_century=number_per_century/np.sum(number_per_century)
             #entropy_per_iteration = -np.sum(norm_per_century*np.log(norm_per_century))
-            print(f"{number_per_century = }")
-            print(f"{entropy_per_iteration = }, normalization = {np.sum(number_per_century)}")
+            logger.info(f"{number_per_century = }")
+            logger.info(f"{entropy_per_iteration = }, normalization = {np.sum(number_per_century)}")
 
             for myiter in range(10000000):
                 #print("========")
@@ -1563,11 +1561,11 @@ class Plasim_Field:
                     entropy_per_iteration_prime, number_per_century, norm_per_century = ComputeEntropy(mixed_event_per_year,mixing)
                     mixingdublicatenumber = (len([item for item, count in collections.Counter(mixing).items() if count > 1]))
                     if mixingdublicatenumber == 1:
-                        print(randrange1,randrange2)
-                        print(oldmixing)
-                        print(mixing)
-                        print(([item for item, count in collections.Counter(mixing).items() if count > 1]))
-                    print(f"{myiter = }, entropy = {entropy_per_iteration_prime} > {entropy_per_iteration} , #/century = {np.sum(number_per_century)} duplicate# = {mixingdublicatenumber}")
+                        logger.debug(randrange1,randrange2)
+                        logger.debug(oldmixing)
+                        logger.debug(mixing)
+                        logger.debug(([item for item, count in collections.Counter(mixing).items() if count > 1]))
+                    logger.debug(f"{myiter = }, entropy = {entropy_per_iteration_prime} > {entropy_per_iteration} , #/century = {np.sum(number_per_century)} duplicate# = {mixingdublicatenumber}")
                     entropy_per_iteration = entropy_per_iteration_prime
                 #else:
                     #print(entropy_per_iteration_prime," <= ", entropy_per_iteration, " => Keep old!")
@@ -1581,28 +1579,28 @@ class Plasim_Field:
             number_per_century=np.sum(mixed_event_per_year[mixing].reshape((10,-1)),1)#/ (A.shape[1]*A.shape[0]//10)
             norm_per_century=number_per_century/np.sum(number_per_century)
             entropy_per_iteration_prime=-np.sum(norm_per_century*np.log(norm_per_century))
-            print(f"final {number_per_century = }")
-            print(f"final {entropy_per_iteration = }, final sum = {np.sum(number_per_century)}")
+            logger.info(f"final {number_per_century = }")
+            logger.info(f"final {entropy_per_iteration = }, final sum = {np.sum(number_per_century)}")
             np.save(filename, mixing)
-            print(f'saved file {filename}')
+            logger.info(f'saved file {filename}')
         else:
             mixing = np.load(filename)
-            print(f'file {filename} loaded')
+            logger.info(f'file {filename} loaded')
             
         self.var = self.var[mixing,...]  # This will apply permutation on all years
-        print(f'mixed {self.var.shape = }')
+        logger.info(f'mixed {self.var.shape = }')
         if hasattr(self, 'abs_mask'):
             self.abs_mask = self.abs_mask[mixing,...]
-            print(f'mixed {self.abs_mask.shape = }')
+            logger.info(f'mixed {self.abs_mask.shape = }')
         if hasattr(self, 'ano_abs_mask'):
             self.ano_abs_mask = self.ano_abs_mask[mixing,...]
-            print(f'mixed {self.ano_abs_mask.shape = }')
+            logger.info(f'mixed {self.ano_abs_mask.shape = }')
         if hasattr(self, 'abs_area_int'):
             self.abs_area_int = self.abs_area_int[mixing,...]
-            print(f'mixed {self.abs_area_int.shape = }')
+            logger.info(f'mixed {self.abs_area_int.shape = }')
         if hasattr(self, 'ano_area_int'):
             self.ano_area_int = self.ano_area_int[mixing,...]
-            print(f'mixed {self.ano_area_int.shape = }')
+            logger.info(f'mixed {self.ano_area_int.shape = }')
             
         self.new_equalmixing = new_mixing
         #self.time = self.time[mixing,:]   <- This we can't use because I don't load time in 3hrs sampling case
@@ -1614,36 +1612,36 @@ class Plasim_Field:
         if os.path.exists(filename):
             #print("series = np.load(filename)")
             series = np.load(filename)
-            print('file ' + filename + ' loaded')
+            logger.info(f'file {filename} loaded')
         else:
             self.abs_area_int, self.ano_area_int = self.Set_area_integral(area, mask)
             series = self.abs_area_int[:,(time_start+tau):(time_end+tau - T+1)].reshape((self.abs_area_int[:,(time_start+tau):(time_end+tau - T+1)].shape[0]*self.abs_area_int[:,(time_start+tau):(time_end+tau - T+1)].shape[1]))
             np.save(filename,series)
-            print('saved file ' + filename)
+            logger.info(f'saved file {filename}')
         return series
     
     def ReshapeInto1Dseries(self, area, mask, time_start, time_end, T, tau): # Reshape years and days into a 1D series useful for learning. In the new version we don't recalculate or reload existing time series because they could be mixed in advance (the years may be in the mixed order)!
         if hasattr(self, 'abs_area_int'):
             series = self.abs_area_int[:,(time_start+tau):(time_end+tau - T+1)].reshape((self.abs_area_int[:,(time_start+tau):(time_end+tau - T+1)].shape[0]*self.abs_area_int[:,(time_start+tau):(time_end+tau - T+1)].shape[1]))
         else:
-            print('First execute: self.abs_area_int, self.ano_area_int = self.Set_area_integral(area, mask)')
+            logger.warning('First execute: self.abs_area_int, self.ano_area_int = self.Set_area_integral(area, mask)')
         return series
     
     def ReshapeInto1DseriesCoarse(self, area, mask, time_start, time_end, T, tau, delta): # Reshape years and days into a 1D series useful for learning. Compute several day average (delta is the coarsegraining time)
         if hasattr(self, 'abs_area_int'):
             series = self.abs_area_int[:,(time_start+tau-delta//2):(time_end+tau - T+1+delta//2)]
-            print("series.shape = ", series.shape)
+            logger.info(f"{series.shape = }")
             convseq = np.ones(delta)/delta
 
             coarseseries = np.zeros((series.shape[0], series.shape[1]+delta), dtype=self.np_precision)
             for y in range(self.var.shape[0]):
                 coarseseries[y,:]=np.convolve(series[y,:],  convseq, mode='valid')
-            print("coarseseries.shape = ", coarseseries.shape)
+            logger.info(f"{coarseseries.shape = }")
             coarseseries = coarseseries.reshape((coarseseries.shape[0]*coarseseries.shape[1]))
-            print("coarseseries.shape = ", coarseseries.shape)
+            logger.info(f"{coarseseries.shape = }")
 
         else:
-            print('First execute: self.abs_area_int, self.ano_area_int = self.Set_area_integral(area, mask)')
+            logger.info('First execute: self.abs_area_int, self.ano_area_int = self.Set_area_integral(area, mask)')
         return series
     
     def ReshapeInto2Dseries(self,time_start,time_end,lat_from,lat_to,lon_from,lon_to,T,tau, dim=1): 
@@ -1720,7 +1718,7 @@ class Plasim_Field:
             convseq = np.zeros(T) # convolution to be used for running mean
             convseq[range(0,T,delta)] = 1/(T//delta)
             convseq = convseq[::-1] # this vector to be used in the convolution has to be inverted for the correct function
-            print("convseq = ", convseq)
+            print(f"{convseq = }")
         for y in range(self.var.shape[0]):
             A[y,:]=np.convolve(self.abs_area_int[y,(time_start):(time_end)],  convseq, mode='valid')
         A_reshape = A.reshape((A.shape[0]*A.shape[1]))
@@ -1759,22 +1757,22 @@ def ExtractAreaWithMask(mylocal,Model,area): # extract land sea mask and multipl
 def TryLocalSource(mylocal):
     folder = mylocal
     addresswithoutlocal = folder[7:]
-    print(f"{addresswithoutlocal = }")
+    logger.info(f"{addresswithoutlocal = }")
     mylocal = '/ClimateDynamics/MediumSpace/ClimateLearningFR/' # This is a hard overwrite to prevent looking in other folders and slow down say scratch. If something doesn't work in backward compatibility, remove it
     folder = mylocal+addresswithoutlocal
-    print("Trying source: ", mylocal) # We assume the input has the form: '/local/gmiloshe/PLASIM/'+''+'Data_Plasim/'
+    logger.info(f"Trying source: {mylocal}") # We assume the input has the form: '/local/gmiloshe/PLASIM/'+''+'Data_Plasim/'
     if not os.path.exists(folder):
         folder='/projects/users/'+addresswithoutlocal
-        print("Trying source: ", folder)
+        logger.info(f"Trying source: {folder}")
         if not os.path.exists(folder):
             folder='/ClimateDynamics/MediumSpace/ClimateLearningFR/'+addresswithoutlocal
-            print("Trying source: ", folder)
+            logger.info(f"Trying source: {folder}")
             if not os.path.exists(folder):
                 folder='/scratch/'+addresswithoutlocal
-                print("Trying source: ", folder)
+                logger.info(f"Trying source: {folder}")
                 if not os.path.exists(folder):
-                    print("Input data could not be found")
-    print("The source will be: ", folder)
+                    logger.warning("Input data could not be found")
+    logger.info(f"The source will be: {folder}")
     return folder
 
 def SingleLinearRegression(i,X, y):
@@ -1833,7 +1831,7 @@ def TrainTestSplit(i,X, labels, undersampling_factor,verbose): # OLD VERSION # C
     X_train_negatives_permuted = X_train_negatives[permutation_negatives,:] # permuted original series
     X_train_negatives_truncated = X_train_negatives_permuted[:len(Y_train_negatives)//undersampling_factor,:] # select a subset that is undersampled
     #if verbose:
-        #print("len(Y_train_negatives)//undersampling_factor = ",len(Y_train_negatives)//undersampling_factor)
+        #logger.info("len(Y_train_negatives)//undersampling_factor = ",len(Y_train_negatives)//undersampling_factor)
     Y_train_negatives_truncated = list(False for iterate in range(len(Y_train_negatives)//undersampling_factor)) # create mock labels
     #if verbose:
         #print(X_train_negatives_truncated.shape,len(Y_train_negatives_truncated))
@@ -1850,14 +1848,14 @@ def TrainTestSplitIndices(i,X, labels, undersampling_factor, sampling='', newund
     # i is the beginning, j corresponds to the end
     lower = int(i*X.shape[0]//num_batches)   # select the lower bound
     upper = int((i+j)*X.shape[0]//num_batches) # select the upper bound
-    print("initial lower = ", lower, " , initial upper = ", upper)
+    logger.info(f"initial: {lower = }, {upper = }")
     if upper<= X.shape[0]: # The usual situation we encounter 
         test_indices = np.array(range(lower,upper))  # extract the test set which is between the lower and the upper bound
         # next we select the train set which is below the lower bound and above the uppder bound
         train_indices = np.array(list(range(lower))+list(range(upper,X.shape[0])))  # The indices of the train set (relative to the original set)
     else: # This happens if we chose large test sets and leave-one-out algorithm surpasses the size of our data, the rest of the test set starts from the beginning of the dataset
         upper = upper - X.shape[0]
-        print("upper bound changed = ", upper)
+        logger.info(f"upper bound changed to {upper}")
         train_indices = np.array(range(upper,lower))  # extract the train set which is between the lower and the upper bound
         # next we select the test set which is below the lower bound and above the uppder bound
         test_indices = np.array(list(range(upper))+list(range(lower,X.shape[0])))  # The indices of the train set (relative to the original set)
@@ -1865,7 +1863,7 @@ def TrainTestSplitIndices(i,X, labels, undersampling_factor, sampling='', newund
     train_labels_indices = (labels[train_indices])                               # Array of labels of the train set (relative to the train set)
     train_true_labels_indices = (train_indices[(train_labels_indices)])               # The array of the indices of the true labels in the train set
     train_false_labels_indices = (train_indices[(~train_labels_indices)])             # The array indices of the false labels in the train set
-    print(" train_false_labels_indices.shape[0] = ", train_false_labels_indices.shape[0])
+    logger.info(f"{train_false_labels_indices.shape[0] = }")
     if undersampling_factor > 1: # if we need to manually remove some positive labels # THIS PART OF THE CODE SHOULD BE PHASED OUT NOW THAT WE HAVEN'T USED IT FOR A WHILE
         ## The old version for compatibility:
         #filename = 'Postproc/permutation_'+str(i)+'_sampling_'+str(sampling)+'_'+thefield+'.npy'
@@ -1873,10 +1871,10 @@ def TrainTestSplitIndices(i,X, labels, undersampling_factor, sampling='', newund
         filename = contain_folder+'/permutation_'+str(i)+'_sampling_'+str(sampling)+'_'+thefield+'_per_'+str(percent)+'.npy'
         if (not os.path.exists(filename)) or newundersampling:
             permutation_negatives = np.random.permutation(len(train_false_labels_indices)) #creates a permuation of integers up to len(train_false_labels_indices)
-            print('saving '+filename)
+            logger.info(f'saving {filename}')
             np.save(filename, permutation_negatives)
         else: 
-            print('loading '+filename)
+            logger.info(f'loading {filename}')
             permutation_negatives = np.load(filename)
         
         train_false_labels_undersampled_indices = train_false_labels_indices[permutation_negatives[:train_false_labels_indices.shape[0]//undersampling_factor]]
@@ -1901,10 +1899,10 @@ def TrainTestSampleIndices(i,Xshape, labels, undersampling_factor, sampling='', 
         filename = 'Postproc/permutation_'+str(i)+'_sampling_'+str(sampling)+'_'+thefield+'.npy'
         if ((not os.path.exists(filename)) or newundersampling):
             permutation_negatives = np.random.permutation(len(train_false_labels_indices)) #creates a permuation of integers up to len(Y_train_negatives)
-            print('saving '+filename)
+            logger.info(f'saving {filename}')
             np.save(filename, permutation_negatives)
         else:
-            print('loading '+filename)
+            logger.info(f'loading {filename}')
             permutation_negatives = np.load(filename)
         # First undersample false labels randomly
         train_false_labels_undersampled_indices = train_false_labels_indices[permutation_negatives[:train_false_labels_indices.shape[0]//undersampling_factor]] 
@@ -1934,11 +1932,11 @@ def TrainTestSplit2(i,X, labels, undersampling_factor,verbose): # NEW VERSION (r
     
         filename = 'Postproc/permutation_'+str(i)+'_undersampling_'+str(undersampling_factor)+'.npy'
         if os.path.exists(filename):
-            print('loading '+filename)
+            logger.info(f'loading {filename}')
             permutation_negatives = np.load(filename)
         else: 
             permutation_negatives = np.random.permutation(len(Y_train_negatives)) #creates a permuation of integers up to len(Y_train_negatives)
-            print('saving '+filename)
+            logger.info(f'saving {filename}')
             np.save(filename, permutation_negatives)
                                                                     
         X_train_negatives_permuted = X_train_negatives[permutation_negatives,:] # permuted original series
