@@ -55,37 +55,6 @@ will result in 4 runs:
     fields=['t2m', 'zg500'], tau=2
 '''
 
-
-# GM: at the moment when cd to the created directory and run this script I get an error:
-
-'''
-k_fold_cross_val:
-Traceback (most recent call last):
-  File "Learn2_new.py", line 1232, in _run
-    k_fold_cross_val(folder, self.X, self.Y, **k_fold_cross_val_kwargs)
-  File "/ClimateDynamics/MediumSpace/ClimateLearningFR/gmiloshe/PLASIM/newtest/ERA/utilities.py", line 181, in wrapper
-    r = func(*args, **kwargs)
-  File "/ClimateDynamics/MediumSpace/ClimateLearningFR/gmiloshe/PLASIM/newtest/ERA/utilities.py", line 134, in wrapper_inner
-    r = func(*args, **kwargs)
-  File "Learn2_new.py", line 852, in k_fold_cross_val
-    load_from = get_run(load_from, current_run_name=folder.rsplit('/',1)[-1])
-  File "Learn2_new.py", line 270, in get_run
-    if runs[l]['status'] != 'COMPLETED':
-KeyError: -1
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "Learn2_new.py", line 1322, in <module>
-    trainer.run()
-  File "Learn2_new.py", line 1190, in run
-    self._run(**kwargs)
-  File "Learn2_new.py", line 1245, in _run
-    raise RuntimeError('Run failed') from e
-RuntimeError: Run failed
-
-'''
-
 ### IMPORT LIBRARIES #####
 
 ## general purpose
