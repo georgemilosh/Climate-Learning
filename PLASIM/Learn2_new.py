@@ -1058,8 +1058,11 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, load_from='last', nfolds
             model = create_model(input_shape=X_tr.shape[1:], **create_model_kwargs)
         else:
             model = keras.models.load_model(f'{load_from}/fold_{i}', compile=False)
-            model.load_weights(f'{load_from}/fold_{i}/cp-{opt_checkpoint:04d}.ckpt')            
-        logger.info(model.summary())
+            model.load_weights(f'{load_from}/fold_{i}/cp-{opt_checkpoint:04d}.ckpt')
+        summary_buffer = ut.Buffer()
+        summary_buffer.append('\n')
+        model.summary(print_fn = lambda x: summary_buffer.append(x + '\n'))
+        logger.info(summary_buffer.msg)
 
         num_epochs = kwargs.pop('num_epochs', None)
         if num_epochs is None:
@@ -1403,8 +1406,6 @@ class Trainer():
         '''
         Parses kwargs and performs a single run, kwargs are not interpreted as iterables
         '''
-        for k,v in kwargs.items():
-            print(f'{k}: {v} ({type(v)})')
         # get run number
         runs = ut.json2dict('runs.json')
         run_id = str(len(runs))
@@ -1503,10 +1504,10 @@ if __name__ == '__main__':
     # schedule runs
     trainer.schedule(**arg_dict)
 
-    o = input('Start training? (Y/[n]) ')
-    if o != 'Y':
-        logger.error('Aborting')
-        sys.exit(0)
+    # o = input('Start training? (Y/[n]) ')
+    # if o != 'Y':
+    #     logger.error('Aborting')
+    #     sys.exit(0)
     
     trainer.run_multiple()
 

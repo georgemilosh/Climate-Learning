@@ -495,3 +495,10 @@ def compose_permutations(permutations):
     for _p in ps[1:]:
         p = _p[p]
     return p
+
+class Buffer():
+    def __init__(self):
+        self.msg = ''
+    def append(self, x):
+        x = str(x)
+        self.msg += x
