@@ -32,15 +32,25 @@ Invalid syntaxes are:
 
 You can also provide arguments as lists, in that case the program will iterate over them. For example:
     python Learn2_new.py tau='[0,1,2]'
+GM: The command results in the following error:
+
+Traceback (most recent call last):
+  File "Learn2_new.py", line 1501, in <module>
+    trainer.schedule(**arg_dict)
+  File "Learn2_new.py", line 1311, in schedule
+    if k in self.default_load_data_kwargs:
+AttributeError: 'Trainer' object has no attribute 'default_load_data_kwargs'
 
 will perform three runs with tau=1, tau=2, tau=3.
+
+
+
 
 Beware that you need to enclose the list inside a string or the terminal will complain. If you are passing a list of strings, use double apices, i.e.
     python Learn2.py area="['France', 'Scandinavia']"
 
-#GM: the sentence below is a bit strange
 
-If by default an argument is already a list, the provided list is not interpreted as to iterate over, for example the argument `fields` has default value ['t2m','zg500','mrso_filtered']. So running
+If by default an argument is already a list, the provided list is not interpreted as something to be iterated over, for example the argument `fields` has default value ['t2m','zg500','mrso_filtered']. So running
     python Learn2.py fields="['t2m', 'zg500']"
 
 will result in a single run performed with fields=['t2m', 'zg500']
@@ -57,9 +67,6 @@ will result in 4 runs:
 
 # GM: The code works but it is a bit strange that metrics vary so much between folds and in some they are rather low and converge more slowly, I have to look carefully.
 
-# GM: Later I tried running $python Learn2_new.py tau=5
-
-# Also next run failed when I added: $python Learn2_new.py
 
 ### IMPORT LIBRARIES #####
 
