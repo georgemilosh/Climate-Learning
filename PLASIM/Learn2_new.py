@@ -67,6 +67,7 @@ import os as os
 from pathlib import Path
 from stat import S_IREAD
 import sys
+import traceback
 import warnings
 import time
 import shutil
@@ -1389,7 +1390,9 @@ class Trainer():
                 os.chmod('config.json', S_IREAD)
         
         except Exception as e:
-            logger.critical(f'Run on {folder = } failed!')
+            logger.critical(f'Run on {folder = } failed due to {repr(e)}')
+            tb = traceback.format_exc()
+            logger.error(tb)
             raise RuntimeError('Run failed') from e
 
         finally:
@@ -1424,10 +1427,10 @@ class Trainer():
             runs[run_id]['status'] = 'COMPLETED'
             logger.log(42, 'run completed!!!\n\n')
 
-        except:
+        except Exception as e:
             runs = ut.json2dict('runs.json')
             runs[run_id]['status'] = 'FAILED'
-            raise
+            raise e
 
         finally:
             runs[run_id]['end_time'] = ut.now()
