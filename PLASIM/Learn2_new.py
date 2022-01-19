@@ -32,14 +32,6 @@ Invalid syntaxes are:
 
 You can also provide arguments as lists, in that case the program will iterate over them. For example:
     python Learn2_new.py tau='[0,1,2]'
-GM: The command results in the following error:
-
-Traceback (most recent call last):
-  File "Learn2_new.py", line 1501, in <module>
-    trainer.schedule(**arg_dict)
-  File "Learn2_new.py", line 1311, in schedule
-    if k in self.default_load_data_kwargs:
-AttributeError: 'Trainer' object has no attribute 'default_load_data_kwargs'
 
 will perform three runs with tau=1, tau=2, tau=3.
 
@@ -1315,7 +1307,7 @@ class Trainer():
         # arguments for loading fields
         to_add = []
         for k in iterate_over:
-            if k in self.default_load_data_kwargs:
+            if k in self.default_run_kwargs['load_data_kwargs']:
                 to_add.append(k)
         new_iterate_over += to_add
         for k in to_add:
@@ -1323,7 +1315,7 @@ class Trainer():
         # arguments for preparing XY
         to_add = []
         for k in iterate_over:
-            if k in self.default_prepare_XY_kwargs:
+            if k in self.default_run_kwargs['prepare_XY_kwargs']:
                 to_add.append(k)
         new_iterate_over += to_add
         for k in to_add:
