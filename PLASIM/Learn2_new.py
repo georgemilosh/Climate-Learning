@@ -63,10 +63,8 @@ will result in 4 runs:
 ### IMPORT LIBRARIES #####
 
 ## general purpose
-from lib2to3.pgen2 import token
 import os as os
 from pathlib import Path
-from signal import pthread_kill
 from stat import S_IREAD
 import sys
 import warnings
@@ -76,7 +74,6 @@ import gc
 import psutil
 import numpy as np
 import inspect
-from functools import wraps
 import ast
 import logging
 
@@ -929,7 +926,7 @@ def k_fold_cross_val_split(i, X, Y, nfolds=10, val_folds=1):
         raise ValueError(f'val_folds out of the range [1, {nfolds - 1}]')
     fold_len = X.shape[0]//nfolds
     lower = i*fold_len % X.shape[0]
-    upper = (i+val_folds) % X.shape[0]
+    upper = (i+val_folds)*fold_len % X.shape[0]
     if lower < upper:
         X_va = X[lower:upper]
         Y_va = Y[lower:upper]
@@ -1328,6 +1325,8 @@ class Trainer():
         iteration_values = [kwargs[k] for k in iterate_over]
         # expand the iterations into a list
         iteration_values = list(zip(*[m.flatten() for m in np.meshgrid(*iteration_values, indexing='ij')]))
+        # ensure json serialazability by converting to string and back
+        iteration_values = ast.literal_eval(str(iteration_values))
 
         self.scheduled_kwargs = [{**non_iterative_kwargs, **{k: l[i] for i,k in enumerate(iterate_over)}} for l in iteration_values]
 
@@ -1401,6 +1400,8 @@ class Trainer():
         '''
         Parses kwargs and performs a single run, kwargs are not interpreted as iterables
         '''
+        for k,v in kwargs.items():
+            print(f'{k}: {v} ({type(v)})')
         # get run number
         runs = ut.json2dict('runs.json')
         run_id = str(len(runs))
