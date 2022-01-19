@@ -8,13 +8,11 @@ Set of general purpose functions
 '''
 
 # import libraries
-from curses import wrapper
-import enum
-from inspect import indentsize
-from os import terminal_size
+import os
 import numpy as np
 import sys
 from functools import wraps
+from pathlib import Path
 import time
 from datetime import datetime
 import json
@@ -199,10 +197,10 @@ def new_telegram_handler(chat_ID=None, token=None, level=logging.WARNING, format
 
     Parameters
     ----------
-    chat_ID : int or None, optional
-        chat ID of the telegram user or group to whom send the logs. If None it is the last used.
+    chat_ID : int or str or None, optional
+        chat ID of the telegram user or group to whom send the logs. If None it is the last used. If str it is a path to a file where it is stored.
         To find your chat ID go to telegram and search for 'userinfobot' and type '/start'. The bot will provide you with your chat ID.
-        You can do the same with a telegram group, and, in this case, you will need to invite 'autoJASCObot' to the group.
+        You can do the same with a telegram group, and, in this case, you will need to invite 'ENSMLbot' to the group.
         The default is None.
     token: str
         token for the telegram bot or path to a text file where the first line is the token
@@ -221,10 +219,15 @@ def new_telegram_handler(chat_ID=None, token=None, level=logging.WARNING, format
     '''
     import telegram_handler # NOTE: to install this package run pip install python-telegram-handler
     try:
+        if token.startswith('~'):
+            token = f"{os.environ['HOME']}{token[1:]}"
         with open(token, 'r') as token_file:
             token = token_file.readline().rstrip('\n')
     except FileNotFoundError:
         pass
+    if isinstance(chat_ID, str) or isinstance(chat_ID, Path):
+        with open(chat_ID, 'r') as chat_ID_file:
+            chat_ID = int(chat_ID_file.readline().rstrip('\n'))
     th = telegram_handler.handlers.TelegramHandler(token=token, chat_id=chat_ID, **kwargs)
     if isinstance(formatter, str):
         if formatter == 'default':
