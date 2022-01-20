@@ -539,4 +539,5 @@ def make_safe(path):
     path = path.replace(' ', '')
     path = path.replace('[', '(')
     path = path.replace(']', ')')
+    path = path.replace("'", '')
     return path

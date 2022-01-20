@@ -997,9 +997,9 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, train_model_kwargs, load
 
     load_from = get_run(load_from, current_run_name=folder.rsplit('/',1)[-1])
     if load_from is None:
-        logger.log(35, 'Models will be trained from scratch')
+        logger.log(41, 'Models will be trained from scratch')
     else:
-        logger.log(35, f'Models will be loaded from {load_from}')
+        logger.log(41, f'Models will be loaded from {load_from}')
 
     my_memory = []
 
