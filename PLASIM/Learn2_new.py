@@ -1355,7 +1355,7 @@ class Trainer():
             for i,kw in enumerate(self.scheduled_kwargs):
                 logger.info(f'{i}: {kw}')
     
-    def telegram(self, telegram_bot_token='~/ENSMLbot.txt', chat_ID=None, telegram_logging_level=logging.WARNING, telegram_logging_format=None):
+    def telegram(self, telegram_bot_token='~/ENSMLbot.txt', chat_ID=None, telegram_logging_level=31, telegram_logging_format=None):
         th = None
         if telegram_bot_token is not None and chat_ID is not None:
             th = ut.new_telegram_handler(chat_ID=chat_ID, token=telegram_bot_token, level=telegram_logging_level, formatter=telegram_logging_format)
@@ -1369,6 +1369,7 @@ class Trainer():
         try:
             for kwargs in self.scheduled_kwargs:
                 self._run(**kwargs)
+            logger.log(45, '\n\n\n\n\n\nALL RUNS COMPLETED\n\n')
         finally:
             if th is not None:
                 logger.handlers.remove(th)
@@ -1529,8 +1530,6 @@ if __name__ == '__main__':
     #     sys.exit(0)
     
     trainer.run_multiple()
-
-    logger.log(45, '\n\n\n\n\n\nALL RUNS COMPLETED\n\n')
 
 
 
