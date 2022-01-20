@@ -947,8 +947,8 @@ def k_fold_cross_val_split(i, X, Y, nfolds=10, val_folds=1):
 
 @ut.execution_time
 @ut.indent_logger(logger)
-def k_fold_cross_val(folder, X, Y, create_model_kwargs, load_from='last', nfolds=10, val_folds=1, u=1,
-                     fullmetrics=True, training_epochs=40, training_epochs_tl=10, lr=1e-4, batch_size=1024, **kwargs):
+def k_fold_cross_val(folder, X, Y, create_model_kwargs, train_model_kwargs, load_from='last', nfolds=10, val_folds=1, u=1,
+                     fullmetrics=True, training_epochs=40, training_epochs_tl=10, lr=1e-4):
     '''
     Performs k fold cross validation on a model architecture.
 
@@ -962,6 +962,13 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, load_from='last', nfolds
         all labels
     create_model_kwargs : dict
         dictionary with the parameters to create a model
+    train_model_kwargs : dict
+        dictionary with the parameters to train a model
+        The follwing special arguments will override other parameters of this function:
+            num_epochs: overrides `training_epochs` and `training_epochs_tl`
+            optimizer: overrides `lr`
+            loss: overrides the default SparseCrossEntropyLoss
+            metrics: overrides `fullmetrics`
     load_from : None, int, str or 'last', optional
         from where to load weights for transfer learning. See the documentation of function `get_run`
         If not None it overrides `create_model_kwargs` (the model is loaded instead of created)
@@ -978,14 +985,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, load_from='last', nfolds
     training_epochs_tl : int, optional 
         numer of training epochs when using transfer learning
     lr : float, optional
-        learning_rate for Adam optimizer
-    batch_size : int, optional
-
-    **kwargs : additional arguments to pass to `train_model` (see its docstring), in particular
-        num_epochs: overrides `training_epochs` and `training_epochs_tl`
-        optimizer: overrides `lr`
-        loss: overrides the default SparseCrossEntropyLoss
-        metrics: overrides `fullmetrics`
+        learning_rate for Adam optimizer       
     '''
     folder = folder.rstrip('/')
 
@@ -1073,7 +1073,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, load_from='last', nfolds
         model.summary(print_fn = lambda x: summary_buffer.append(x + '\n'))
         logger.info(summary_buffer.msg)
 
-        num_epochs = kwargs.pop('num_epochs', None)
+        num_epochs = train_model_kwargs.pop('num_epochs', None)
         if num_epochs is None:
             if load_from is None:
                 num_epochs = training_epochs
@@ -1081,17 +1081,17 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, load_from='last', nfolds
                 num_epochs = training_epochs_tl
 
         tf_sampling = tf.cast([0.5*np.log(u), -0.5*np.log(u)], tf.float32)
-        metrics = kwargs.pop('metrics', None)
+        metrics = train_model_kwargs.pop('metrics', None)
         if metrics is None:
             if fullmetrics:
                 metrics=['accuracy',tff.MCCMetric(2),tff.ConfusionMatrixMetric(2),tff.CustomLoss(tf_sampling)]#keras.metrics.SparseCategoricalCrossentropy(from_logits=True)]#CustomLoss()]   # the last two make the code run longer but give precise discrete prediction benchmarks
             else:
                 metrics=['loss']
-        optimizer = kwargs.pop('optimizer',keras.optimizers.Adam(learning_rate=lr))
-        loss = kwargs.pop('loss',keras.losses.SparseCategoricalCrossentropy(from_logits=True))
+        optimizer = train_model_kwargs.pop('optimizer',keras.optimizers.Adam(learning_rate=lr))
+        loss = train_model_kwargs.pop('loss',keras.losses.SparseCategoricalCrossentropy(from_logits=True))
 
         train_model(model, X_tr, Y_tr, X_va, Y_va,
-                    folder=fold_folder, num_epochs=num_epochs, optimizer=optimizer, loss=loss, metrics=metrics, batch_size=batch_size, **kwargs)
+                    folder=fold_folder, num_epochs=num_epochs, optimizer=optimizer, loss=loss, metrics=metrics, **train_model_kwargs)
 
         my_memory.append(psutil.virtual_memory())
         logger.info(f'RAM memory: {my_memory[i][3]:.3e}') # Getting % usage of virtual_memory ( 3rd field)
