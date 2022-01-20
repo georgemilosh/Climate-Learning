@@ -45,6 +45,25 @@ Beware that you need to enclose the list inside a string or the terminal will co
 If by default an argument is already a list, the provided list is not interpreted as something to be iterated over, for example the argument `fields` has default value ['t2m','zg500','mrso_filtered']. So running
     python Learn2.py fields="['t2m', 'zg500']"
 
+# Here I got:
+
+ ValueError: Input 0 of layer sequential is incompatible with the layer: expected axis -1 of input shape to have value 3 but received input with shape (None, 22, 128, 2)
+
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "Learn2_new.py", line 1508, in <module>
+    trainer.run_multiple()
+  File "Learn2_new.py", line 1357, in run_multiple
+    self._run(**kwargs)
+  File "Learn2_new.py", line 1421, in _run
+    self.run(folder, **run_kwargs)
+  File "Learn2_new.py", line 1393, in run
+    raise RuntimeError('Run failed') from e
+RuntimeError: Run failed
+
+
 will result in a single run performed with fields=['t2m', 'zg500']
 
 If you provide more than one argument to iterate over, all combinations will be performed, e.g.:
