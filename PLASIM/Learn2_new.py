@@ -293,14 +293,30 @@ def get_run(load_from, current_run_name=None):
     '''
     if load_from is None:
         return None
+
+    create_model_keys = list(get_default_params(create_model).keys()) + ['nfolds', 'fields'] # arguments relevant for model architecture
+
+    def check(run_name, current_run_name=None):
+        if current_run_name is None:
+            return True
+        # parse run_name for arguments
+        run_dict = parse_run_name(run_name)
+        current_run_dict = parse_run_name(current_run_name)
+        # keep only arguments that are model kwargs
+        run_dict = {k:v for k,v in run_dict.items() if k in create_model_keys}
+        current_run_dict = {k:v for k,v in current_run_dict.items() if k in create_model_keys}
+        return run_dict == current_run_dict
     
     runs = ut.json2dict('runs.json')
 
     # select only completed runs
     runs = {k: v for k,v in runs.items() if v['status'] == 'COMPLETED'}
 
+    # select only compatible runs
+    runs = {k: v for k,v in runs.items if check(v['name'], current_run_name)}
+
     if len(runs) == 0:
-        logger.warning('No runs to load from')
+        logger.warning('No valid runs to load from')
         return None
     if isinstance(load_from, dict):
         found = False
@@ -312,7 +328,7 @@ def get_run(load_from, current_run_name=None):
                 else: # ambiguity
                     raise KeyError(f"Multiple runs contain {load_from}, at least {l} and {i}")
         if not found:
-            raise KeyError(f'No previous run has {load_from}')
+            raise KeyError(f'No previous compatible run has {load_from}')
     elif isinstance(load_from, int):
         l = load_from
     elif isinstance(load_from, str):
@@ -333,7 +349,7 @@ def get_run(load_from, current_run_name=None):
                         else: # ambiguity
                             raise KeyError(f'Multiple runs contain {load_from_dict}, at least {l} and {i}')
                 if not found:
-                    raise KeyError(f'No previous run has {load_from_dict}')
+                    raise KeyError(f'No previous compatible run has {load_from_dict}')
     else:
         raise TypeError(f'Unsupported type {type(load_from)} for load_from')
     # now l is an int
@@ -343,20 +359,6 @@ def get_run(load_from, current_run_name=None):
         r = runs[str(l)]
     run_name = r['name']
     
-    if current_run_name is not None: # check for compatibility issues when loading
-        # parse run_name for arguments
-        run_dict = parse_run_name(run_name)
-        current_run_dict = parse_run_name(current_run_name)
-        create_model_keys = list(get_default_params(create_model).keys()) + ['nfolds']
-
-        # keep only arguments that are model kwargs
-        run_dict = {k:v for k,v in run_dict.items() if k in create_model_keys}
-        current_run_dict = {k:v for k,v in current_run_dict.items() if k in create_model_keys}
-
-        # check if arguments match
-        if run_dict != current_run_dict:
-            raise ValueError('The current run and the one you want to load from have different model architectures')
-
     return run_name
 
 ########## COPY SOURCE FILES #########
@@ -1004,6 +1006,10 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, load_from='last', nfolds
     folder = folder.rstrip('/')
 
     load_from = get_run(load_from, current_run_name=folder.rsplit('/',1)[-1])
+    if load_from is None:
+        logger.log(35, 'Models will be trained from scratch')
+    else:
+        logger.log(35, f'Models will be loaded from {load_from}')
 
     my_memory = []
 
@@ -1240,7 +1246,7 @@ def run(folder, prepare_data_kwargs, k_fold_cross_val_kwargs, log_level=logging.
         logger.info(f"{tf.config.list_physical_devices('GPU') = }")
         GPU = len(tf.config.list_physical_devices('GPU'))
     if not GPU:
-        warnings.warn('\nThis machine does not have a GPU: training may be very slow\n')
+        warnings.warn('\n\nThis machine does not have a GPU: training may be very slow\n\n')
 
     # prepare the data
     X,Y, permutation = prepare_data(**prepare_data_kwargs)
