@@ -106,6 +106,10 @@ import ERA_Fields as ef # general routines
 import TF_Fields as tff # tensorflow routines
 import utilities as ut
 
+
+arg_sep = '--'
+value_sep = '__'
+
 ########## USAGE ###############################
 def usage(): 
     '''
@@ -237,11 +241,11 @@ def parse_run_name(run_name):
     {'test_arg': 'bla', 'b': '7'}
     '''
     d = {}
-    args = run_name.split('__')
+    args = run_name.split(arg_sep)
     for arg in args:
         if '_' not in arg:
             continue
-        key, value = arg.rsplit('_',1)
+        key, value = arg.rsplit(value_sep,1)
         d[key] = value
     return d
 
@@ -1428,10 +1432,10 @@ class Trainer():
         # get run number
         run_id = str(len(runs))
 
-        folder = f'{run_id}__'
+        folder = f'{run_id}{arg_sep}'
         for k in sorted(kwargs):
-            folder += f'{k}_{kwargs[k]}__'
-        folder = folder[:-2] # remove the last '__'
+            folder += f'{k}{value_sep}{kwargs[k]}{arg_sep}'
+        folder = folder[:-len(arg_sep)] # remove the last arg_sep
         logger.log(42, f'{folder = }\n')
         
         runs[run_id] = {'name': folder, 'args': kwargs, 'status': 'RUNNING', 'start_time': ut.now()}
