@@ -847,15 +847,17 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     '''
     folder = folder.rstrip('/')
     ckpt_name = folder + '/cp-{epoch:04d}.ckpt'
-    if additional_callbacks is None:
-        additional_callbacks = []
-    else:
-        for i,cb in enumerate(additional_callbacks):
+    
+    callbacks = []
+    if additional_callbacks is not None:
+        for cb in additional_callbacks:
             if isinstance(cb, str):
                 if cb.lower().startswith('csv'):
-                    additional_callbacks[i] = keras.callbacks.CSVLogger(f'{folder}/history.csv', append=True)
+                    callbacks.append(keras.callbacks.CSVLogger(f'{folder}/history.csv', append=True))
                 else:
                     raise ValueError(f'Unable to understand callback {cb}')
+            else:
+                callbacks.append(cb)
 
     ckpt_callback = None
     if checkpoint_every == 0:
@@ -884,14 +886,14 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
         raise ValueError(f'Unrecognized value for {checkpoint_every = }')
 
     if ckpt_callback is not None:
-        additional_callbacks.append(ckpt_callback)
+        callbacks.append(ckpt_callback)
 
     model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
     model.save_weights(ckpt_name.format(epoch=0))
 
     my_history=model.fit(X_tr, Y_tr, batch_size=batch_size, validation_data=(X_va,Y_va), shuffle=True,
-                         callbacks=additional_callbacks, epochs=num_epochs, verbose=2, class_weight=None)
+                         callbacks=callbacks, epochs=num_epochs, verbose=2, class_weight=None)
 
     model.save(folder)
     np.save(f'{folder}/history.npy', my_history.history)
