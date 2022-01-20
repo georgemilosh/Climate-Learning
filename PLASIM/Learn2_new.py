@@ -289,7 +289,7 @@ def get_run(load_from, current_run_name=None):
     runs = {k: v for k,v in runs.items() if v['status'] == 'COMPLETED'}
 
     # select only compatible runs
-    runs = {k: v for k,v in runs.items if check(v['name'], current_run_name)}
+    runs = {k: v for k,v in runs.items() if check(v['name'], current_run_name)}
 
     if len(runs) == 0:
         logger.warning('No valid runs to load from')
@@ -1446,6 +1446,8 @@ class Trainer():
         except Exception as e:
             runs = ut.json2dict('runs.json')
             runs[run_id]['status'] = 'FAILED'
+            runs[run_id]['name'] = f'F{folder}'
+            shutil.move(folder, f'F{folder}')
             raise e
 
         finally:
