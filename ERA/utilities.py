@@ -521,3 +521,22 @@ class Buffer():
     def append(self, x):
         x = str(x)
         self.msg += x
+
+def make_safe(path):
+    '''
+    Replaces square brackets with round ones and removes spaces
+
+    Parameters
+    ----------
+    path : str
+        path to be modified
+
+    Returns
+    -------
+    str
+        modified path
+    '''
+    path = path.replace(' ', '')
+    path = path.replace('[', '(')
+    path = path.replace(']', ')')
+    return path

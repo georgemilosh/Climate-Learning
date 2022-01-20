@@ -1436,6 +1436,7 @@ class Trainer():
         for k in sorted(kwargs):
             folder += f'{k}{value_sep}{kwargs[k]}{arg_sep}'
         folder = folder[:-len(arg_sep)] # remove the last arg_sep
+        folder = ut.make_safe(folder)
         logger.log(42, f'{folder = }\n')
         
         runs[run_id] = {'name': folder, 'args': kwargs, 'status': 'RUNNING', 'start_time': ut.now()}
