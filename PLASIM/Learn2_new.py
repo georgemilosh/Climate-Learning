@@ -36,33 +36,12 @@ You can also provide arguments as lists, in that case the program will iterate o
 will perform three runs with tau=1, tau=2, tau=3.
 
 
-
-
 Beware that you need to enclose the list inside a string or the terminal will complain. If you are passing a list of strings, use double apices, i.e.
     python Learn2.py area="['France', 'Scandinavia']"
 
 
 If by default an argument is already a list, the provided list is not interpreted as something to be iterated over, for example the argument `fields` has default value ['t2m','zg500','mrso_filtered']. So running
     python Learn2.py fields="['t2m', 'zg500']"
-
-# Here I got:
-
- ValueError: Input 0 of layer sequential is incompatible with the layer: expected axis -1 of input shape to have value 3 but received input with shape (None, 22, 128, 2)
-
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "Learn2_new.py", line 1508, in <module>
-    trainer.run_multiple()
-  File "Learn2_new.py", line 1357, in run_multiple
-    self._run(**kwargs)
-  File "Learn2_new.py", line 1421, in _run
-    self.run(folder, **run_kwargs)
-  File "Learn2_new.py", line 1393, in run
-    raise RuntimeError('Run failed') from e
-RuntimeError: Run failed
-
 
 will result in a single run performed with fields=['t2m', 'zg500']
 
@@ -76,9 +55,28 @@ will result in 4 runs:
     fields=['t2m', 'zg500'], tau=2
 '''
 
-# GM: The code works but it is a bit strange that metrics vary so much between folds and in some they are rather low and converge more slowly, I have to look carefully.
+# GM: The run in folder newtest
+# python Learn2_new.py fields="['t2m', 'zg500']"
+#was successful 
+# GM: Then I tried:
+
+#python Learn2_new.py fields="[['t2m'], ['t2m', 'zg500']]" tau='[1,2]'
+
+# I got an error
+'''
+FileNotFoundError: Unsuccessful TensorSliceReader constructor: Failed to find any matching files for 0__fields_['t2m', 'zg500']/fold_0/variables/variables
+#
+ If trying to load on a different device from the computational device, consider using setting the `experimental_io_device` option on tf.saved_model.LoadOptions to the io_device such as '/job:localhost'.
+#
+
+Traceback (most recent call last):
+  File "/home/gmiloshe/miniconda3/envs/myenv3.8/lib/python3.8/site-packages/tensorflow/python/training/py_checkpoint_reader.py", line 95, in NewCheckpointReader
+    return CheckpointReader(compat.as_bytes(filepattern))
+RuntimeError: Unsuccessful TensorSliceReader constructor: Failed to find any matching files for 0__fields_['t2m', 'zg500']/fold_0/variables/variables
 
 
+
+'''
 ### IMPORT LIBRARIES #####
 
 ## general purpose
