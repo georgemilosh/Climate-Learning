@@ -155,7 +155,26 @@ def indent_logger(logger=None):
         logger = logging.getLogger()
     if isinstance(logger, str):
         logger = logging.getLogger(logger)
-    return indent(*[h.stream for h in logger.handlers])
+    def wrapper_outer(func):
+        @wraps(func)
+        def wrapper_inner(*args, **kwargs):
+            streams = [h.stream for h in logger.handlers if hasattr(h, 'stream')]
+            # save old write and emit functions
+            old_write = [stream.write if hasattr(stream, 'write') else None for stream in streams]
+            # indent write and emit functions
+            for i,stream in enumerate(streams):
+                if old_write[i] is not None:
+                    stream.write = indent_write(stream.write)
+            try:
+                r = func(*args, **kwargs)
+            finally:
+                # restore original functions
+                for i,stream in enumerate(streams):
+                    if old_write[i] is not None:
+                        stream.write = old_write[i]
+            return r
+        return wrapper_inner
+    return wrapper_outer
 
 def indent_stdout(func):
     '''

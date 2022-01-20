@@ -196,7 +196,8 @@ class MCCMetric(tf.keras.metrics.Metric): # This function is designed to produce
     def update_state(self, y_true, y_pred,sample_weight=None):
         self.total_cm.assign_add(self.confusion_matrix(y_true,y_pred))
         return self.total_cm
-        
+    
+    @tf.autograph.experimental.do_not_convert
     def result(self):
         #return self.process_confusion_matrix()
         cm=self.total_cm

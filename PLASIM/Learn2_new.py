@@ -55,28 +55,6 @@ will result in 4 runs:
     fields=['t2m', 'zg500'], tau=2
 '''
 
-# GM: The run in folder newtest
-# python Learn2_new.py fields="['t2m', 'zg500']"
-#was successful 
-# GM: Then I tried:
-
-#python Learn2_new.py fields="[['t2m'], ['t2m', 'zg500']]" tau='[1,2]'
-
-# I got an error
-'''
-FileNotFoundError: Unsuccessful TensorSliceReader constructor: Failed to find any matching files for 0__fields_['t2m', 'zg500']/fold_0/variables/variables
-#
- If trying to load on a different device from the computational device, consider using setting the `experimental_io_device` option on tf.saved_model.LoadOptions to the io_device such as '/job:localhost'.
-#
-
-Traceback (most recent call last):
-  File "/home/gmiloshe/miniconda3/envs/myenv3.8/lib/python3.8/site-packages/tensorflow/python/training/py_checkpoint_reader.py", line 95, in NewCheckpointReader
-    return CheckpointReader(compat.as_bytes(filepattern))
-RuntimeError: Unsuccessful TensorSliceReader constructor: Failed to find any matching files for 0__fields_['t2m', 'zg500']/fold_0/variables/variables
-
-
-
-'''
 ### IMPORT LIBRARIES #####
 
 ## general purpose
@@ -834,7 +812,7 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
 @ut.execution_time
 @ut.indent_logger(logger)
 def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics,
-                batch_size=1024, checkpoint_every=1, additional_callbacks=None):
+                batch_size=1024, checkpoint_every=1, additional_callbacks=['csv_logger']):
     '''
     Trains a given model checkpointing its weights
 
@@ -863,42 +841,50 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
         5 or '5 epochs' or '5 e': every 5 epochs
         '100 batches' or '100 b': every 100 batches
         'best custom_loss': every time 'custom_loss' reaches a new minimum. 'custom_loss' must be in the list of metrics
-    additional_callbacks : list of keras.callbacks.Callback objects
+    additional_callbacks : list of keras.callbacks.Callback objects or list of str, optional
         for example EarlyStopping
+        string items are interpreted, for example 'csv_logger' creates a CSVLogger callback
     '''
     folder = folder.rstrip('/')
     ckpt_name = folder + '/cp-{epoch:04d}.ckpt'
     if additional_callbacks is None:
         additional_callbacks = []
+    else:
+        for i,cb in enumerate(additional_callbacks):
+            if isinstance(cb, str):
+                if cb.lower().startswith('csv'):
+                    additional_callbacks[i] = keras.callbacks.CSVLogger(f'{folder}/history.csv', append=True)
+                else:
+                    raise ValueError(f'Unable to understand callback {cb}')
 
     ckpt_callback = None
     if checkpoint_every == 0:
         pass
     elif checkpoint_every == 1: # save every epoch
-        ckpt_callpback = keras.callbacks.ModelCheckpoint(filepath=ckpt_name, save_weights_only=True, verbose=1)
+        ckpt_callback = keras.callbacks.ModelCheckpoint(filepath=ckpt_name, save_weights_only=True, verbose=1)
     elif isinstance(checkpoint_every, int): # save every checkpoint_every epochs 
-        ckpt_callpback = keras.callbacks.ModelCheckpoint(filepath=ckpt_name, save_weights_only=True, verbose=1, period=checkpoint_every)
+        ckpt_callback = keras.callbacks.ModelCheckpoint(filepath=ckpt_name, save_weights_only=True, verbose=1, period=checkpoint_every)
     elif isinstance(checkpoint_every, str): # parse string options
         if checkpoint_every[0].isnumeric():
             every, what = checkpoint_every.split(' ',1)
             every = int(every)
             if what.startswith('b'): # every batch
-                ckpt_callpback = keras.callbacks.ModelCheckpoint(filepath=ckpt_name, save_weights_only=True, verbose=1, save_freq=every)
+                ckpt_callback = keras.callbacks.ModelCheckpoint(filepath=ckpt_name, save_weights_only=True, verbose=1, save_freq=every)
             elif what.startswith('e'): # every epoch
-                ckpt_callpback = keras.callbacks.ModelCheckpoint(filepath=ckpt_name, save_weights_only=True, verbose=1, period=every)
+                ckpt_callback = keras.callbacks.ModelCheckpoint(filepath=ckpt_name, save_weights_only=True, verbose=1, period=every)
             else:
                 raise ValueError(f'Unrecognized value for {checkpoint_every = }')
 
         elif checkpoint_every.startswith('best'): # every best of something
             monitor = checkpoint_every.split(' ',1)[1]
-            ckpt_callpback = keras.callbacks.ModelCheckpoint(filepath=ckpt_name, monitor=monitor, save_best_only=True, save_weights_only=True, verbose=1)
+            ckpt_callback = keras.callbacks.ModelCheckpoint(filepath=ckpt_name, monitor=monitor, save_best_only=True, save_weights_only=True, verbose=1)
         else:
             raise ValueError(f'Unrecognized value for {checkpoint_every = }')
     else:
         raise ValueError(f'Unrecognized value for {checkpoint_every = }')
 
-    if ckpt_callpback is not None:
-        additional_callbacks.append(ckpt_callpback)
+    if ckpt_callback is not None:
+        additional_callbacks.append(ckpt_callback)
 
     model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
@@ -1267,7 +1253,6 @@ def run(folder, prepare_data_kwargs, k_fold_cross_val_kwargs, log_level=logging.
 
 ###### EFFICIENT MANAGEMENT OF MULTIPLE RUNS #######
 
-# NOTE: this is still pseudo-code
 class Trainer():
     def __init__(self):
         # load config file and parse arguments
@@ -1429,8 +1414,15 @@ class Trainer():
         '''
         Parses kwargs and performs a single run, kwargs are not interpreted as iterables
         '''
-        # get run number
         runs = ut.json2dict('runs.json')
+
+        # check if the run has already been performed
+        for r in runs.values():
+            if r['status'] == 'COMPLETED' and r['args'] == kwargs:
+                logger.log(45, f"Skipping already performed run {r['name']}")
+                return None
+
+        # get run number
         run_id = str(len(runs))
 
         folder = f'{run_id}__'
