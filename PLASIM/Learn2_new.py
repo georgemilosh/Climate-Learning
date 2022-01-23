@@ -53,6 +53,35 @@ will result in 4 runs:
     fields=['t2m'], tau=2
     fields=['t2m', 'zg500'], tau=1
     fields=['t2m', 'zg500'], tau=2
+
+
+Logging levels:
+level   name                events
+
+0       logging.NOTSET
+
+10      logging.DEBUG
+
+20      logging.INFO
+
+30      logging.WARNING
+
+35                          Which fold is running
+
+40      logging.ERROR
+
+41                          From where the models are loaded or created
+
+42                          Folder name of the run
+                            Single run completes
+
+45                          Added and removed telegram logger
+                            Tell number of scheduled runs
+                            Skipping already performed run
+
+49                          All runs completed
+
+50      logging.CRITICAL    The program stops due to an error
 '''
 
 ### IMPORT LIBRARIES #####
@@ -1373,7 +1402,7 @@ class Trainer():
         try:
             for kwargs in self.scheduled_kwargs:
                 self._run(**kwargs)
-            logger.log(45, '\n\n\n\n\n\nALL RUNS COMPLETED\n\n')
+            logger.log(49, '\n\n\n\n\n\nALL RUNS COMPLETED\n\n')
         finally:
             if th is not None:
                 logger.handlers.remove(th)

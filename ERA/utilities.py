@@ -516,6 +516,9 @@ def compose_permutations(permutations):
     return p
 
 class Buffer():
+    '''
+    A simple class for storing a string.
+    '''
     def __init__(self):
         self.msg = ''
     def append(self, x):
@@ -524,7 +527,7 @@ class Buffer():
 
 def make_safe(path):
     '''
-    Replaces square brackets with round ones and removes spaces
+    Replaces square brackets with round ones and removes spaces and ' characters
 
     Parameters
     ----------
