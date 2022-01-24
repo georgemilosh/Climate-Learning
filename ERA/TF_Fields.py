@@ -179,14 +179,29 @@ def vae_generate_images(vae,Z_DIM,n_to_show=10):
         sub = fig.add_subplot(2, n_to_show, i+1)
         sub.axis('off')        
         sub.imshow(img)
+
+
+
+#### Custom Metrics ######
+
     
 class MCCMetric(tf.keras.metrics.Metric): # This function is designed to produce confusion matrix during training each epoch
-    """
-    A custom Keras metric to compute the running average of the confusion matrix
-    """
-    def __init__(self, num_classes, **kwargs):
-        super(MCCMetric,self).__init__(name='MCC',**kwargs) # handles base args (e.g., dtype)
+    def __init__(self, num_classes, threshold=None, **kwargs):
+        '''
+        Mathews correlation coefficient metric
+
+        Parameters
+        ----------
+        num_classes : int
+            number of classes
+        threshold : float, optional
+            If num_classes == 2 allows to choose a threshold over which to consider an event positive. If None the event is positive if it has probability higher than 0.5. By default None
+        '''
+        super().__init__(name='MCC',**kwargs) # handles base args (e.g., dtype)
         self.num_classes=num_classes
+        self.threshold = threshold
+        if self.num_classes > 2:
+            self.threshold = None
         self.total_cm = self.add_weight("total", shape=(num_classes,num_classes), initializer="zeros")
         
     def reset_states(self):
@@ -212,8 +227,10 @@ class MCCMetric(tf.keras.metrics.Metric): # This function is designed to produce
         return tf.cond(MCC_den == 0, lambda: tf.constant(0, dtype=tf.float32), lambda: MCC)
     
     def confusion_matrix(self,y_true, y_pred): # Make a confusion matrix
-        
-        y_pred=tf.argmax(y_pred,1)
+        if self.threshold is None:
+            y_pred=tf.argmax(y_pred,1)
+        else:
+            y_pred = tf.cast(y_pred[:,1] > self.threshold, tf.int8)
         cm=tf.math.confusion_matrix(y_true,y_pred,dtype=tf.float32,num_classes=self.num_classes)
         return cm
     
@@ -225,7 +242,7 @@ class ConfusionMatrixMetric(tf.keras.metrics.Metric): # This function is designe
     A custom Keras metric to compute the running average of the confusion matrix
     """
     def __init__(self, num_classes, **kwargs):
-        super(ConfusionMatrixMetric,self).__init__(name='confusion_matrix',**kwargs) # handles base args (e.g., dtype)
+        super().__init__(name='confusion_matrix',**kwargs) # handles base args (e.g., dtype)
         self.num_classes=num_classes
         self.total_cm = self.add_weight("total", shape=(num_classes,num_classes), initializer="zeros")
         
@@ -255,7 +272,7 @@ class ConfusionMatrixMetric(tf.keras.metrics.Metric): # This function is designe
 class CustomLoss(tf.keras.metrics.Metric):
 
   def __init__(self, r, **kwargs):
-    super(CustomLoss, self).__init__(name='CustomLoss', **kwargs)
+    super().__init__(name='CustomLoss', **kwargs)
     self.my_metric = self.add_weight(name='CLoss', initializer='zeros')
     self.r = r # undersampling_factor array (we expect the input as tf.cast(-0.5*np.log(undersampling_factor), 0.5*np.log(undersampling_factor))
     self.m = tf.keras.metrics.SparseCategoricalCrossentropy(from_logits=True)
