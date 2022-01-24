@@ -2181,6 +2181,9 @@ def unbias_probabilities(Y_pred_prob, r=1, epsilon=1e-15):
     
 
 def ReNormProbability(Y_pred_prob_input, reundersampling_factor=1):
+    '''
+    Old version of unbias_probabilities, to be phased out
+    '''
     Y_pred_prob = Y_pred_prob_input.copy()
     Denominator = 1 - (1 - reundersampling_factor)*Y_pred_prob[:,0]
     Y_pred_prob = np.c_[reundersampling_factor*Y_pred_prob[:,0]/Denominator, Y_pred_prob[:,1]/Denominator]
@@ -2189,6 +2192,59 @@ def ReNormProbability(Y_pred_prob_input, reundersampling_factor=1):
     Y_pred_prob_eq_0[:,[0,1]] = Y_pred_prob_eq_0[:,[1,0]]  # switch the columns so that the truth value now corresponds to the other column that is supposed to be set to 1 - 1e-15
     Y_pred_prob[Y_pred_prob_eq_0] = 1 - 1e-15 #renormalize when Y_pred_prob = 1
     return Y_pred_prob
+
+def entropy(p, q=None):
+    '''
+    Returns -p*log(q) - (1-p)*log(1-q)
+
+    If q in None, q = p
+    '''
+    if q is None:
+        q = p
+    return -p*np.log(q) - (1-p)*np.log(1-q)
+
+def compute_metrics(Y_test, Y_pred_prob, percent, r=1, assignment_threshold=None):
+    '''
+    Computes several metrics from labels and predicted prbabilities
+
+    Parameters
+    ----------
+    Y_test : np.ndarray of shape (n,)
+        Has values in {0 (no heatwave), 1 (heatwave)}
+    Y_pred_prob : np.ndarray of shape (n, 2)
+        Probability that the event is or not a heatwave
+    percent : float between 0 and 100
+        Percentage associated to how rare the events are
+    r : float >= 1, optional
+        undersampling factor, used to unbias the probabilities, by default 1
+    assignment_threshold : float in [0,1], optional
+        If provided events are considered heatwaaves if their probability is higher than `assignment_threshold`, by default None
+
+    Returns
+    -------
+    dict
+        dictionary of metrics
+    '''
+    Y_pred_unbiased = unbias_probabilities(Y_pred_prob, r=r)
+    perc = percent/100.
+    if assignment_threshold is None:
+        label_assignment = np.argmax(Y_pred_unbiased, axis=1)
+    else:
+        label_assignment = np.array(Y_pred_unbiased[:,1] > assignment_threshold, dtype=int)
+    
+    climatological_entropy = entropy(perc) # this is the entropy associated with just knowing that the heatwaves cover `percent` of the data
+
+    metrics = {}
+    
+    metrics['entropy'] = np.mean(entropy(1 - Y_test, Y_pred_unbiased[:,0]))
+    metrics['norm_entropy_skill'] = 1 - metrics['entropy']/climatological_entropy # max value is 1, if = 0 your model didn't learn any conditional probabilities, if < 0 your model really sucks!
+    metrics['brier_score'] = np.mean((Y_test - Y_pred_unbiased[:,1])**2)
+
+    metrics['MCC'] = ComputeMCC(Y_test, label_assignment)[-1]
+    metrics['frequency'] = np.sum(label_assignment)/len(Y_test)
+
+    return metrics
+
 
 def ComputeMetrics(Y_test, Y_pred_prob_input, percent, reundersampling_factor=1):  # Compute the metrics given the probabilities and the outcome
     """
@@ -2203,7 +2259,7 @@ def ComputeMetrics(Y_test, Y_pred_prob_input, percent, reundersampling_factor=1)
     Y_pred_prob = ReNormProbability(Y_pred_prob_input, reundersampling_factor)
     label_assignment = np.argmax(Y_pred_prob,1)
 
-    TP, TN, FP, FN, new_MCC = ComputeMCC(Y_test, label_assignment, True)
+    TP, TN, FP, FN, new_MCC = ComputeMCC(Y_test, label_assignment, verbose=True)
     new_entropy = -np.sum(np.c_[1-Y_test,Y_test]*np.log(Y_pred_prob))/Y_test.shape[0]
     #new_entropy[i] = -np.sum(Y_test_2_1hot*np.log(Y_pred_prob))
     maxskill = -(percent/100.)*np.log(percent/100.)-(1-percent/100.)*np.log(1-percent/100.)
