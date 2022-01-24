@@ -131,7 +131,7 @@ path_to_ERA = str(path_to_ERA)
 logger.info(f'{path_to_ERA = }')
 sys.path.insert(1, path_to_ERA)
 # sys.path.insert(1, '../ERA/')
-import ERA_Fields as ef # general routines
+import ERA_Fields_New as ef # general routines
 import TF_Fields as tff # tensorflow routines
 import utilities as ut
 

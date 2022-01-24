@@ -2139,6 +2139,47 @@ def ReadStringFromFile(file1, string2):
     #print(string2+" index = ", index)
     return parameter
 
+def unbias_probabilities(Y_pred_prob, r=1, epsilon=1e-15):
+    '''
+    Removes the bias in probabilities due to undersampling
+
+                            r P[Y=0]_biased
+    P[Y=0]_unbiased = ----------------------------
+                       1 - (1 - r) P[Y=0]_biased
+    
+    Parameters
+    ----------
+    Y_pred_prob : np.ndarray of shape (n, 2)
+        Array of probabilities computed on the undersampled dataset. Assumes Y_pred_prob[:,0] == 1 - Y_pred_prob[:,1] and Y_pred_prob[:,0] are the probabilities of being in the majority class, the une that has been undersampled
+    r : float >= 1, optional
+        undersampling factor, by default 1
+    epsilon : float, optional
+        probailities will be clipped to be in [epsilon, 1-epsilon], by default 1e-15
+
+    Returns
+    -------
+    np.ndarray of shape (n, 2)
+        Array of unbiased probabilities
+
+    Raises
+    ------
+    ValueError
+        If r < 1
+    '''
+    if r == 1:
+        return Y_pred_prob
+    elif r < 1:
+        raise ValueError('r must be >= 1')
+    Y_unb = np.zeros_like(Y_pred_prob)
+    Y_unb[:,0] = r*Y_pred_prob[:,0]/(1 - (1 - r)*Y_pred_prob[:,0])
+    Y_unb[:,1] = 1 - Y_unb[:,0]
+
+    # removes zeros and ones as they mess with the logarithm
+    Y_unb = np.clip(Y_unb, epsilon, 1 - epsilon)
+
+    return Y_unb
+    
+
 def ReNormProbability(Y_pred_prob_input, reundersampling_factor=1):
     Y_pred_prob = Y_pred_prob_input.copy()
     Denominator = 1 - (1 - reundersampling_factor)*Y_pred_prob[:,0]
@@ -2162,7 +2203,7 @@ def ComputeMetrics(Y_test, Y_pred_prob_input, percent, reundersampling_factor=1)
     Y_pred_prob = ReNormProbability(Y_pred_prob_input, reundersampling_factor)
     label_assignment = np.argmax(Y_pred_prob,1)
 
-    TP, TN, FP, FN, new_MCC = ComputeMCC(Y_test, label_assignment, 'True')
+    TP, TN, FP, FN, new_MCC = ComputeMCC(Y_test, label_assignment, True)
     new_entropy = -np.sum(np.c_[1-Y_test,Y_test]*np.log(Y_pred_prob))/Y_test.shape[0]
     #new_entropy[i] = -np.sum(Y_test_2_1hot*np.log(Y_pred_prob))
     maxskill = -(percent/100.)*np.log(percent/100.)-(1-percent/100.)*np.log(1-percent/100.)

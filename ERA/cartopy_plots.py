@@ -10,7 +10,7 @@ import numpy as np
 import warnings
 from collections import deque
 
-import ERA_Fields as ef
+import ERA_Fields_New as ef
 
 data_proj = ccrs.PlateCarree()
 
@@ -55,7 +55,7 @@ def draw_map(m, background='stock_img', **kwargs):
         m.add_feature(cfeat.LAKES)
     else:
         if background != 'coastlines':
-            warning.warn(f"Unrecognized option {background = }, using 'coastlines' instead")
+            warnings.warn(f"Unrecognized option {background = }, using 'coastlines' instead")
         m.coastlines()
     m.gridlines(**kwargs)
     
