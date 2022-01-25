@@ -399,7 +399,7 @@ def move_to_folder(folder):
     # copy useful files from ../ERA/ to folder/ERA/
     path_to_here = path_to_here.parent / 'ERA'
     shutil.copy(path_to_here / 'cartopy_plots.py', ERA_folder)
-    shutil.copy(path_to_here / 'ERA_Fields.py', ERA_folder)
+    shutil.copy(path_to_here / 'ERA_Fields_New.py', ERA_folder)
     shutil.copy(path_to_here / 'TF_Fields.py', ERA_folder)
     shutil.copy(path_to_here / 'utilities.py', ERA_folder)
 
