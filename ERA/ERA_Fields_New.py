@@ -9,15 +9,11 @@ import matplotlib.pyplot as plt
 import pylab as p
 import sys
 import os
-import time
 import logging
 
-import matplotlib.gridspec as gridspec
 import matplotlib.patheffects as PathEffects
 from matplotlib.transforms import Bbox
 
-import pickle
-import itertools
 from itertools import chain
 import collections
 from random import randrange
@@ -30,13 +26,13 @@ from scipy.optimize import curve_fit
 from sklearn.linear_model import LinearRegression
 from sklearn.utils import shuffle
 from sklearn.preprocessing import PolynomialFeatures
-from sklearn.metrics import mean_squared_error, r2_score
-from sklearn import datasets, linear_model
+from sklearn.metrics import r2_score
+from sklearn import linear_model
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import confusion_matrix
 from skimage.transform import resize
 
-from utilities import pretty_time, execution_time
+from utilities import execution_time
 
 logger = logging.getLogger(__name__)
 logger.level = logging.INFO

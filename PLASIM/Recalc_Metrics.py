@@ -32,9 +32,9 @@ import pandas as pd
 import ast
 this_module = sys.modules[__name__]
 
-sys.path.append('../')
-import ERA.ERA_Fields_New as ef
-import ERA.utilities as ut
+sys.path.append('../ERA')
+import ERA_Fields_New as ef
+import utilities as ut
 import Learn2_new as ln
 
 def usage(): 
