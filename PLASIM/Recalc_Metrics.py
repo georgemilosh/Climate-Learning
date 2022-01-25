@@ -195,8 +195,8 @@ def prepare_data(run_folder, run_config_dict=None, ignore_year_permutation=False
             year_list = np.load(path_to_ylist, allow_pickle=True)
             run_config_dict = ut.set_values_recursive(run_config_dict, {'year_list': year_list, 'do_pre_mixing': False, 'do_balance_folds': False})
 
-    fields = ln.load_data(**ut.extract_nested('load_data_kwargs'))
-    X, Y, _ = ln.prepare_XY(fields,**ut.extract_nested('prepare_XY_kwargs'))
+    fields = ln.load_data(**ut.extract_nested(run_config_dict, 'load_data_kwargs'))
+    X, Y, _ = ln.prepare_XY(fields,**ut.extract_nested(run_config_dict, 'prepare_XY_kwargs'))
 
     return X,Y
 
@@ -295,7 +295,7 @@ if __name__ == '__main__':
         runs = ut.json2dict(f'{folder}/runs.json')
         runs = {k: v for k,v in runs.items() if v['status'] == 'COMPLETED'} # restrict to successfull runs
 
-        for i,r in enumerate(runs.values):
+        for i,r in enumerate(runs.values()):
             print(f"\n\n\nComputing metrics for {r['name']} ({i+1}/{len(runs)})\n")
             metrics = recalc_metrics(f"{folder}/{r['name']}", arg_dict, save=True)
             print(metrics)
