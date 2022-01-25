@@ -675,7 +675,7 @@ def shuffle_years(X, permutation=None, seed=0, apply=False):
     if permutation is None:
         if seed is not None:
             np.random.seed(seed)
-            permutation = np.random.permutation(X.shape[0])
+        permutation = np.random.permutation(X.shape[0])
     if len(permutation) != X.shape[0]:
         raise ValueError(f'Shape mismatch between X ({X.shape[0] = }) and permutation ({len(permutation) = })')
     if apply:
@@ -1042,7 +1042,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, train_model_kwargs, load
             raise KeyError('val_CustomLoss not in history: cannot compute optimal checkpoint')
         historyCustom = [np.load(f'{load_from}/fold_{i}/history.npy', allow_pickle=True).item()['val_CustomLoss'] for i in range(nfolds)]
         historyCustom = np.mean(np.array(historyCustom),axis=0)
-        opt_checkpoint = np.argmin(historyCustom) # We will use optimal checkpoint in this case!
+        opt_checkpoint = np.argmin(historyCustom) + 1 # We will use optimal checkpoint in this case! Add 1 because epochs start from 1
         logger.info(f'{opt_checkpoint = }')
 
     # k fold cross validation
@@ -1140,7 +1140,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, train_model_kwargs, load
 ########## PUTTING THE PIECES TOGETHER ###########
 @ut.execution_time
 @ut.indent_logger(logger)
-def prepare_XY(fields, make_XY_kwargs, roll_X_kwargs, premix_seed=0, nfolds=10, flatten_time_axis=True):
+def prepare_XY(fields, make_XY_kwargs, roll_X_kwargs, do_premix=False, premix_seed=0, do_balance_folds=True, nfolds=10, flatten_time_axis=True):
     '''
     Performs all operations to extract from the fields X and Y ready to be fed to the neural network.
 
@@ -1152,7 +1152,7 @@ def prepare_XY(fields, make_XY_kwargs, roll_X_kwargs, premix_seed=0, nfolds=10, 
     roll_X_kwargs : dict
         arguments to pass to the function `roll_X`
     premix_seed : int, optional
-        seed for premixing. If None premixing is skipped
+        seed for premixing, by default 0
     nfolds : int, optional
         necessary for balancing folds
     flatten_time_axis : bool, optional
@@ -1175,17 +1175,27 @@ def prepare_XY(fields, make_XY_kwargs, roll_X_kwargs, premix_seed=0, nfolds=10, 
     # mixing
     logger.info('Mixing')
     start_time = time.time()
-    if premix_seed is not None:
+    tot_permutation = None
+
+    # premixing
+    if do_premix:
         premix_permutation = shuffle_years(X, seed=premix_seed, apply=False)
         Y = Y[premix_permutation]
+        tot_permutation = premix_permutation
+
     # balance folds:
-    weights = np.sum(Y, axis=1) # get the number of heatwave events per year
-    balance_permutation = balance_folds(weights,nfolds=nfolds, verbose=True)
-    Y = Y[balance_permutation]
-    tot_permutation = balance_permutation
-    if premix_seed is not None:
-        tot_permutation = ut.compose_permutations([premix_permutation, tot_permutation])
-    X = X[tot_permutation]
+    if do_balance_folds:
+        weights = np.sum(Y, axis=1) # get the number of heatwave events per year
+        balance_permutation = balance_folds(weights,nfolds=nfolds, verbose=True)
+        Y = Y[balance_permutation]
+        if tot_permutation is None:
+            tot_permutation = balance_permutation
+        else:
+            tot_permutation = ut.compose_permutations([tot_permutation, balance_permutation])
+
+    # apply permutation to X
+    if tot_permutation is not None:    
+        X = X[tot_permutation]
     logger.info(f'Mixing completed in {ef.pretty_time(time.time() - start_time)}\n')
     logger.info(f'{X.shape = }, {Y.shape = }')
 
@@ -1269,7 +1279,8 @@ def run(folder, prepare_data_kwargs, k_fold_cross_val_kwargs, log_level=logging.
 
     # prepare the data
     X,Y, permutation = prepare_data(**prepare_data_kwargs)
-    np.save(f'{folder}/year_permutation.npy',permutation)
+    if permutation is not None:
+        np.save(f'{folder}/year_permutation.npy', permutation)
 
     logger.info(f'{X.shape = }, {Y.shape = }')
     # flatten the time axis
@@ -1427,7 +1438,8 @@ class Trainer():
             if self._prepare_XY_kwargs != prepare_XY_kwargs:
                 self._prepare_XY_kwargs = prepare_XY_kwargs
                 self.X, self.Y, self.year_permutation = prepare_XY(self.fields, **prepare_XY_kwargs)
-            np.save(f'{folder}/year_permutation.npy',self.year_permutation)
+            if self.year_permutation is not None:
+                np.save(f'{folder}/year_permutation.npy',self.year_permutation)
 
             # do kfold
             k_fold_cross_val(folder, self.X, self.Y, **k_fold_cross_val_kwargs)

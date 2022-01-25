@@ -544,3 +544,56 @@ def make_safe(path):
     path = path.replace(']', ')')
     path = path.replace("'", '')
     return path
+
+
+### stuff useful for computing metrics ####
+
+def entropy(p, q=None):
+    '''
+    Returns -p*log(q) - (1-p)*log(1-q)
+
+    If q in None, q = p
+    '''
+    if q is None:
+        q = p
+    return -p*np.log(q) - (1-p)*np.log(1-q)
+
+def unbias_probabilities(Y_pred_prob, u=1, epsilon=1e-15):
+    '''
+    Removes the bias in probabilities due to undersampling
+
+                            u P[Y=0]_biased
+    P[Y=0]_unbiased = ----------------------------
+                       1 - (1 - u) P[Y=0]_biased
+    
+    Parameters
+    ----------
+    Y_pred_prob : np.ndarray of shape (n, 2)
+        Array of probabilities computed on the undersampled dataset. Assumes Y_pred_prob[:,0] == 1 - Y_pred_prob[:,1] and Y_pred_prob[:,0] are the probabilities of being in the majority class, the une that has been undersampled
+    u : float >= 1, optional
+        undersampling factor, by default 1
+    epsilon : float, optional
+        probailities will be clipped to be in [epsilon, 1-epsilon], by default 1e-15
+
+    Returns
+    -------
+    np.ndarray of shape (n, 2)
+        Array of unbiased probabilities
+
+    Raises
+    ------
+    ValueError
+        If u < 1
+    '''
+    if u == 1:
+        return Y_pred_prob
+    elif u < 1:
+        raise ValueError('r must be >= 1')
+    Y_unb = np.zeros_like(Y_pred_prob)
+    Y_unb[:,0] = u*Y_pred_prob[:,0]/(1 - (1 - u)*Y_pred_prob[:,0])
+    Y_unb[:,1] = 1 - Y_unb[:,0]
+
+    # removes zeros and ones as they mess with the logarithm
+    Y_unb = np.clip(Y_unb, epsilon, 1 - epsilon)
+
+    return Y_unb
