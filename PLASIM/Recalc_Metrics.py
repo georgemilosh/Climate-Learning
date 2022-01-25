@@ -165,7 +165,7 @@ def get_run_arguments(run_folder):
 
 
 
-def prepare_data(run_folder, run_config_dict=None):
+def prepare_data(run_folder, run_config_dict=None, ignore_year_permutation=False):
     '''
     Prepares the data as they were for training
 
@@ -175,6 +175,8 @@ def prepare_data(run_folder, run_config_dict=None):
         folder where the run is located
     run_config_dict : dict, optional
         dictionary of the arguments for training, by default None, in which case it is computed.
+    ignore_year_permutation : bool, optional
+        if True, then years are loaded and mixed instead of loading them according to the 'year_permutation.npy' file
 
     Returns
     -------
@@ -187,10 +189,11 @@ def prepare_data(run_folder, run_config_dict=None):
         run_config_dict = get_run_arguments(run_folder)
     run_config_dict = ut.set_values_recursive(run_config_dict, {'flatten_time_axis': True})
 
-    path_to_ylist = f'{run_folder}/year_permutation.npy'
-    if os.path.exists(path_to_ylist):
-        year_list = np.load(path_to_ylist, allow_pickle=True)
-        run_config_dict = ut.set_values_recursive(run_config_dict, {'year_list': year_list, 'do_pre_mixing': False, 'do_balance_folds': False})
+    if not ignore_year_permutation:
+        path_to_ylist = f'{run_folder}/year_permutation.npy'
+        if os.path.exists(path_to_ylist):
+            year_list = np.load(path_to_ylist, allow_pickle=True)
+            run_config_dict = ut.set_values_recursive(run_config_dict, {'year_list': year_list, 'do_pre_mixing': False, 'do_balance_folds': False})
 
     fields = ln.load_data(**ut.extract_nested('load_data_kwargs'))
     X, Y, _ = ln.prepare_XY(fields,**ut.extract_nested('prepare_XY_kwargs'))
