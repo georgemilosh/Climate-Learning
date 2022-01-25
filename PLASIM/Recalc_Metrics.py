@@ -31,6 +31,14 @@ from tensorflow import keras
 import pandas as pd
 import ast
 from pathlib import Path
+import logging
+
+if __name__ == '__main__':
+    logger = logging.getLogger()
+    logger.handlers = [logging.StreamHandler(sys.stdout)]
+else:
+    logger = logging.getLogger(__name__)
+logger.level = logging.INFO
 
 this_module = sys.modules[__name__]
 
@@ -95,52 +103,6 @@ def compute_metrics(Y_test, Y_pred_prob, percent, u=1, assignment_threshold=None
     return metrics
 
 
-def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='minimize', first_epoch=1):
-    '''
-    Computes the epoch that had the best score
-
-    Parameters
-    ----------
-    folder : str
-        folder where the model is located that contains sub folders with the n folds named 'fold_%i'
-    nfolds : int, optional
-        number of folds,
-    metric : str, optional
-        metric with respect to which optimize, by default 'val_CustomLoss'
-    direction : str, optional
-        'maximize' or 'minimize', by default 'minimize'
-    first_epoch : int, optional
-        The number of the first epoch, by default 1
-
-    Returns
-    -------
-    int
-        epoch number corresponding to the best checkpoint
-
-    Raises
-    ------
-    KeyError
-        If `metric` is not present in the history
-    ValueError
-        If `direction` not in ['maximize', 'minimize']
-    '''
-    run_folder = run_folder.rstrip('/')
-    # Here we insert analysis of the previous training with the assessment of the ideal checkpoint
-    history0 = np.load(f'{run_folder}/fold_0/history.npy', allow_pickle=True).item()
-    if metric not in history0.keys():
-        raise KeyError(f'{metric} not in history: cannot compute optimal checkpoint')
-    historyCustom = [np.load(f'{run_folder}/fold_{i}/history.npy', allow_pickle=True).item()[metric] for i in range(nfolds)]
-    historyCustom = np.mean(np.array(historyCustom),axis=0)
-    if direction == 'minimize':
-        opt_checkpoint = np.argmin(historyCustom)
-    elif direction == 'maximize':
-        opt_checkpoint = np.argmax(historyCustom)
-    else:
-        raise ValueError(f'Unrecognized {direction = }')
-    opt_checkpoint += first_epoch
-    return opt_checkpoint
-
-
 def get_run_arguments(run_folder):
     '''
     Retrieves the values of the parameters of a run
@@ -168,107 +130,123 @@ def get_run_arguments(run_folder):
 
     config_dict = ut.json2dict(f'{root_folder}/config.json')
 
-    run_config_dict = ut.set_values_recursive(config_dict,run['args'])
+    run_config_dict = ut.set_values_recursive(config_dict, run['args'])
 
     return run_config_dict
 
 
+class MetricComputer():
+    def __init__(self):
+        self.load_data_kwargs = None
+        self.prepare_XY_kwargs = None
 
-def prepare_data(run_folder, run_config_dict=None, ignore_year_permutation=False):
-    '''
-    Prepares the data as they were for training
+        self.fields = None
+        self.X = None
+        self.Y = None
 
-    Parameters
-    ----------
-    run_folder : str
-        folder where the run is located
-    run_config_dict : dict, optional
-        dictionary of the arguments for training, by default None, in which case it is computed.
-    ignore_year_permutation : bool, optional
-        if True, then years are loaded and mixed instead of loading them according to the 'year_permutation.npy' file
+    @ut.execution_time
+    @ut.indent_logger(logger)
+    def prepare_data(self, run_folder, run_config_dict=None, ignore_year_permutation=False):
+        '''
+        Prepares the data as they were for training
 
-    Returns
-    -------
-    X : np.ndarray
-        data
-    Y : np.ndarray
-        labels
-    '''
-    if run_config_dict is None:
+        Parameters
+        ----------
+        run_folder : str
+            folder where the run is located
+        run_config_dict : dict, optional
+            dictionary of the arguments for training, by default None, in which case it is computed.
+        ignore_year_permutation : bool, optional
+            if True, then years are loaded and mixed instead of loading them according to the 'year_permutation.npy' file
+
+        Returns
+        -------
+        X : np.ndarray
+            data
+        Y : np.ndarray
+            labels
+        '''
+        if run_config_dict is None:
+            run_config_dict = get_run_arguments(run_folder)
+        run_config_dict = ut.set_values_recursive(run_config_dict, {'flatten_time_axis': True})
+
+        if not ignore_year_permutation:
+            path_to_ylist = f'{run_folder}/year_permutation.npy'
+            if os.path.exists(path_to_ylist):
+                year_permutation = np.load(path_to_ylist, allow_pickle=True)
+                run_config_dict = ut.set_values_recursive(run_config_dict, {'year_permutation': year_permutation})
+
+        load_data_kwargs = ut.extract_nested(run_config_dict, 'load_data_kwargs')
+        if self.load_data_kwargs != load_data_kwargs:
+            self.load_data_kwargs = load_data_kwargs
+            self.prepare_XY_kwargs = None # force the computation of prepare_XY
+            self.fields = ln.load_data(**load_data_kwargs)
+
+        prepare_XY_kwargs = ut.extract_nested(run_config_dict, 'prepare_XY_kwargs')
+        if self.prepare_XY_kwargs != prepare_XY_kwargs:
+            self.prepare_XY_kwargs = prepare_XY_kwargs
+            self.X, self.Y, _ = ln.prepare_XY(self.fields, **prepare_XY_kwargs)
+
+        return self.X, self.Y
+
+    def recalc_metrics(self, run_folder, optimal_checkpoint_kwargs, save=True):
+        run_folder = run_folder.rstrip('/')
+        if os.path.exists(f'{run_folder}/metrics.csv'):
+            run_name = run_folder.rsplit('/',1)[-1]
+            print(f'Skipping {run_name}')
+
         run_config_dict = get_run_arguments(run_folder)
-    run_config_dict = ut.set_values_recursive(run_config_dict, {'flatten_time_axis': True})
 
-    if not ignore_year_permutation:
-        path_to_ylist = f'{run_folder}/year_permutation.npy'
-        if os.path.exists(path_to_ylist):
-            year_list = np.load(path_to_ylist, allow_pickle=True)
-            run_config_dict = ut.set_values_recursive(run_config_dict, {'year_list': year_list, 'do_pre_mixing': False, 'do_balance_folds': False})
+        self.prepare_data(run_folder, run_config_dict=run_config_dict) # computes self.X, self.Y
 
-    fields = ln.load_data(**ut.extract_nested(run_config_dict, 'load_data_kwargs'))
-    X, Y, _ = ln.prepare_XY(fields,**ut.extract_nested(run_config_dict, 'prepare_XY_kwargs'))
+        nfolds = ut.extract_nested(run_config_dict, 'nfolds')
+        val_folds = ut.extract_nested(run_config_dict, 'val_folds')
+        u = ut.extract_nested(run_config_dict, 'u')
+        percent = ut.extract_nested(run_config_dict, 'percent')
 
-    return X,Y
+        # if threshold is provided, percent must be computed because threshold overrides percent
+        threshold = ut.extract_nested(run_config_dict, 'threshold')
+        if threshold is not None:
+            percent = 100*np.sum(self.Y)/len(self.Y)
 
+        opt_checkpoint = ut.optimal_checkpoint(run_folder,nfolds, **optimal_checkpoint_kwargs)
 
-def recalc_metrics(run_folder, optimal_checkpoint_kwargs, save=True):
-    run_folder = run_folder.rstrip('/')
-    if os.path.exists(f'{folder}/metrics.csv'):
-        run_name = run_folder.rsplit('/',1)[-1]
-        print(f'Skipping {run_name}')
+        metrics = {}
+        # compute the metrics for each fold
+        for i in range(nfolds):
+            fold_folder = f'{run_folder}/fold_{i}'
+            # get the validation set
+            X_tr, Y_tr, X_va, Y_va = ln.k_fold_cross_val_split(i, self.X, self.Y, nfolds=nfolds, val_folds=val_folds)
 
-    run_config_dict = get_run_arguments(run_folder)
+            # normalize data
+            X_mean = np.load(f'{fold_folder}/X_mean.npy')
+            X_std = np.load(f'{fold_folder}/X_std.npy')
+            X_va = (X_va - X_mean)/X_std
 
-    X, Y = prepare_data(run_folder, run_config_dict=run_config_dict)
+            # load the model
+            model = keras.models.load_model(f'{fold_folder}/fold_{i}', compile=False)
+            model.load_weights(f'{fold_folder}/fold_{i}/cp-{opt_checkpoint:04d}.ckpt')
 
-    nfolds = ut.extract_nested(run_config_dict, 'nfolds')
-    val_folds = ut.extract_nested(run_config_dict, 'val_folds')
-    u = ut.extract_nested(run_config_dict, 'u')
-    percent = ut.extract_nested(run_config_dict, 'percent')
+            # get predicted labels
+            Y_pred = model.predict(X_va) # now these are logits, so we apply a softmax layer
+            print(Y_pred[0])
+            Y_pred_prob = keras.layers.Softmax()(Y_pred) # these are the probabilities
+            print(Y_pred_prob[0])
 
-    # if threshold is provided, percent must be computed because threshold overrides percent
-    threshold = ut.extract_nested(run_config_dict, 'threshold')
-    if threshold is not None:
-        percent = 100*np.sum(Y)/len(Y)
+            # compute metrics
+            metrics[f'fold_{i}'] = compute_metrics(Y_va,Y_pred_prob, percent=percent, u=u)
 
-    opt_checkpoint = optimal_checkpoint(run_folder,nfolds, **optimal_checkpoint_kwargs)
+        # create a pandas dataframe
+        metrics = pd.DataFrame(metrics).T # transpose so the rows are the folds and the columns are the metrics
 
-    metrics = {}
-    # compute the metrics for each fold
-    for i in range(nfolds):
-        fold_folder = f'{run_folder}/fold_{i}'
-        # get the validation set
-        X_tr, Y_tr, X_va, Y_va = ln.k_fold_cross_val_split(i, X, Y, nfolds=nfolds, val_folds=val_folds)
+        # compute mean and std
+        metrics.loc['mean'] = metrics.mean()
+        metrics.loc['std'] = metrics.std()
 
-        # normalize data
-        X_mean = np.load(f'{fold_folder}/X_mean.npy')
-        X_std = np.load(f'{fold_folder}/X_std.npy')
-        X_va = (X_va - X_mean)/X_std
+        if save:
+            metrics.to_csv(f'{run_folder}/metrics.csv')
 
-        # load the model
-        model = keras.models.load_model(f'{fold_folder}/fold_{i}', compile=False)
-        model.load_weights(f'{fold_folder}/fold_{i}/cp-{opt_checkpoint:04d}.ckpt')
-
-        # get predicted labels
-        Y_pred = model.predict(X_va) # now these are logits, so we apply a softmax layer
-        print(Y_pred[0])
-        Y_pred_prob = keras.layers.Softmax()(Y_pred) # these are the probabilities
-        print(Y_pred_prob[0])
-
-        # compute metrics
-        metrics[f'fold_{i}'] = compute_metrics(Y_va,Y_pred_prob, percent=percent, u=u)
-
-    # create a pandas dataframe
-    metrics = pd.DataFrame(metrics).T # transpose so the rows are the folds and the columns are the metrics
-
-    # compute mean and std
-    metrics.loc['mean'] = metrics.mean()
-    metrics.loc['std'] = metrics.std()
-
-    if save:
-        metrics.to_csv(f'{run_folder}/metrics.csv')
-
-    return metrics
-
+        return metrics   
 
 
 if __name__ == '__main__':
@@ -298,13 +276,20 @@ if __name__ == '__main__':
 
     print(f'{arg_dict = }')
 
+    mc = MetricComputer()
+
     if os.path.exists(f'{folder}/runs.json'):
         print('Calculating metrics for every run')
 
         runs = ut.json2dict(f'{folder}/runs.json')
-        runs = {k: v for k,v in runs.items() if v['status'] == 'COMPLETED'} # restrict to successfull runs
+        runs = [r for r in runs.values() if r['status'] == 'COMPLETED'] # restrict to successfull runs
 
-        for i,r in enumerate(runs.values()):
+        # sort the runs such as to load data efficiently TODO
+
+        for i,r in enumerate(runs):
             print(f"\n\n\nComputing metrics for {r['name']} ({i+1}/{len(runs)})\n")
-            metrics = recalc_metrics(f"{folder}/{r['name']}", arg_dict, save=True)
+            metrics = mc.recalc_metrics(f"{folder}/{r['name']}", arg_dict, save=True)
             print(metrics)
+
+    else:
+        metrics = mc.recalc_metrics(f'{folder}', arg_dict, save=True)

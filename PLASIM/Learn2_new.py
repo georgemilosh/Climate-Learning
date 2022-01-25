@@ -96,6 +96,7 @@ import warnings
 import time
 import shutil
 import gc
+from matplotlib.pyplot import loglog
 import psutil
 import numpy as np
 import inspect
@@ -127,7 +128,7 @@ if not os.path.exists(path_to_ERA):
     path_to_ERA = path_to_here.parent / 'ERA'
     if not os.path.exists(path_to_ERA):
         raise FileNotFoundError('Could not find ERA folder')
-        
+
 # go to the parent so vscode is happy with code completion :)
 path_to_ERA = path_to_ERA.parent
 path_to_ERA = str(path_to_ERA)
@@ -307,7 +308,8 @@ def get_run(load_from, current_run_name=None):
     if load_from is None:
         return None
 
-    create_model_keys = list(get_default_params(create_model).keys()) + ['nfolds', 'fields'] # arguments relevant for model architecture
+    # arguments relevant for model architecture
+    relevant_kwargs = list(get_default_params(create_model).keys()) + list(get_default_params(load_data).keys()) + ['nfolds']
 
     def check(run_name, current_run_name=None):
         if current_run_name is None:
@@ -315,9 +317,9 @@ def get_run(load_from, current_run_name=None):
         # parse run_name for arguments
         run_dict = parse_run_name(run_name)
         current_run_dict = parse_run_name(current_run_name)
-        # keep only arguments that are model kwargs
-        run_dict = {k:v for k,v in run_dict.items() if k in create_model_keys}
-        current_run_dict = {k:v for k,v in current_run_dict.items() if k in create_model_keys}
+        # keep only arguments that are relevant for model architecture
+        run_dict = {k:v for k,v in run_dict.items() if k in relevant_kwargs}
+        current_run_dict = {k:v for k,v in current_run_dict.items() if k in relevant_kwargs}
         return run_dict == current_run_dict
     
     runs = ut.json2dict('runs.json')
@@ -984,9 +986,55 @@ def k_fold_cross_val_split(i, X, Y, nfolds=10, val_folds=1):
         Y_tr = Y[upper:lower]
     return X_tr, Y_tr, X_va, Y_va
 
+
+def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='minimize', first_epoch=1):
+    '''
+    Computes the epoch that had the best score
+
+    Parameters
+    ----------
+    folder : str
+        folder where the model is located that contains sub folders with the n folds named 'fold_%i'
+    nfolds : int, optional
+        number of folds,
+    metric : str, optional
+        metric with respect to which optimize, by default 'val_CustomLoss'
+    direction : str, optional
+        'maximize' or 'minimize', by default 'minimize'
+    first_epoch : int, optional
+        The number of the first epoch, by default 1
+
+    Returns
+    -------
+    int
+        epoch number corresponding to the best checkpoint
+
+    Raises
+    ------
+    KeyError
+        If `metric` is not present in the history
+    ValueError
+        If `direction` not in ['maximize', 'minimize']
+    '''
+    run_folder = run_folder.rstrip('/')
+    # Here we insert analysis of the previous training with the assessment of the ideal checkpoint
+    history0 = np.load(f'{run_folder}/fold_0/history.npy', allow_pickle=True).item()
+    if metric not in history0.keys():
+        raise KeyError(f'{metric} not in history: cannot compute optimal checkpoint')
+    historyCustom = [np.load(f'{run_folder}/fold_{i}/history.npy', allow_pickle=True).item()[metric] for i in range(nfolds)]
+    historyCustom = np.mean(np.array(historyCustom),axis=0)
+    if direction == 'minimize':
+        opt_checkpoint = np.argmin(historyCustom)
+    elif direction == 'maximize':
+        opt_checkpoint = np.argmax(historyCustom)
+    else:
+        raise ValueError(f'Unrecognized {direction = }')
+    opt_checkpoint += first_epoch
+    return opt_checkpoint
+
 @ut.execution_time
 @ut.indent_logger(logger)
-def k_fold_cross_val(folder, X, Y, create_model_kwargs, train_model_kwargs, load_from='last', nfolds=10, val_folds=1, u=1,
+def k_fold_cross_val(folder, X, Y, create_model_kwargs, train_model_kwargs, optimal_checkpoint_kwargs, load_from='last', nfolds=10, val_folds=1, u=1,
                      fullmetrics=True, training_epochs=40, training_epochs_tl=10, lr=1e-4):
     '''
     Performs k fold cross validation on a model architecture.
@@ -1008,6 +1056,8 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, train_model_kwargs, load
             optimizer: overrides `lr`
             loss: overrides the default SparseCrossEntropyLoss
             metrics: overrides `fullmetrics`
+    optimal_chekpoint_kwargs : dict
+        dictionary with the parameters to find the optimal checkpoint
     load_from : None, int, str or 'last', optional
         from where to load weights for transfer learning. See the documentation of function `get_run`
         If not None it overrides `create_model_kwargs` (the model is loaded instead of created)
@@ -1040,14 +1090,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, train_model_kwargs, load
     opt_checkpoint = None
     if load_from is not None:
         load_from = load_from.rstrip('/')
-        # Here we insert analysis of the previous training with the assessment of the ideal checkpoint
-        history0 = np.load(f'{load_from}/fold_0/history.npy', allow_pickle=True).item()
-        if 'val_CustomLoss' not in history0.keys():
-            raise KeyError('val_CustomLoss not in history: cannot compute optimal checkpoint')
-        historyCustom = [np.load(f'{load_from}/fold_{i}/history.npy', allow_pickle=True).item()['val_CustomLoss'] for i in range(nfolds)]
-        historyCustom = np.mean(np.array(historyCustom),axis=0)
-        opt_checkpoint = np.argmin(historyCustom) + 1 # We will use optimal checkpoint in this case! Add 1 because epochs start from 1
-        logger.info(f'{opt_checkpoint = }')
+        opt_checkpoint = optimal_checkpoint(load_from, nfolds, **optimal_checkpoint_kwargs)
 
     # k fold cross validation
     for i in range(nfolds):
@@ -1144,7 +1187,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, train_model_kwargs, load
 ########## PUTTING THE PIECES TOGETHER ###########
 @ut.execution_time
 @ut.indent_logger(logger)
-def prepare_XY(fields, make_XY_kwargs, roll_X_kwargs, do_premix=False, premix_seed=0, do_balance_folds=True, nfolds=10, flatten_time_axis=True):
+def prepare_XY(fields, make_XY_kwargs, roll_X_kwargs, do_premix=False, premix_seed=0, do_balance_folds=True, nfolds=10, year_permutation=None, flatten_time_axis=True):
     '''
     Performs all operations to extract from the fields X and Y ready to be fed to the neural network.
 
@@ -1155,10 +1198,16 @@ def prepare_XY(fields, make_XY_kwargs, roll_X_kwargs, do_premix=False, premix_se
         arguments to pass to the function `make_XY`
     roll_X_kwargs : dict
         arguments to pass to the function `roll_X`
+    do_premix : bool, optional
+        whether to perform premixing, by default False
     premix_seed : int, optional
         seed for premixing, by default 0
+    do_balance_folds : bool, optional
+        whether to balance folds
     nfolds : int, optional
         necessary for balancing folds
+    year_permutation : np.ndarray, optional
+        if provided overrides both premixing and fold balancing, useful for transfer learning as avoids contaminating test sets. By default None
     flatten_time_axis : bool, optional
         whether to flatten the time axis consisting of years and days
 
@@ -1179,27 +1228,30 @@ def prepare_XY(fields, make_XY_kwargs, roll_X_kwargs, do_premix=False, premix_se
     # mixing
     logger.info('Mixing')
     start_time = time.time()
-    tot_permutation = None
+    
+    if year_permutation is None:
+        # premixing
+        if do_premix:
+            premix_permutation = shuffle_years(X, seed=premix_seed, apply=False)
+            Y = Y[premix_permutation]
+            year_permutation = premix_permutation
 
-    # premixing
-    if do_premix:
-        premix_permutation = shuffle_years(X, seed=premix_seed, apply=False)
-        Y = Y[premix_permutation]
-        tot_permutation = premix_permutation
-
-    # balance folds:
-    if do_balance_folds:
-        weights = np.sum(Y, axis=1) # get the number of heatwave events per year
-        balance_permutation = balance_folds(weights,nfolds=nfolds, verbose=True)
-        Y = Y[balance_permutation]
-        if tot_permutation is None:
-            tot_permutation = balance_permutation
-        else:
-            tot_permutation = ut.compose_permutations([tot_permutation, balance_permutation])
+        # balance folds:
+        if do_balance_folds:
+            weights = np.sum(Y, axis=1) # get the number of heatwave events per year
+            balance_permutation = balance_folds(weights,nfolds=nfolds, verbose=True)
+            Y = Y[balance_permutation]
+            if year_permutation is None:
+                year_permutation = balance_permutation
+            else:
+                year_permutation = ut.compose_permutations([year_permutation, balance_permutation])
+    else:
+        Y = Y[year_permutation]
+        logger.warning('Mixing overriden by provided permutation')
 
     # apply permutation to X
-    if tot_permutation is not None:    
-        X = X[tot_permutation]
+    if year_permutation is not None:    
+        X = X[year_permutation]
     logger.info(f'Mixing completed in {ut.pretty_time(time.time() - start_time)}\n')
     logger.info(f'{X.shape = }, {Y.shape = }')
 
@@ -1208,7 +1260,7 @@ def prepare_XY(fields, make_XY_kwargs, roll_X_kwargs, do_premix=False, premix_se
         Y = Y.reshape((Y.shape[0]*Y.shape[1]))
         logger.info(f'Flattened time: {X.shape = }, {Y.shape = }')
 
-    return X, Y, tot_permutation
+    return X, Y, year_permutation
 
 
 @ut.execution_time
@@ -1230,7 +1282,7 @@ def prepare_data(load_data_kwargs, prepare_XY_kwargs):
         data. If flatten_time_axis with shape (days, lat, lon, fields), else (years, days, lat, lon, fields)
     Y : np.ndarray 
         labels. If flatten_time_axis with shape (days,), else (years, days)
-    tot_permutation : np.ndarray
+    year_permutation : np.ndarray
         with shape (years,), final permutaion of the years that reproduces X and Y once applied to the just loaded data
     '''
     # load data
@@ -1238,7 +1290,7 @@ def prepare_data(load_data_kwargs, prepare_XY_kwargs):
 
     return prepare_XY(fields, **prepare_XY_kwargs)
 
-
+@ut.execution_time
 def run(folder, prepare_data_kwargs, k_fold_cross_val_kwargs, log_level=logging.INFO):
     '''
     Perfroms a single full run
@@ -1252,53 +1304,18 @@ def run(folder, prepare_data_kwargs, k_fold_cross_val_kwargs, log_level=logging.
     k_fold_cross_val_kwargs : dict
         arguments to pass to the `k_fold_cross_val` function
     '''
+    load_data_kwargs = prepare_data_kwargs['load_data_kwargs']
+    prepare_XY_kwargs = prepare_data_kwargs['prepare_XY_kwargs']
     label_field = ut.extract_nested(prepare_data_kwargs, 'label_field')
-    for field_name in prepare_data_kwargs['load_data_kwargs']['fields']:
+    for field_name in load_data_kwargs['fields']:
         if field_name.startswith(label_field):
             found = True
             break
     if not found:
         raise KeyError(f"field {label_field} is not a loaded field")
-    start_time = time.time()
-    folder = folder.rstrip('/')
-    if not os.path.exists(folder):
-        os.mkdir(folder)
-    else:
-        raise FileExistsError(f'{folder} already exists')
-    # setup logger
-    fh = logging.FileHandler(f'{folder}/log.log')
-    fh.setLevel(log_level)
-    logger.handlers.append(fh)
 
-    # check tf version and GPUs
-    logger.info(f"{tf.__version__ = }")
-    if int(tf.__version__[0]) < 2:
-        logger.info(f"{tf.test.is_gpu_available() = }")
-        GPU = tf.test.is_gpu_available()
-    else:
-        logger.info(f"{tf.config.list_physical_devices('GPU') = }")
-        GPU = len(tf.config.list_physical_devices('GPU'))
-    if not GPU:
-        warnings.warn('\n\nThis machine does not have a GPU: training may be very slow\n\n')
-
-    # prepare the data
-    X,Y, permutation = prepare_data(**prepare_data_kwargs)
-    if permutation is not None:
-        np.save(f'{folder}/year_permutation.npy', permutation)
-
-    logger.info(f'{X.shape = }, {Y.shape = }')
-    # flatten the time axis
-    X = X.reshape((X.shape[0]*X.shape[1],*X.shape[2:]))
-    Y = Y.reshape((Y.shape[0]*Y.shape[1]))
-    logger.info(f'Flattened time: {X.shape = }, {Y.shape = }')
-
-    # run kfold
-    k_fold_cross_val(folder, X, Y, **k_fold_cross_val_kwargs)
-
-    logger.info(f'\ntotal run time: {ut.pretty_time(time.time() - start_time)}')
-
-    # remove logger
-    logger.handlers.remove(fh)
+    trainer = Trainer()
+    trainer.run(folder,load_data_kwargs, prepare_XY_kwargs, k_fold_cross_val_kwargs, log_level=log_level)
 
 
 ###### EFFICIENT MANAGEMENT OF MULTIPLE RUNS #######
@@ -1489,6 +1506,27 @@ class Trainer():
 
         try:
             run_kwargs = ut.set_values_recursive(self.default_run_kwargs, kwargs)
+
+            check_config_dict(run_kwargs)
+
+            # check for transfer learning
+            load_from = ut.extract_nested(run_kwargs, 'load_from')
+            load_from = get_run(load_from,current_run_name=folder)
+            if load_from is not None:
+                nfolds = ut.extract_nested(run_kwargs, 'nfolds')
+                optimal_checkpoint_kwargs = ut.extract_nested(run_kwargs, 'optimal_checkpoint_kwargs')
+                opt_checkpoint = optimal_checkpoint(load_from,nfolds, **optimal_checkpoint_kwargs)
+
+                # write on the runs file from where we do transfer learning
+                runs = ut.json2dict('runs.json')
+                runs[run_id]['transfer_learning_from'] = f'{load_from}/epoch_{opt_checkpoint}'
+                ut.dict2json(runs, 'runs.json')
+
+                # force the dataset to the same year permutation
+                year_permutation = np.load(f'{load_from}/year_permutation.npy', allow_pickle=True)
+                run_kwargs = ut.set_values_recursive(run_kwargs, {'year_permutation': year_permutation})
+
+                # TODO: warn the user about arguments that will be ignored
             
             self.run(folder, **run_kwargs)
 
