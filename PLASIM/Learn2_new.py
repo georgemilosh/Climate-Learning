@@ -1499,35 +1499,56 @@ class Trainer():
             folder += f'{k}{value_sep}{kwargs[k]}{arg_sep}'
         folder = folder[:-len(arg_sep)] # remove the last arg_sep
         folder = ut.make_safe(folder)
+
+        run_kwargs = ut.set_values_recursive(self.default_run_kwargs, kwargs)
+
+        check_config_dict(run_kwargs)
+
+        # check for transfer learning
+        load_from = ut.extract_nested(run_kwargs, 'load_from')
+        load_from = get_run(load_from,current_run_name=folder)
+        if load_from is not None:
+            nfolds = ut.extract_nested(run_kwargs, 'nfolds')
+            optimal_checkpoint_kwargs = ut.extract_nested(run_kwargs, 'optimal_checkpoint_kwargs')
+            opt_checkpoint = optimal_checkpoint(load_from,nfolds, **optimal_checkpoint_kwargs)
+
+            # write on the runs file from where we do transfer learning
+            runs = ut.json2dict('runs.json')
+            runs[run_id]['transfer_learning_from'] = f'{load_from}/epoch_{opt_checkpoint}'
+            ut.dict2json(runs, 'runs.json')
+
+            # force the dataset to the same year permutation
+            year_permutation = np.load(f'{load_from}/year_permutation.npy', allow_pickle=True)
+            run_kwargs = ut.set_values_recursive(run_kwargs, {'year_permutation': year_permutation})
+
+            # TODO: warn the user about arguments that will be ignored
+            overridden_kwargs = ['do_premix', 'premix_seed', 'do_balance_folds']
+            ignored_kwargs = [k for k in kwargs if k in overridden_kwargs]
+            if len(ignored_kwargs) > 0:
+                # remove ignored kwargs
+                for k in ignored_kwargs:
+                    kwargs.pop(k)
+                    logger.log(45, f'Ignoring provided argument {k} due to transfer learning compatibility')
+
+                # check again if the run has already been done
+                for r in runs.values():
+                    if r['status'] == 'COMPLETED' and r['args'] == kwargs:
+                        logger.log(45, f"Skipping already performed run {r['name']}")
+                        return None
+                # update the folder name
+                folder = f'{run_id}{arg_sep}'
+                for k in sorted(kwargs):
+                    folder += f'{k}{value_sep}{kwargs[k]}{arg_sep}'
+                folder = folder[:-len(arg_sep)] # remove the last arg_sep
+                folder = ut.make_safe(folder)
+
         logger.log(42, f'{folder = }\n')
         
         runs[run_id] = {'name': folder, 'args': kwargs, 'status': 'RUNNING', 'start_time': ut.now()}
         ut.dict2json(runs, 'runs.json')
 
-        try:
-            run_kwargs = ut.set_values_recursive(self.default_run_kwargs, kwargs)
-
-            check_config_dict(run_kwargs)
-
-            # check for transfer learning
-            load_from = ut.extract_nested(run_kwargs, 'load_from')
-            load_from = get_run(load_from,current_run_name=folder)
-            if load_from is not None:
-                nfolds = ut.extract_nested(run_kwargs, 'nfolds')
-                optimal_checkpoint_kwargs = ut.extract_nested(run_kwargs, 'optimal_checkpoint_kwargs')
-                opt_checkpoint = optimal_checkpoint(load_from,nfolds, **optimal_checkpoint_kwargs)
-
-                # write on the runs file from where we do transfer learning
-                runs = ut.json2dict('runs.json')
-                runs[run_id]['transfer_learning_from'] = f'{load_from}/epoch_{opt_checkpoint}'
-                ut.dict2json(runs, 'runs.json')
-
-                # force the dataset to the same year permutation
-                year_permutation = np.load(f'{load_from}/year_permutation.npy', allow_pickle=True)
-                run_kwargs = ut.set_values_recursive(run_kwargs, {'year_permutation': year_permutation})
-
-                # TODO: warn the user about arguments that will be ignored
-            
+        # run
+        try:            
             self.run(folder, **run_kwargs)
 
             runs = ut.json2dict('runs.json')
