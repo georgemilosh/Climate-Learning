@@ -30,11 +30,20 @@ import os
 from tensorflow import keras
 import pandas as pd
 import ast
+from pathlib import Path
+
 this_module = sys.modules[__name__]
 
-sys.path.append('../ERA')
-import ERA_Fields_New as ef
-import utilities as ut
+# ensure the proper namescapes
+path_to_PLASIM = str(Path(__file__).resolve().parent)
+if not path_to_PLASIM in sys.path:
+    sys.path.insert(1,path_to_PLASIM)
+path_to_project_root = str(Path(__file__).resolve().parent.parent)
+if not path_to_project_root in sys.path:
+    sys.path.insert(1, path_to_project_root)
+
+import ERA.ERA_Fields_New as ef
+import ERA.utilities as ut
 import Learn2_new as ln
 
 def usage(): 

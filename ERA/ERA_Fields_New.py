@@ -32,6 +32,10 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import confusion_matrix
 from skimage.transform import resize
 
+path_to_ERA = str(Path(__file__).resolve().parent)
+if not path_to_ERA in sys.path:
+    sys.path.insert(1, path_to_ERA)
+
 from utilities import execution_time
 
 logger = logging.getLogger(__name__)

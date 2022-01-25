@@ -127,13 +127,17 @@ if not os.path.exists(path_to_ERA):
     path_to_ERA = path_to_here.parent / 'ERA'
     if not os.path.exists(path_to_ERA):
         raise FileNotFoundError('Could not find ERA folder')
+        
+# go to the parent so vscode is happy with code completion :)
+path_to_ERA = path_to_ERA.parent
 path_to_ERA = str(path_to_ERA)
-logger.info(f'{path_to_ERA = }')
-sys.path.insert(1, path_to_ERA)
-# sys.path.insert(1, '../ERA/')
-import ERA_Fields_New as ef # general routines
-import TF_Fields as tff # tensorflow routines
-import utilities as ut
+logger.info(f'{path_to_ERA = }/ERA/')
+if not path_to_ERA in sys.path:
+    sys.path.insert(1, path_to_ERA)
+
+import ERA.ERA_Fields_New as ef # general routines
+import ERA.TF_Fields as tff # tensorflow routines
+import ERA.utilities as ut
 
 
 arg_sep = '--'
@@ -1196,7 +1200,7 @@ def prepare_XY(fields, make_XY_kwargs, roll_X_kwargs, do_premix=False, premix_se
     # apply permutation to X
     if tot_permutation is not None:    
         X = X[tot_permutation]
-    logger.info(f'Mixing completed in {ef.pretty_time(time.time() - start_time)}\n')
+    logger.info(f'Mixing completed in {ut.pretty_time(time.time() - start_time)}\n')
     logger.info(f'{X.shape = }, {Y.shape = }')
 
     if flatten_time_axis:
@@ -1291,7 +1295,7 @@ def run(folder, prepare_data_kwargs, k_fold_cross_val_kwargs, log_level=logging.
     # run kfold
     k_fold_cross_val(folder, X, Y, **k_fold_cross_val_kwargs)
 
-    logger.info(f'\ntotal run time: {ef.pretty_time(time.time() - start_time)}')
+    logger.info(f'\ntotal run time: {ut.pretty_time(time.time() - start_time)}')
 
     # remove logger
     logger.handlers.remove(fh)

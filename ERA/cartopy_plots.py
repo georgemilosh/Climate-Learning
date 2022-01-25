@@ -1,14 +1,26 @@
-import cartopy.crs as ccrs
-import cartopy.feature as cfeat
-from cartopy.util import add_cyclic_point as acp
+# '''
+# Created in November 2021
+
+# @author: Alessandro Lovo
+# '''
+
+import numpy as np
+import warnings
+from collections import deque
+from pathlib import Path
+import sys
 
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as PathEffects
 from matplotlib.animation import FuncAnimation, PillowWriter
 
-import numpy as np
-import warnings
-from collections import deque
+import cartopy.crs as ccrs
+import cartopy.feature as cfeat
+from cartopy.util import add_cyclic_point as acp
+
+path_to_ERA = str(Path(__file__).resolve().parent)
+if not path_to_ERA in sys.path:
+    sys.path.insert(1, path_to_ERA)
 
 import ERA_Fields_New as ef
 
