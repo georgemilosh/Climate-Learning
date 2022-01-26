@@ -1246,6 +1246,7 @@ def prepare_XY(fields, make_XY_kwargs, roll_X_kwargs, do_premix=False, premix_se
             else:
                 year_permutation = ut.compose_permutations([year_permutation, balance_permutation])
     else:
+        year_permutation = np.array(year_permutation)
         Y = Y[year_permutation]
         logger.warning('Mixing overriden by provided permutation')
 
@@ -1518,7 +1519,7 @@ class Trainer():
             ut.dict2json(runs, 'runs.json')
 
             # force the dataset to the same year permutation
-            year_permutation = np.load(f'{load_from}/year_permutation.npy', allow_pickle=True)
+            year_permutation = list(np.load(f'{load_from}/year_permutation.npy', allow_pickle=True))
             run_kwargs = ut.set_values_recursive(run_kwargs, {'year_permutation': year_permutation})
 
             # TODO: warn the user about arguments that will be ignored

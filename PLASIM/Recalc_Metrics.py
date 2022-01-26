@@ -173,7 +173,7 @@ class MetricComputer():
         if not ignore_year_permutation:
             path_to_ylist = f'{run_folder}/year_permutation.npy'
             if os.path.exists(path_to_ylist):
-                year_permutation = np.load(path_to_ylist, allow_pickle=True)
+                year_permutation = list(np.load(path_to_ylist, allow_pickle=True))
                 run_config_dict = ut.set_values_recursive(run_config_dict, {'year_permutation': year_permutation})
 
         load_data_kwargs = ut.extract_nested(run_config_dict, 'load_data_kwargs')
