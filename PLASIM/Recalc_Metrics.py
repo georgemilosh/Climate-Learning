@@ -194,6 +194,8 @@ class MetricComputer():
         if os.path.exists(f'{run_folder}/metrics.csv'):
             run_name = run_folder.rsplit('/',1)[-1]
             logger.warning(f'Skipping {run_name}')
+            metrics = pd.read_csv(f'{run_folder}/metrics.csv')
+            return metrics
 
         run_config_dict = get_run_arguments(run_folder)
 
@@ -214,6 +216,9 @@ class MetricComputer():
         metrics = {}
         # compute the metrics for each fold
         for i in range(nfolds):
+            logger.info('========')
+            logger.log(35, f'fold_{i} ({i+1}/{nfolds})')
+            logger.info('========')
             fold_folder = f'{run_folder}/fold_{i}'
             # get the validation set
             X_tr, Y_tr, X_va, Y_va = ln.k_fold_cross_val_split(i, self.X, self.Y, nfolds=nfolds, val_folds=val_folds)
