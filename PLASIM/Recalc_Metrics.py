@@ -224,8 +224,8 @@ class MetricComputer():
             X_va = (X_va - X_mean)/X_std
 
             # load the model
-            model = keras.models.load_model(f'{fold_folder}/fold_{i}', compile=False)
-            model.load_weights(f'{fold_folder}/fold_{i}/cp-{opt_checkpoint:04d}.ckpt')
+            model = keras.models.load_model(f'{fold_folder}', compile=False)
+            model.load_weights(f'{fold_folder}/cp-{opt_checkpoint:04d}.ckpt')
 
             # get predicted labels
             Y_pred = model.predict(X_va) # now these are logits, so we apply a softmax layer
