@@ -125,7 +125,7 @@ def get_run_arguments(run_folder):
         run_id = int(run_id)
         run = runs[str(run_id)]
     except (ValueError, KeyError):
-        print(f'{run_name} is not a successful run')
+        logger.error(f'{run_name} is not a successful run')
         raise
 
     config_dict = ut.json2dict(f'{root_folder}/config.json')
@@ -193,7 +193,7 @@ class MetricComputer():
         run_folder = run_folder.rstrip('/')
         if os.path.exists(f'{run_folder}/metrics.csv'):
             run_name = run_folder.rsplit('/',1)[-1]
-            print(f'Skipping {run_name}')
+            logger.warning(f'Skipping {run_name}')
 
         run_config_dict = get_run_arguments(run_folder)
 
@@ -229,9 +229,9 @@ class MetricComputer():
 
             # get predicted labels
             Y_pred = model.predict(X_va) # now these are logits, so we apply a softmax layer
-            print(Y_pred[0])
+            logger.debug(f'{Y_pred[0] = }')
             Y_pred_prob = keras.layers.Softmax()(Y_pred) # these are the probabilities
-            print(Y_pred_prob[0])
+            logger.debug(f'{Y_pred_prob[0] = }')
 
             # compute metrics
             metrics[f'fold_{i}'] = compute_metrics(Y_va,Y_pred_prob, percent=percent, u=u)
@@ -279,7 +279,7 @@ if __name__ == '__main__':
     mc = MetricComputer()
 
     if os.path.exists(f'{folder}/runs.json'):
-        print('Calculating metrics for every run')
+        logger.info('Calculating metrics for every run')
 
         runs = ut.json2dict(f'{folder}/runs.json')
         runs = [r for r in runs.values() if r['status'] == 'COMPLETED'] # restrict to successfull runs
@@ -287,9 +287,9 @@ if __name__ == '__main__':
         # sort the runs such as to load data efficiently TODO
 
         for i,r in enumerate(runs):
-            print(f"\n\n\nComputing metrics for {r['name']} ({i+1}/{len(runs)})\n")
+            logger.log(35,f"\n\n\nComputing metrics for {r['name']} ({i+1}/{len(runs)})\n")
             metrics = mc.recalc_metrics(f"{folder}/{r['name']}", arg_dict, save=True)
-            print(metrics)
+            logger.log(35,metrics)
 
     else:
         metrics = mc.recalc_metrics(f'{folder}', arg_dict, save=True)

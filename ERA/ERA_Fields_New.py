@@ -1980,7 +1980,7 @@ def PrepareTestTrain(X_train_new, X_test, Y_train_new,Y_test): # Get's our data 
 
     return X_train_new, X_test, Y_train_new, Y_test
 
-def ComputeMCC(Y_test, Y_pred, verbose):
+def ComputeMCC(Y_test, Y_pred, verbose=False):
     # Compute Matthews Correlation Coefficient
     [[TN, FP],[FN, TP]] = confusion_matrix(Y_test, Y_pred) # note that confusion matrix treats 0 as the first column/row
     if ((TP+FP)*(TP+FN)*(TN+FP)*(TN+FN) == 0):
@@ -1988,7 +1988,8 @@ def ComputeMCC(Y_test, Y_pred, verbose):
     else:
         MCC = ((TP * TN - FP *FN)/ np.sqrt(float((TP+FP)*(TP+FN)*(TN+FP)*(TN+FN))))
     if verbose:
-        print("MCC = ", MCC, " , TP = ", TP, " , TN = ", TN, " , FP = ", FP, " , FN = ", FN)
+        print(f'{MCC = }, {TP = }, {TN = }, {FP = }, {FN = }')
+    logger.info(f'{MCC = }, {TP = }, {TN = }, {FP = }, {FN = }')
     return TP, TN, FP, FN, MCC
         
 def SingleLogisticRegression(i,X, labels, undersampling_factor,verbose,inv_reg=1e5):
