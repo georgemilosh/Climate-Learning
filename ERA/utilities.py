@@ -550,9 +550,9 @@ def make_safe(path):
 
 def entropy(p, q=None):
     '''
-    Returns -p*log(q) - (1-p)*log(1-q)
+    Returns `-p*log(q) - (1-p)*log(1-q)`
 
-    If q in None, q = p
+    If q is None, q = p
     '''
     if q is None:
         q = p
@@ -585,11 +585,15 @@ def unbias_probabilities(Y_pred_prob, u=1, epsilon=1e-15):
     ValueError
         If u < 1
     '''
+    epsilon = np.float64(epsilon)
+    if 1 - epsilon == 1:
+        raise ValueError('Too small epsilon')
+
     if u == 1:
         return Y_pred_prob
     elif u < 1:
         raise ValueError('r must be >= 1')
-    Y_unb = np.zeros_like(Y_pred_prob)
+    Y_unb = np.zeros_like(Y_pred_prob, dtype=np.float64)
     Y_unb[:,0] = u*Y_pred_prob[:,0]/(1 - (1 - u)*Y_pred_prob[:,0])
     Y_unb[:,1] = 1 - Y_unb[:,0]
 
