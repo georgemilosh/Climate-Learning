@@ -92,6 +92,7 @@ from pathlib import Path
 from stat import S_IREAD
 import sys
 import traceback
+from unittest import skip
 import warnings
 import time
 import shutil
@@ -1322,8 +1323,10 @@ def run(folder, prepare_data_kwargs, k_fold_cross_val_kwargs, log_level=logging.
 ###### EFFICIENT MANAGEMENT OF MULTIPLE RUNS #######
 
 class Trainer():
-    def __init__(self):
+    def __init__(self, skip_existing_run=True):
         # load config file and parse arguments
+        self.skip_existing_run = skip_existing_run
+
         self.config_dict = ut.json2dict('config.json')
         self.config_dict_flat = check_config_dict(self.config_dict)
         
@@ -1482,15 +1485,19 @@ class Trainer():
 
     def _run(self, **kwargs):
         '''
-        Parses kwargs and performs a single run, kwargs are not interpreted as iterables
+        Parses kwargs and performs a single run, kwargs are not interpreted as iterables.
+        It checks for transfer learning and if the run has already been performed, in whih case, if `self.skip_existing_run` is True, it is skipped
         '''
         runs = ut.json2dict('runs.json')
 
         # check if the run has already been performed
         for r in runs.values():
             if r['status'] == 'COMPLETED' and r['args'] == kwargs:
-                logger.log(45, f"Skipping already performed run {r['name']}")
-                return None
+                if self.skip_existing_run:
+                    logger.log(45, f"Skipping already performed run {r['name']}")
+                    return None
+                else:
+                    logger.log(45, f"Rerunning {r['name']}")
 
         # get run number
         run_id = str(len(runs))
@@ -1508,15 +1515,13 @@ class Trainer():
         # check for transfer learning
         load_from = ut.extract_nested(run_kwargs, 'load_from')
         load_from = get_run(load_from,current_run_name=folder)
+        tl_from = None
         if load_from is not None:
             nfolds = ut.extract_nested(run_kwargs, 'nfolds')
             optimal_checkpoint_kwargs = ut.extract_nested(run_kwargs, 'optimal_checkpoint_kwargs')
             opt_checkpoint = optimal_checkpoint(load_from,nfolds, **optimal_checkpoint_kwargs)
 
-            # write on the runs file from where we do transfer learning
-            runs = ut.json2dict('runs.json')
-            runs[run_id]['transfer_learning_from'] = f'{load_from}/epoch_{opt_checkpoint}'
-            ut.dict2json(runs, 'runs.json')
+            tl_from = f'{load_from}/epoch_{opt_checkpoint}'
 
             # force the dataset to the same year permutation
             year_permutation = list(np.load(f'{load_from}/year_permutation.npy', allow_pickle=True))
@@ -1533,9 +1538,12 @@ class Trainer():
 
                 # check again if the run has already been done
                 for r in runs.values():
-                    if r['status'] == 'COMPLETED' and r['args'] == kwargs:
+                    if self.skip_existing_run:
                         logger.log(45, f"Skipping already performed run {r['name']}")
                         return None
+                    else:
+                        logger.log(45, f"Rerunning {r['name']}")
+                        
                 # update the folder name
                 folder = f'{run_id}{arg_sep}'
                 for k in sorted(kwargs):
@@ -1545,7 +1553,7 @@ class Trainer():
 
         logger.log(42, f'{folder = }\n')
         
-        runs[run_id] = {'name': folder, 'args': kwargs, 'status': 'RUNNING', 'start_time': ut.now()}
+        runs[run_id] = {'name': folder, 'args': kwargs, 'transfer_learning_from': tl_from, 'status': 'RUNNING', 'start_time': ut.now()}
         ut.dict2json(runs, 'runs.json')
 
         # run
