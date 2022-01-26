@@ -209,7 +209,7 @@ class MetricComputer():
         if threshold is not None:
             percent = 100*np.sum(self.Y)/len(self.Y)
 
-        opt_checkpoint = ut.optimal_checkpoint(run_folder,nfolds, **optimal_checkpoint_kwargs)
+        opt_checkpoint = ln.optimal_checkpoint(run_folder,nfolds, **optimal_checkpoint_kwargs)
 
         metrics = {}
         # compute the metrics for each fold
