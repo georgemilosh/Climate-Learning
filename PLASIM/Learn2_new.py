@@ -97,7 +97,8 @@ import warnings
 import time
 import shutil
 import gc
-from matplotlib.pyplot import loglog
+from matplotlib import path
+from matplotlib.pyplot import hist, loglog
 import psutil
 import numpy as np
 import inspect
@@ -214,7 +215,7 @@ def build_config_dict(functions):
     If calling on one function only it is the same as to use get_default_params recursively
     >>> d1 = build_config_dict([k_fold_cross_val])
     >>> d2 = get_default_params(k_fold_cross_val, recursive=True)
-    >>> d1 == {'k_fold_cross_val': d2}
+    >>> d1 == {'k_fold_cross_val_kwargs': d2}
     True
     '''
     d = {}
@@ -270,19 +271,91 @@ def parse_run_name(run_name):
     
     Examples
     --------
-    >>> parse_run_name('a_5__b_7')
+    >>> parse_run_name('a__5--b__7')
     {'a': '5', 'b': '7'}
-    >>> parse_run_name('test_arg_bla__b_7')
+    >>> parse_run_name('test_arg__bla--b__7')
     {'test_arg': 'bla', 'b': '7'}
     '''
     d = {}
     args = run_name.split(arg_sep)
     for arg in args:
-        if '_' not in arg:
+        if value_sep not in arg:
             continue
         key, value = arg.rsplit(value_sep,1)
         d[key] = value
     return d
+
+def check_compatibility(run_name, current_run_name=None, relevant_keys=None):
+    '''
+    Check if `run_name` is compatible with `current_run_name` for transfer learning, namely if the values corresponding to `relevant_keys` coincide
+    '''
+    if current_run_name is None or relevant_keys is None:
+        return True
+    # parse run_name for arguments
+    run_dict = parse_run_name(run_name)
+    current_run_dict = parse_run_name(current_run_name)
+    # keep only arguments that are relevant for model architecture
+    run_dict = {k:v for k,v in run_dict.items() if k in relevant_keys}
+    current_run_dict = {k:v for k,v in current_run_dict.items() if k in relevant_keys}
+    return run_dict == current_run_dict
+
+def select_compatible(run_args, conditions, require_unique=True, path_to_config=None):
+    '''
+    Selects which runs are compatible with given conditions
+
+    Parameters
+    ----------
+    run_args : dict
+        dictionary where each item is a dictionary of the arguments of the run
+    conditions : dict
+        dictionary of run arguments that has to be contained in the arguments of a compatible run
+    require_unique : bool, optional
+        whether you want a single run or a subset of compatible runs, by default True
+    path_to_config : str, optional
+        path to where the config file is located (without 'config.json').
+        If provided allows to beter check when a candition is at its default level, since it won't appear in the list of arguments of the run
+
+    Returns
+    -------
+    if require_unique:
+        the key in run_args corresponding to the only run satisfying the compatibility requirements
+    else:
+        the list of keys of compatible runs
+
+    Raises
+    ------
+    KeyError
+        If require_unique and either none or more than one run are found compatible.
+
+    Examples
+    --------
+    >>> run_args = {'1': {'tau': -5}, '2': {'percent': 1, 'tau': 0}, '3': {'percent': 1, 'tau': -5}}
+    >>> select_compatible(run_args, {'tau': 0})
+    '2'
+    >>> select_compatible(run_args, {'tau': 0}, require_unique=False)
+    ['2']
+    >>> select_compatible(run_args, {'percent': 1}, require_unique=False)
+    ['2', '3']
+    '''
+    if path_to_config is not None:
+        path_to_config.rstrip('/')
+        config_dict_flat = ut.collapse_dict(ut.json2dict(f'{path_to_config}/config.json'))
+        conditions_at_default = {k:v for k,v in conditions.items() if v == config_dict_flat[k]}
+        for args in run_args.values():
+            for k,v in conditions_at_default.items():
+                if k not in args:
+                    args[k] = v
+
+    compatible_keys = [k for k,v in run_args.items() if conditions.items() <= v.items()]
+    if not require_unique:
+        return compatible_keys
+
+    if len(compatible_keys) == 0:
+        raise KeyError(f'No previous compatible satisfies {conditions = }')
+    elif len(compatible_keys) > 1:
+        raise KeyError(f"Multiple runs contain satisfy {conditions = } ({compatible_keys}) and your are requiring just one")
+    return compatible_keys[0]
+
 
 def get_run(load_from, current_run_name=None):
     '''
@@ -290,7 +363,7 @@ def get_run(load_from, current_run_name=None):
     ----------
     load_from : dict, int, str, 'last' or None
         If dict it is a dictionary with arguments of the run. If int it is the number of the run.
-        If 'last' it is the last completed run. Otherwise it can be a piece of the run name. If None the function returns None
+        If 'last' it is the last completed run. Otherwise it can be a piece of the run name or the full run name. If None, the function returns None
         If the choice is ambiguous an error will be raised.
     current_run_name : str, optional
         used to check for compatibility issues when loading a model
@@ -310,18 +383,7 @@ def get_run(load_from, current_run_name=None):
         return None
 
     # arguments relevant for model architecture
-    relevant_kwargs = list(get_default_params(create_model).keys()) + list(get_default_params(load_data).keys()) + ['nfolds']
-
-    def check(run_name, current_run_name=None):
-        if current_run_name is None:
-            return True
-        # parse run_name for arguments
-        run_dict = parse_run_name(run_name)
-        current_run_dict = parse_run_name(current_run_name)
-        # keep only arguments that are relevant for model architecture
-        run_dict = {k:v for k,v in run_dict.items() if k in relevant_kwargs}
-        current_run_dict = {k:v for k,v in current_run_dict.items() if k in relevant_kwargs}
-        return run_dict == current_run_dict
+    relevant_keys = list(get_default_params(create_model).keys()) + list(get_default_params(load_data).keys()) + ['nfolds']
     
     runs = ut.json2dict('runs.json')
 
@@ -329,24 +391,16 @@ def get_run(load_from, current_run_name=None):
     runs = {k: v for k,v in runs.items() if v['status'] == 'COMPLETED'}
 
     # select only compatible runs
-    runs = {k: v for k,v in runs.items() if check(v['name'], current_run_name)}
+    runs = {k: v for k,v in runs.items() if check_compatibility(v['name'], current_run_name, relevant_keys=relevant_keys)}
 
     if len(runs) == 0:
         logger.warning('No valid runs to load from')
         return None
-    if isinstance(load_from, dict):
-        found = False
-        for i,r in runs.items():
-            if load_from.items() <= r['args']: # check if the provided arguments are a subset of the run argument
-                if not found:
-                    found = True
-                    l = int(i)
-                else: # ambiguity
-                    raise KeyError(f"Multiple runs contain {load_from}, at least {l} and {i}")
-        if not found:
-            raise KeyError(f'No previous compatible run has {load_from}')
-    elif isinstance(load_from, int):
+
+    if isinstance(load_from, int):
         l = load_from
+    elif isinstance(load_from, dict):
+        l = int(select_compatible({k:v['args'] for k,v in runs.items()}, load_from, require_unique=True))
     elif isinstance(load_from, str):
         try:
             l = int(load_from) # run number
@@ -354,20 +408,14 @@ def get_run(load_from, current_run_name=None):
             if load_from == 'last':
                 l = -1
             else:
+                run_names = {k:v['name'] for k,v in runs.items()}
+                if load_from in run_names.values():
+                    return load_from
                 load_from_dict = parse_run_name(load_from)
-                found = False
-                for i,r in runs.items():
-                    r_dict = parse_run_name(r['name']) # cannot use directly r['args'] because of types (we need argument values in string format)
-                    if load_from_dict.items() <= r_dict.items(): # check if the provided arguments are a subset of the run argument
-                        if not found:
-                            found = True
-                            l = int(i)
-                        else: # ambiguity
-                            raise KeyError(f'Multiple runs contain {load_from_dict}, at least {l} and {i}')
-                if not found:
-                    raise KeyError(f'No previous compatible run has {load_from_dict}')
+                l = int(select_compatible({k:parse_run_name(v) for k,v in run_names.items()}, load_from_dict, require_unique=True))
     else:
         raise TypeError(f'Unsupported type {type(load_from)} for load_from')
+
     # now l is an int
     if l < 0:
         r = list(runs.values())[l]
@@ -988,7 +1036,7 @@ def k_fold_cross_val_split(i, X, Y, nfolds=10, val_folds=1):
     return X_tr, Y_tr, X_va, Y_va
 
 
-def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='minimize', first_epoch=1):
+def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='minimize', first_epoch=1, collective=True, bypass=None):
     '''
     Computes the epoch that had the best score
 
@@ -1004,11 +1052,19 @@ def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='m
         'maximize' or 'minimize', by default 'minimize'
     first_epoch : int, optional
         The number of the first epoch, by default 1
+    collective : bool, optional
+        Whether the optimal checkpoint should be the same for all folds (True) or the best for each fold
+    bypass : np.ndarray, optional
+        If provided the function immediately returns `bypass`
 
     Returns
     -------
-    int
-        epoch number corresponding to the best checkpoint
+    if collective:
+        int
+            epoch number corresponding to the best checkpoint
+    else:
+        list
+            of best epoch number for each fold
 
     Raises
     ------
@@ -1017,20 +1073,41 @@ def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='m
     ValueError
         If `direction` not in ['maximize', 'minimize']
     '''
+    if bypass is not None:
+        return bypass
+    
     run_folder = run_folder.rstrip('/')
     # Here we insert analysis of the previous training with the assessment of the ideal checkpoint
     history0 = np.load(f'{run_folder}/fold_0/history.npy', allow_pickle=True).item()
     if metric not in history0.keys():
         raise KeyError(f'{metric} not in history: cannot compute optimal checkpoint')
     historyCustom = [np.load(f'{run_folder}/fold_{i}/history.npy', allow_pickle=True).item()[metric] for i in range(nfolds)]
-    historyCustom = np.mean(np.array(historyCustom),axis=0)
+
     if direction == 'minimize':
-        opt_checkpoint = np.argmin(historyCustom)
+        opt_f = np.argmin
     elif direction == 'maximize':
-        opt_checkpoint = np.argmax(historyCustom)
+        opt_f = np.argmax
     else:
         raise ValueError(f'Unrecognized {direction = }')
+
+    if collective:
+        # check that the nfolds histories have the same length
+        l0 = len(historyCustom[0])
+        for h in historyCustom[1:]:
+            if len(h) != l0:
+                logger.error('Cannot compute a collective checkpoint from folds trained a different number of epochs. Computing independent checkpoints instead')
+                collective = False
+                break
+    if collective:
+        historyCustom = np.mean(np.array(historyCustom),axis=0)
+        opt_checkpoint = opt_f(historyCustom)
+    else:
+        opt_checkpoint = np.array([opt_f(h) for h in historyCustom])
+    
     opt_checkpoint += first_epoch
+
+    if not collective:
+        opt_checkpoint = list(opt_checkpoint)
     return opt_checkpoint
 
 @ut.execution_time
@@ -1092,6 +1169,8 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, train_model_kwargs, opti
     if load_from is not None:
         load_from = load_from.rstrip('/')
         opt_checkpoint = optimal_checkpoint(load_from, nfolds, **optimal_checkpoint_kwargs)
+        if isinstance(opt_checkpoint,int):
+            opt_checkpoint = [opt_checkpoint]*nfolds
 
     # k fold cross validation
     for i in range(nfolds):
@@ -1150,7 +1229,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, train_model_kwargs, opti
             model = create_model(input_shape=X_tr.shape[1:], **create_model_kwargs)
         else:
             model = keras.models.load_model(f'{load_from}/fold_{i}', compile=False)
-            model.load_weights(f'{load_from}/fold_{i}/cp-{opt_checkpoint:04d}.ckpt')
+            model.load_weights(f'{load_from}/fold_{i}/cp-{opt_checkpoint[i]:04d}.ckpt')
         summary_buffer = ut.Buffer()
         summary_buffer.append('\n')
         model.summary(print_fn = lambda x: summary_buffer.append(x + '\n'))
@@ -1368,7 +1447,7 @@ class Trainer():
         for k,v in kwargs.items():
             if k not in self.config_dict_flat:
                 raise KeyError(f'Invalid argument {k}')
-            if k in self.telegram_kwargs:
+            if k in self.telegram_kwargs: # deal with telegram arguments separately
                 self.telegram_kwargs[k] = v
                 continue
             iterate = False
@@ -1521,7 +1600,10 @@ class Trainer():
             optimal_checkpoint_kwargs = ut.extract_nested(run_kwargs, 'optimal_checkpoint_kwargs')
             opt_checkpoint = optimal_checkpoint(load_from,nfolds, **optimal_checkpoint_kwargs)
 
-            tl_from = f'{load_from}/epoch_{opt_checkpoint}'
+            tl_from = {'run': load_from, 'optimal_checkpoint': opt_checkpoint}
+
+            # avoid computing the optimal checkpoint again inside k_fold_cross_val
+            run_kwargs = ut.set_values_recursive(run_kwargs, {'load_from': load_from, 'bypass': opt_checkpoint})
 
             # force the dataset to the same year permutation
             year_permutation = list(np.load(f'{load_from}/year_permutation.npy', allow_pickle=True))
