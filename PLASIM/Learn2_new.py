@@ -87,10 +87,12 @@ level   name                events
 ### IMPORT LIBRARIES #####
 
 ## general purpose
+from copy import deepcopy
 import os as os
 from pathlib import Path
 from stat import S_IREAD
 import sys
+from tkinter.messagebox import NO
 import traceback
 from unittest import skip
 import warnings
@@ -255,6 +257,8 @@ def check_config_dict(config_dict):
         raise KeyError('Invalid config dictionary') from e
     return config_dict_flat
 
+### OPERATIONS WITH RUN METADATA ###
+
 def parse_run_name(run_name):
     '''
     Parses a string into a dictionary
@@ -337,16 +341,17 @@ def select_compatible(run_args, conditions, require_unique=True, path_to_config=
     >>> select_compatible(run_args, {'percent': 1}, require_unique=False)
     ['2', '3']
     '''
+    _run_args = deepcopy(run_args)
     if path_to_config is not None:
         path_to_config.rstrip('/')
         config_dict_flat = ut.collapse_dict(ut.json2dict(f'{path_to_config}/config.json'))
         conditions_at_default = {k:v for k,v in conditions.items() if v == config_dict_flat[k]}
-        for args in run_args.values():
+        for args in _run_args.values():
             for k,v in conditions_at_default.items():
                 if k not in args:
                     args[k] = v
 
-    compatible_keys = [k for k,v in run_args.items() if conditions.items() <= v.items()]
+    compatible_keys = [k for k,v in _run_args.items() if conditions.items() <= v.items()]
     if not require_unique:
         return compatible_keys
 
@@ -356,6 +361,81 @@ def select_compatible(run_args, conditions, require_unique=True, path_to_config=
         raise KeyError(f"Multiple runs contain satisfy {conditions = } ({compatible_keys}) and your are requiring just one")
     return compatible_keys[0]
 
+def remove_args_at_default(run_args, config_dict_flat):
+    '''
+    Removes from a dictionary of parameters the values that are at their default one.
+
+    Parameters
+    ----------
+    run_args : dict
+        dictionary where each item is a dictionary of the arguments of the run
+    config_dict_flat : dict
+        flattened config dictionary with the default values
+
+    Returns
+    -------
+    dict
+        epurated run_args
+    '''
+    _run_args = deepcopy(run_args)
+    for k,args in _run_args.items():
+        new_args = {}
+        for arg,value in args:
+            if value != config_dict_flat[arg]:
+                new_args[arg] = value
+        _run_args[k] = new_args
+    return _run_args
+
+def group_by_varying(run_args, variable='tau', config_dict_flat=None):
+    '''
+    Groups a series of runs into sets where only `variable` varies and other parameters are shared inside the set
+
+    Parameters
+    ----------
+    run_args : dict
+        dictionary where each item is a dictionary of the arguments of the run
+    variable : str, optional
+        argument that varies inside each group, by default 'tau'
+    config_dict_flat : dict, optional
+        flattened config dictionary with the default values, by default None
+
+    Returns
+    -------
+    list
+        list of dictionaries, one for each group. See examples for its structure
+
+    Examples
+    --------
+    >>> run_args = {'1': {'tau': 0, 'percent':5}, '2': {'percent': 1, 'tau': 0}, '3': {'percent': 1, 'tau': -5}}
+    >>> group_by_varying(run_args)
+    [{'args': {'percent': 5}, 'runs': ['1'], 'tau': [0]}, {'args': {'percent': 1}, 'runs': ['2', '3'], 'tau': [0, -5]}]
+    >>> group_by_varying(run_args, 'percent')
+    [{'args': {'tau': 0}, 'runs': ['1', '2'], 'percent': [5, 1]}, {'args': {'tau': -5}, 'runs': ['3'], 'percent': [1]}]
+    '''
+    _run_args = deepcopy(run_args)
+    # add default values for the varaible of interest
+    if config_dict_flat is not None:
+        for args in _run_args.values():
+            if variable not in args:
+                args[variable] = config_dict_flat[variable]
+    
+    # find the groups
+    variable_dict = {k:v.pop(variable) for k,v in _run_args.items()} # move the variable to a separate dictionary removing it from the arguments in run_args
+
+    group_args = []
+    group_runs = []
+    for k,v in _run_args.items():
+        try:
+            i = group_args.index(v)
+            group_runs[i].append(k)
+        except ValueError:
+            group_args.append(v)
+            group_runs.append([k])
+
+    groups = []
+    for i in range(len(group_args)):
+        groups.append({'args': group_args[i], 'runs': group_runs[i], variable:[variable_dict[k] for k in group_runs[i]]})
+    return groups
 
 def get_run(load_from, current_run_name=None):
     '''
