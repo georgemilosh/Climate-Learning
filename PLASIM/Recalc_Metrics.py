@@ -194,7 +194,7 @@ class MetricComputer():
         if os.path.exists(f'{run_folder}/metrics.csv'):
             run_name = run_folder.rsplit('/',1)[-1]
             logger.warning(f'Skipping {run_name}')
-            metrics = pd.read_csv(f'{run_folder}/metrics.csv')
+            metrics = pd.read_csv(f'{run_folder}/metrics.csv', index_col=0)
             return metrics
 
         run_config_dict = get_run_arguments(run_folder)
@@ -213,6 +213,9 @@ class MetricComputer():
 
         opt_checkpoint = ln.optimal_checkpoint(run_folder,nfolds, **optimal_checkpoint_kwargs)
 
+        if isinstance(opt_checkpoint, int):
+            opt_checkpoint = [opt_checkpoint]*nfolds
+
         metrics = {}
         # compute the metrics for each fold
         for i in range(nfolds):
@@ -230,7 +233,7 @@ class MetricComputer():
 
             # load the model
             model = keras.models.load_model(f'{fold_folder}', compile=False)
-            model.load_weights(f'{fold_folder}/cp-{opt_checkpoint:04d}.ckpt')
+            model.load_weights(f'{fold_folder}/cp-{opt_checkpoint[i]:04d}.ckpt')
 
             # get predicted labels
             Y_pred = model.predict(X_va) # now these are logits, so we apply a softmax layer
