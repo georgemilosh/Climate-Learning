@@ -1186,7 +1186,9 @@ def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='m
     
     opt_checkpoint += first_epoch
 
-    if not collective:
+    if collective:
+        opt_checkpoint = int(opt_checkpoint)
+    else:
         opt_checkpoint = list(opt_checkpoint)
     return opt_checkpoint
 
