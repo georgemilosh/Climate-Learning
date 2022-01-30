@@ -186,7 +186,7 @@ def vae_generate_images(vae,Z_DIM,n_to_show=10):
 
     
 class MCCMetric(tf.keras.metrics.Metric): # This function is designed to produce confusion matrix during training each epoch
-    def __init__(self, num_classes, threshold=None, **kwargs):
+    def __init__(self, num_classes, threshold=None, undersampling_factor=1, **kwargs):
         '''
         Mathews correlation coefficient metric
 
@@ -200,10 +200,12 @@ class MCCMetric(tf.keras.metrics.Metric): # This function is designed to produce
         super().__init__(name='MCC',**kwargs) # handles base args (e.g., dtype)
         self.num_classes=num_classes
         self.threshold = threshold
+        self.undersampling_factor = undersampling_factor
         if self.num_classes > 2:
             self.threshold = None
         self.total_cm = self.add_weight("total", shape=(num_classes,num_classes), initializer="zeros")
-        
+    
+    # TODO: add unbiasing of y_pred
     def reset_states(self):
         for s in self.variables:
             s.assign(tf.zeros(shape=s.shape))
@@ -241,6 +243,7 @@ class ConfusionMatrixMetric(tf.keras.metrics.Metric): # This function is designe
     """
     A custom Keras metric to compute the running average of the confusion matrix
     """
+    # TODO: add unbiasing of y_pred
     def __init__(self, num_classes, **kwargs):
         super().__init__(name='confusion_matrix',**kwargs) # handles base args (e.g., dtype)
         self.num_classes=num_classes

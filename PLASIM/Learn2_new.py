@@ -1328,7 +1328,12 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, train_model_kwargs, opti
         metrics = train_model_kwargs.pop('metrics', None)
         if metrics is None:
             if fullmetrics:
-                metrics=['accuracy',tff.MCCMetric(2),tff.ConfusionMatrixMetric(2),tff.CustomLoss(tf_sampling)]#keras.metrics.SparseCategoricalCrossentropy(from_logits=True)]#CustomLoss()]   # the last two make the code run longer but give precise discrete prediction benchmarks
+                metrics=[
+                    'accuracy',
+                    tff.MCCMetric(2),
+                    tff.ConfusionMatrixMetric(2),
+                    tff.CustomLoss(tf_sampling)
+                ]# the last two make the code run longer but give precise discrete prediction benchmarks
             else:
                 metrics=['loss']
         optimizer = train_model_kwargs.pop('optimizer',keras.optimizers.Adam(learning_rate=lr))
