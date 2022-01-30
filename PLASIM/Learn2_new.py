@@ -1526,8 +1526,12 @@ class Trainer():
         '''
         Here kwargs can be iterables. This function schedules several runs and calls on each of them `self._run`
         You can also set telegram kwargs with this function.
-        '''
 
+        Special arguments:
+            first_from_scratch : bool, optional
+                Whether the first run should be created from scratch or from transfer learning, by default False (transfer learning)
+        '''
+        first_from_scratch = kwargs.pop('first_from_scratch', False)
         # detect variables over which to iterate
         iterate_over = []
         non_iterative_kwargs = {}
@@ -1578,6 +1582,10 @@ class Trainer():
         iteration_values = ast.literal_eval(str(iteration_values))
 
         self.scheduled_kwargs = [{**non_iterative_kwargs, **{k: l[i] for i,k in enumerate(iterate_over)}} for l in iteration_values]
+
+        if first_from_scratch:
+            self.scheduled_kwargs[0]['load_from'] = None
+            logger.warning('Forcing the first run to be loaded from scratch')
 
         if len(self.scheduled_kwargs) == 0:
             self.scheduled_kwargs = [non_iterative_kwargs]
