@@ -1056,6 +1056,9 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     if ckpt_callback is not None:
         callbacks.append(ckpt_callback)
 
+    # TODO: early stopping callback
+    # es = keras.callbacks.EarlyStopping
+
     model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
     model.save_weights(ckpt_name.format(epoch=0))
@@ -1779,7 +1782,7 @@ if __name__ == '__main__':
             # GM: build_config_dict will recursively find the keyword parameters of function run (including the functions it calls) and build a corresponding dictionary tree in config file
             # GM: Can some of these functions be moved to ../ERA/utilities.py later at some point?
             d = build_config_dict([Trainer.run, Trainer.telegram]) 
-            print(f"{d = }") # GM: Doing some tests
+            # print(f"{d = }") # GM: Doing some tests
             ut.dict2json(d,f'{folder}/config.json')
 
             # runs file (which will keep track of various runs performed in newly created folder)

@@ -168,6 +168,7 @@ def plot_compare(model, images=None, add_noise=False): # Plot images generated b
         sub = fig.add_subplot(2, n_to_show, i+n_to_show+1)
         sub.axis('off')
         sub.imshow(img)
+
 def vae_generate_images(vae,Z_DIM,n_to_show=10):
     reconst_images = vae.decoder.predict(np.random.normal(0,1,size=(n_to_show,Z_DIM)))
 
@@ -184,8 +185,14 @@ def vae_generate_images(vae,Z_DIM,n_to_show=10):
 
 #### Custom Metrics ######
 
+class UnbiasedMetric(keras.metrics.Metric):
+    def __init__(self, name, undersampling_factor=1, **kwargs):
+        super().__init__(name=name, **kwargs)
+        self.undersampling_factor = undersampling_factor
+        self.r = tf.cast([0.5*np.log(undersampling_factor), -0.5*np.log(undersampling_factor)], tf.float32)
+
     
-class MCCMetric(tf.keras.metrics.Metric): # This function is designed to produce confusion matrix during training each epoch
+class MCCMetric(UnbiasedMetric): # This function is designed to produce confusion matrix during training each epoch
     def __init__(self, num_classes, threshold=None, undersampling_factor=1, **kwargs):
         '''
         Mathews correlation coefficient metric
@@ -197,15 +204,13 @@ class MCCMetric(tf.keras.metrics.Metric): # This function is designed to produce
         threshold : float, optional
             If num_classes == 2 allows to choose a threshold over which to consider an event positive. If None the event is positive if it has probability higher than 0.5. By default None
         '''
-        super().__init__(name='MCC',**kwargs) # handles base args (e.g., dtype)
+        super().__init__(name='MCC',undersampling_factor=undersampling_factor, **kwargs) # handles base args (e.g., dtype)
         self.num_classes=num_classes
         self.threshold = threshold
-        self.undersampling_factor = undersampling_factor
         if self.num_classes > 2:
             self.threshold = None
         self.total_cm = self.add_weight("total", shape=(num_classes,num_classes), initializer="zeros")
     
-    # TODO: add unbiasing of y_pred
     def reset_states(self):
         for s in self.variables:
             s.assign(tf.zeros(shape=s.shape))
@@ -229,6 +234,8 @@ class MCCMetric(tf.keras.metrics.Metric): # This function is designed to produce
         return tf.cond(MCC_den == 0, lambda: tf.constant(0, dtype=tf.float32), lambda: MCC)
     
     def confusion_matrix(self,y_true, y_pred): # Make a confusion matrix
+        if self.undersampling_factor > 1 or self.threshold is not None:
+            y_pred = keras.layers.Softmax()(y_pred + self.r) # apply shift of logits and softmax to convert to balanced probabilities
         if self.threshold is None:
             y_pred=tf.argmax(y_pred,1)
         else:
@@ -239,13 +246,12 @@ class MCCMetric(tf.keras.metrics.Metric): # This function is designed to produce
     def fill_output(self,output):
         results=self.result()
         
-class ConfusionMatrixMetric(tf.keras.metrics.Metric): # This function is designed to produce confusion matrix during training each epoch
+class ConfusionMatrixMetric(UnbiasedMetric): # This function is designed to produce confusion matrix during training each epoch
     """
     A custom Keras metric to compute the running average of the confusion matrix
     """
-    # TODO: add unbiasing of y_pred
-    def __init__(self, num_classes, **kwargs):
-        super().__init__(name='confusion_matrix',**kwargs) # handles base args (e.g., dtype)
+    def __init__(self, num_classes, undersampling_factor=1, **kwargs):
+        super().__init__(name='confusion_matrix', undersampling_factor=undersampling_factor, **kwargs) # handles base args (e.g., dtype)
         self.num_classes=num_classes
         self.total_cm = self.add_weight("total", shape=(num_classes,num_classes), initializer="zeros")
         
@@ -263,6 +269,8 @@ class ConfusionMatrixMetric(tf.keras.metrics.Metric): # This function is designe
         return cm
     
     def confusion_matrix(self,y_true, y_pred): # Make a confusion matrix
+        if self.undersampling_factor > 1:
+            y_pred = keras.layers.Softmax()(y_pred + self.r) # apply shift of logits and softmax to convert to balanced probabilities
         
         y_pred=tf.argmax(y_pred,1)
         cm=tf.math.confusion_matrix(y_true,y_pred,dtype=tf.float32,num_classes=self.num_classes)
@@ -271,7 +279,36 @@ class ConfusionMatrixMetric(tf.keras.metrics.Metric): # This function is designe
     def fill_output(self,output):
         results=self.result()
 
+class BrierScoreMetric(UnbiasedMetric):
+    def __init__(self, undersampling_factor=1, **kwargs):
+        super().__init__(name='BrierScore', undersampling_factor=undersampling_factor, **kwargs)
+        self.mse = keras.metrics.MeanSquaredError()
+        self.my_metric = self.add_weight(name='BScore', initializer='zeros')
 
+    def update_state(self, y_true, y_pred, sample_weight=None):
+        _ = self.mse.update_state(y_true, keras.layers.Softmax()(y_pred + self.r))
+        self.my_metric.assign(self.mse.result())
+
+    def result(self):
+        return self.my_metric
+
+class UnbiasedCrossEntropyLoss(UnbiasedMetric):
+
+  def __init__(self, undersampling_factor=1, **kwargs):
+    super().__init__(name='UnbiasedCrossEntropyLoss', undersampling_factor=undersampling_factor, **kwargs)
+    self.my_metric = self.add_weight(name='CLoss', initializer='zeros')
+    self.m = tf.keras.metrics.SparseCategoricalCrossentropy(from_logits=True)
+
+  def update_state(self, y_true, y_pred, sample_weight=None):
+    #_ = self.m.update_state(tf.cast(y_true, 'int32'), y_pred)
+    _ = self.m.update_state(y_true, y_pred+self.r) # the idea is to add the weight factor inside the logit so that we effectively change the probabilities
+    self.my_metric.assign(self.m.result())
+    
+  def result(self):
+    return self.my_metric
+
+
+# same as above but less elegant
 class CustomLoss(tf.keras.metrics.Metric):
 
   def __init__(self, r, **kwargs):
