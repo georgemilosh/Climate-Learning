@@ -438,7 +438,7 @@ def set_values_recursive(d_nested, d_flat, inplace=False):
     {'a': 'hello', 'b': {'a': 'hello', 'c': 8}}
     >>> d = {'a': 10, 'b': {'a': 10, 'c': 8}}
     >>> set_values_recursive(d, {'a': 'hello', 'z': 42}, inplace=False)
-    {'a': 'hello', 'b': {'a': 'hello', 'c': 8}}
+    {'a': 'hello', 'b': {'a': 'hello', 'c': 8}} 
     >>> d
     {'a': 10, 'b': {'a': 10, 'c': 8}}
     '''

@@ -1537,10 +1537,10 @@ class Trainer():
             first_from_scratch : bool, optional
                 Whether the first run should be created from scratch or from transfer learning, by default False (transfer learning)
         '''
-        first_from_scratch = kwargs.pop('first_from_scratch', False)
+        first_from_scratch = kwargs.pop('first_from_scratch', False)  # GM: Removing this argument from the dictionary?
         # detect variables over which to iterate
         iterate_over = []
-        non_iterative_kwargs = {}
+        non_iterative_kwargs = {} # GM: My understanding is that we need to distinguish here between iterative kwargs and non-iterative ones
         for k,v in kwargs.items():
             if k not in self.config_dict_flat:
                 raise KeyError(f'Invalid argument {k}')
@@ -1625,6 +1625,7 @@ class Trainer():
                 logger.log(45, 'Removed telegram logger')
 
     def run(self, folder, load_data_kwargs, prepare_XY_kwargs, k_fold_cross_val_kwargs, log_level=logging.INFO):
+        # GM to AL: Write a description
         os.mkdir(folder)
 
         # setup logger
@@ -1666,7 +1667,7 @@ class Trainer():
     def _run(self, **kwargs):
         '''
         Parses kwargs and performs a single run, kwargs are not interpreted as iterables.
-        It checks for transfer learning and if the run has already been performed, in whih case, if `self.skip_existing_run` is True, it is skipped
+        It checks for transfer learning and if the run has already been performed, in which case, if `self.skip_existing_run` is True, it is skipped
         '''
         runs = ut.json2dict('runs.json')
 
@@ -1686,7 +1687,7 @@ class Trainer():
         for k in sorted(kwargs):
             folder += f'{k}{value_sep}{kwargs[k]}{arg_sep}'
         folder = folder[:-len(arg_sep)] # remove the last arg_sep
-        folder = ut.make_safe(folder)
+        folder = ut.make_safe(folder) 
 
         run_kwargs = ut.set_values_recursive(self.default_run_kwargs, kwargs)
 
