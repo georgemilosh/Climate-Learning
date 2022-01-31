@@ -1225,7 +1225,7 @@ def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='m
     if collective:
         opt_checkpoint = int(opt_checkpoint)
     else:
-        opt_checkpoint = list(opt_checkpoint)
+        opt_checkpoint = [int(oc) for oc in opt_checkpoint]
     return opt_checkpoint
 
 @ut.execution_time
