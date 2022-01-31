@@ -979,9 +979,37 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
 
 
 ###### TRAINING THE NETWORK ############
+def early_stopping(monitor='val_CustomLoss', min_delta=0, patience=0, mode='auto'):
+    '''
+    Creates an early stopping callback
+
+    Parameters
+    ----------
+    monitor : str, optional
+        metric to monitor, by default 'val_CustomLoss'
+    min_delta : int, optional
+        minimum change in the monitored metric to qualify as improvement, by default 0
+    patience : int, optional
+        maximum number of epochs to wait for an improvement of the monitored metric, by default 0, which means early stopping is disabled
+    mode : 'min' or 'max' or 'auto', optional
+        whether the monitored metric needs to be maximized or minimized, by default 'auto', which means it is inferrend by the name of the monitored quantity
+
+    Returns
+    -------
+    keras.callbacks.EarlyStopping
+        Early stopping callback
+    '''
+    if mode == 'auto':
+        mode = 'min'
+        for v in ['acc', 'MCC', 'skill']:
+            if v in monitor:
+                mode = 'max'
+                break
+    return keras.callbacks.EarlyStopping(monitor=monitor, min_delta=min_delta, patience=patience, mode=mode)
+
 @ut.execution_time
 @ut.indent_logger(logger)
-def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics,
+def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics, early_stopping_kwargs, enable_early_stopping=False,
                 batch_size=1024, checkpoint_every=1, additional_callbacks=['csv_logger']):
     '''
     Trains a given model checkpointing its weights
@@ -1058,8 +1086,11 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     if ckpt_callback is not None:
         callbacks.append(ckpt_callback)
 
-    # TODO: early stopping callback
-    # es = keras.callbacks.EarlyStopping
+    if enable_early_stopping:
+        if 'patience' not in early_stopping_kwargs or early_stopping_kwargs['patience'] == 0:
+            logger.warning('Skipping early stopping with patience = 0')
+        else:
+            callbacks.append(early_stopping(**early_stopping_kwargs))
 
     model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
