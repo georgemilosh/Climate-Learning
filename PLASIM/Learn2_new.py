@@ -333,15 +333,14 @@ def select_compatible(run_args, conditions, require_unique=True, path_to_config=
 
     Examples   
     --------
-    >>> run_args = {'1': {'tau': -5}, '2': {'percent': 1, 'tau': 0}, '3': {'percent': 1, 'tau': -5}}
-    >>> select_compatible(run_args, {'tau': 0})
+    >>> run_args = {'1': {'tau': -5}, '2': {'percent': 1, 'tau': -10}, '3': {'percent': 1, 'tau': -5}}
+    >>> select_compatible(run_args, {'tau': 10})
     '2'
-    >>> select_compatible(run_args, {'tau': 0}, require_unique=False)
+    >>> select_compatible(run_args, {'tau': -10}, require_unique=False)
     ['2']
     >>> select_compatible(run_args, {'percent': 1}, require_unique=False)
     ['2', '3']
     '''
-    #GM: Shouldn't {'tau': 0} be a default parameter and thus not require specification?
     _run_args = deepcopy(run_args)
     if path_to_config is not None:
         path_to_config.rstrip('/')
@@ -490,7 +489,7 @@ def get_run(load_from, current_run_name=None):
                 l = -1
             else:
                 run_names = {k:v['name'] for k,v in runs.items()}
-                if load_from in run_names.values():
+                if load_from in run_names.values(): # full run name provided
                     return load_from
                 load_from_dict = parse_run_name(load_from)
                 l = int(select_compatible({k:parse_run_name(v) for k,v in run_names.items()}, load_from_dict, require_unique=True))
@@ -566,8 +565,8 @@ for h in [200,300,500,850]: # geopotential heights
         'label': f'{h} mbar Geopotential',
     }
 
-@ut.execution_time  # GM: I guess the point is to measure elapsed time but the way this works is not transparent to me yet
-@ut.indent_logger(logger)   # GM: same, I guess the idea is to ensure something about print statements
+@ut.execution_time  # prints the time it takes for the function t run
+@ut.indent_logger(logger)   # indents the log messages produced by this function
 # GM: perhaps 'mask' is a better title, rather than filter, but given many functions already carry this name it is too late
 def load_data(dataset_years=1000, year_list=None, sampling='', Model='Plasim', area='France', filter_area='France',
               lon_start=0, lon_end=128, lat_start=0, lat_end=22, mylocal='/local/gmiloshe/PLASIM/',fields=['t2m','zg500','mrso_filtered']):
@@ -1032,7 +1031,12 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     optimizer : keras.Optimizer object
     loss : keras.losses.Loss object
     metrics : list of keras.metrics.Metric or str
+    early_stopping_kwargs : dict
+        arguments to create the early stopping callback. Ignored if `enable_early_stopping` = False
+    enable_early_stopping : bool, optional
+        whether to perform early stopping or not, by default False
     batch_size : int, optional
+        by default 1024
     checkpoint_every : int or str, optional
         Examples:
         0: disabled
@@ -1040,13 +1044,15 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
         '100 batches' or '100 b': every 100 batches
         'best custom_loss': every time 'custom_loss' reaches a new minimum. 'custom_loss' must be in the list of metrics
     additional_callbacks : list of keras.callbacks.Callback objects or list of str, optional
-        for example EarlyStopping
         string items are interpreted, for example 'csv_logger' creates a CSVLogger callback
     '''
     folder = folder.rstrip('/')
     ckpt_name = folder + '/cp-{epoch:04d}.ckpt'
-    
+
+    ## deal with callbacks
     callbacks = []
+
+    # additional callbacks
     if additional_callbacks is not None:
         for cb in additional_callbacks:
             if isinstance(cb, str):
@@ -1057,12 +1063,13 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
             else:
                 callbacks.append(cb)
 
+    # checkpointing callback
     ckpt_callback = None
-    if checkpoint_every == 0:
+    if checkpoint_every == 0: # no checkpointing
         pass
     elif checkpoint_every == 1: # save every epoch
         ckpt_callback = keras.callbacks.ModelCheckpoint(filepath=ckpt_name, save_weights_only=True, verbose=1)
-    elif isinstance(checkpoint_every, int): # save every checkpoint_every epochs 
+    elif isinstance(checkpoint_every, int): # save every `checkpoint_every` epochs 
         ckpt_callback = keras.callbacks.ModelCheckpoint(filepath=ckpt_name, save_weights_only=True, verbose=1, period=checkpoint_every)
     elif isinstance(checkpoint_every, str): # parse string options
         if checkpoint_every[0].isnumeric():
@@ -1086,6 +1093,7 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     if ckpt_callback is not None:
         callbacks.append(ckpt_callback)
 
+    # early stopping callback
     if enable_early_stopping:
         if 'patience' not in early_stopping_kwargs or early_stopping_kwargs['patience'] == 0:
             logger.warning('Skipping early stopping with patience = 0')
@@ -1094,8 +1102,9 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
 
     model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
-    model.save_weights(ckpt_name.format(epoch=0))
+    model.save_weights(ckpt_name.format(epoch=0)) # save model before training
 
+    # perform training for `num_epochs`
     my_history=model.fit(X_tr, Y_tr, batch_size=batch_size, validation_data=(X_va,Y_va), shuffle=True,
                          callbacks=callbacks, epochs=num_epochs, verbose=2, class_weight=None)
 
@@ -1144,7 +1153,7 @@ def k_fold_cross_val_split(i, X, Y, nfolds=10, val_folds=1):
         Y_va = Y[lower:upper]
         X_tr = np.concatenate([X[upper:], X[:lower]], axis=0)
         Y_tr = np.concatenate([Y[upper:], Y[:lower]], axis=0)
-    else: # upper overshoots
+    else: # `upper` overshoots
         X_va = np.concatenate([X[lower:], X[:upper]], axis=0)
         Y_va = np.concatenate([Y[lower:], Y[:upper]], axis=0)
         X_tr = X[upper:lower]
@@ -1206,7 +1215,7 @@ def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='m
     else:
         raise ValueError(f'Unrecognized {direction = }')
 
-    if collective:
+    if collective: # the optimal checkpoint is the same for all folds and it is based on the average performance over the folds
         # check that the nfolds histories have the same length
         l0 = len(historyCustom[0])
         for h in historyCustom[1:]:
@@ -1218,7 +1227,7 @@ def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='m
         historyCustom = np.mean(np.array(historyCustom),axis=0)
         opt_checkpoint = opt_f(historyCustom)
     else:
-        opt_checkpoint = np.array([opt_f(h) for h in historyCustom])
+        opt_checkpoint = np.array([opt_f(h) for h in historyCustom]) # each fold independently
     
     opt_checkpoint += first_epoch
 
@@ -1232,7 +1241,6 @@ def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='m
 @ut.indent_logger(logger)
 def k_fold_cross_val(folder, X, Y, create_model_kwargs, train_model_kwargs, optimal_checkpoint_kwargs, load_from='last', nfolds=10, val_folds=1, u=1,
                      fullmetrics=True, training_epochs=40, training_epochs_tl=10, lr=1e-4):
-    # GM: explain train_model_kwargs more
     '''
     Performs k fold cross validation on a model architecture.
 
@@ -1248,11 +1256,18 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, train_model_kwargs, opti
         dictionary with the parameters to create a model
     train_model_kwargs : dict
         dictionary with the parameters to train a model
-        The following special arguments will override other parameters of this function:
-            num_epochs: overrides `training_epochs` and `training_epochs_tl`
-            optimizer: overrides `lr`
-            loss: overrides the default SparseCrossEntropyLoss
-            metrics: overrides `fullmetrics`
+        For most common use (command line) you can only specify arguments that have a default value and so appear in the config file.
+        However if run this function from a notebook you can use more advanced features like using another loss rather than the default cross entropy
+        or an optimizer rather than Adam.
+        This can be done specifying other parameters rather than the ones that appear in the config file, namely:
+            num_epochs : int
+                number of training epochs. `training_epochs` and `training_epochs_tl` are ignored
+            optimizer : keras.optimizers.Optimizer
+                optimizer object, `lr` is ignored
+            loss : keras.metrics.Metric
+                overrides the default SparseCrossEntropyLoss
+            metrics : list of metrics objects
+                overrides `fullmetrics`
     optimal_chekpoint_kwargs : dict
         dictionary with the parameters to find the optimal checkpoint
     load_from : None, int, str or 'last', optional
@@ -1275,6 +1290,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, train_model_kwargs, opti
     '''
     folder = folder.rstrip('/')
 
+    # get the actual run name from where to load
     load_from = get_run(load_from, current_run_name=folder.rsplit('/',1)[-1])
     if load_from is None:
         logger.log(41, 'Models will be trained from scratch')
@@ -1289,6 +1305,8 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, train_model_kwargs, opti
         load_from = load_from.rstrip('/')
         opt_checkpoint = optimal_checkpoint(load_from, nfolds, **optimal_checkpoint_kwargs)
         if isinstance(opt_checkpoint,int):
+            # this happens if the optimal checkpoint is computed with `collective` = True
+            #  so we simply broadcast the single optimal checkpoint to all the folds
             opt_checkpoint = [opt_checkpoint]*nfolds
 
     # k fold cross validation
@@ -1310,18 +1328,14 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, train_model_kwargs, opti
         # perform undersampling
         if u > 1:
             undersampling_strategy = n_pos_tr/(n_neg_tr/u)
-            if undersampling_strategy > 1:
-                # print(f'Too high undersmapling factor, maximum for this dataset is u={n_neg_tr/n_pos_tr}')
-                # print(f'using the maximum undersampling instead')
-                # undersampling_strategy = 1
-                # u = n_neg_tr/n_pos_tr
+            if undersampling_strategy > 1: # you cannot undersample so much that the majority class becomes the minority one
                 raise ValueError(f'Too high undersmapling factor, maximum for this dataset is u={n_neg_tr/n_pos_tr}')
             pipeline = Pipeline(steps=[('u', RandomUnderSampler(random_state=42, sampling_strategy=undersampling_strategy))])
             # reshape data to feed it to the pipeline
             X_tr_shape = X_tr.shape
             X_tr = X_tr.reshape((X_tr_shape[0], np.product(X_tr_shape[1:])))
-            X_tr, Y_tr = pipeline.fit_resample(X_tr, Y_tr)
-            X_tr = X_tr.reshape((X_tr.shape[0], *X_tr_shape[1:]))
+            X_tr, Y_tr = pipeline.fit_resample(X_tr, Y_tr) # apply pipeline
+            X_tr = X_tr.reshape((X_tr.shape[0], *X_tr_shape[1:])) # reshape back
             n_pos_tr = np.sum(Y_tr)
             n_neg_tr = len(Y_tr) - n_pos_tr
             logger.info(f'number of training data: {len(Y_tr)} of which {n_neg_tr} negative and {n_pos_tr} positive')
@@ -1341,6 +1355,8 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, train_model_kwargs, opti
 
         logger.info(f'{X_tr.shape = }, {X_va.shape = }')
 
+        # at this point data is ready to be fed to the networks
+
 
         # check for transfer learning
         model = None        
@@ -1349,18 +1365,21 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, train_model_kwargs, opti
         else:
             model = keras.models.load_model(f'{load_from}/fold_{i}', compile=False)
             model.load_weights(f'{load_from}/fold_{i}/cp-{opt_checkpoint[i]:04d}.ckpt')
-        summary_buffer = ut.Buffer()
+        summary_buffer = ut.Buffer() # workaround necessary to log the structure of the network to the file, since `model.summary` uses `print`
         summary_buffer.append('\n')
         model.summary(print_fn = lambda x: summary_buffer.append(x + '\n'))
         logger.info(summary_buffer.msg)
 
-        num_epochs = train_model_kwargs.pop('num_epochs', None)
+        # number of training epochs
+        num_epochs = train_model_kwargs.pop('num_epochs', None) # if num_epochs is not provided in train_model_kwargs, whihc is most of the time,
+                                                                # we assign it according if we have to du transfer learning or not
         if num_epochs is None:
             if load_from is None:
                 num_epochs = training_epochs
             else:
                 num_epochs = training_epochs_tl
 
+        # metrics
         tf_sampling = tf.cast([0.5*np.log(u), -0.5*np.log(u)], tf.float32)
         metrics = train_model_kwargs.pop('metrics', None)
         if metrics is None:
@@ -1374,11 +1393,14 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, train_model_kwargs, opti
                 ]# the last two make the code run longer but give precise discrete prediction benchmarks
             else:
                 metrics=['loss']
-        optimizer = train_model_kwargs.pop('optimizer',keras.optimizers.Adam(learning_rate=lr))
-        loss = train_model_kwargs.pop('loss',keras.losses.SparseCategoricalCrossentropy(from_logits=True))
+        # optimizer and loss
+        optimizer = train_model_kwargs.pop('optimizer',keras.optimizers.Adam(learning_rate=lr)) # if optimizer is not provided in train_model_kwargs use Adam
+        loss = train_model_kwargs.pop('loss',keras.losses.SparseCategoricalCrossentropy(from_logits=True)) # same as above
 
-        train_model(model, X_tr, Y_tr, X_va, Y_va,
-                    folder=fold_folder, num_epochs=num_epochs, optimizer=optimizer, loss=loss, metrics=metrics, **train_model_kwargs)
+        # train the model
+        train_model(model, X_tr, Y_tr, X_va, Y_va, # arguments that are always computed inside this function
+                    folder=fold_folder, num_epochs=num_epochs, optimizer=optimizer, loss=loss, metrics=metrics, # arguments that may come from train_model_kwargs for advanced uses but usually are computed here
+                    **train_model_kwargs) # arguments which have a default value in the definition of `train_model` and thus appear in the config file
 
         my_memory.append(psutil.virtual_memory())
         logger.info(f'RAM memory: {my_memory[i][3]:.3e}') # Getting % usage of virtual_memory ( 3rd field)
@@ -1392,7 +1414,8 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, train_model_kwargs, opti
 ########## PUTTING THE PIECES TOGETHER ###########
 @ut.execution_time
 @ut.indent_logger(logger)
-def prepare_XY(fields, make_XY_kwargs, roll_X_kwargs, do_premix=False, premix_seed=0, do_balance_folds=True, nfolds=10, year_permutation=None, flatten_time_axis=True):
+def prepare_XY(fields, make_XY_kwargs, roll_X_kwargs,
+               do_premix=False, premix_seed=0, do_balance_folds=True, nfolds=10, year_permutation=None, flatten_time_axis=True):
     '''
     Performs all operations to extract from the fields X and Y ready to be fed to the neural network.
 
@@ -1461,6 +1484,7 @@ def prepare_XY(fields, make_XY_kwargs, roll_X_kwargs, do_premix=False, premix_se
     logger.info(f'Mixing completed in {ut.pretty_time(time.time() - start_time)}\n')
     logger.info(f'{X.shape = }, {Y.shape = }')
 
+    # flatten the time axis dropping the organizatin in years
     if flatten_time_axis:
         X = X.reshape((X.shape[0]*X.shape[1],*X.shape[2:]))
         Y = Y.reshape((Y.shape[0]*Y.shape[1]))
@@ -1527,13 +1551,26 @@ def run(folder, prepare_data_kwargs, k_fold_cross_val_kwargs, log_level=logging.
 ###### EFFICIENT MANAGEMENT OF MULTIPLE RUNS #######
 
 class Trainer():
+    '''
+    Class for performing training of neural networks over multiple runs with different paramters in an efficient way
+    '''
     def __init__(self, skip_existing_run=True):
-        # load config file and parse arguments
+        '''
+        Constructor
+
+        Parameters
+        ----------
+        skip_existing_run : bool, optional
+            Whether to skip runs that have already been performed in the same folder, by default True
+            If False the existing run is not overwritten but a new one is performed
+        '''
         self.skip_existing_run = skip_existing_run
 
+        # load config file and parse arguments
         self.config_dict = ut.json2dict('config.json')
         self.config_dict_flat = check_config_dict(self.config_dict)
         
+        # cached (heavy) variables
         self.fields = None
         self.X = None
         self.Y = None
@@ -1569,10 +1606,11 @@ class Trainer():
             first_from_scratch : bool, optional
                 Whether the first run should be created from scratch or from transfer learning, by default False (transfer learning)
         '''
-        first_from_scratch = kwargs.pop('first_from_scratch', False)  # GM: Removing this argument from the dictionary?
+        first_from_scratch = kwargs.pop('first_from_scratch', False)  # this argument is removed from the kwargs because it affects only the first run
+        
         # detect variables over which to iterate
-        iterate_over = []
-        non_iterative_kwargs = {} # GM: My understanding is that we need to distinguish here between iterative kwargs and non-iterative ones
+        iterate_over = [] # list of names of arguments that are lists and so need to be iterated over
+        non_iterative_kwargs = {} # dictionary of provided arguments that have a single value
         for k,v in kwargs.items():
             if k not in self.config_dict_flat:
                 raise KeyError(f'Invalid argument {k}')
@@ -1580,9 +1618,9 @@ class Trainer():
                 self.telegram_kwargs[k] = v
                 continue
             iterate = False
-            if isinstance(v, list): # possible need to iterate over the argument
-                if isinstance(self.config_dict_flat[k], list):
-                    if isinstance(v[0], list):
+            if isinstance(v, list): # the argument is a list: possible need to iterate over the argument
+                if isinstance(self.config_dict_flat[k], list): # the default value is a list as well, so maybe we don't need to iterate over v
+                    if isinstance(v[0], list): # v is a list of lists: we need to iterate over it
                         iterate = True
                 else:
                     iterate = True
@@ -1591,9 +1629,12 @@ class Trainer():
             elif v != self.config_dict_flat[k]: # skip parameters already at their default value
                 non_iterative_kwargs[k] = v
 
+
+        # rearrange the order of the arguments over which we need to iterate such that the runs are performed in the most efficient way
+        # namely we want arguments for loading data to tick like hours, arguments for preparing X,Y to tick like minutes and arguments for k_fold_cross_val like seconds
         new_iterate_over = []
         # arguments for loading fields
-        to_add = [] # GM: The idea here is to arrange the arguments in order that it is the most efficient (e.g. loading the fields is heavy)
+        to_add = []
         for k in iterate_over:
             if k in self.default_run_kwargs['load_data_kwargs']:
                 to_add.append(k)
@@ -1613,17 +1654,15 @@ class Trainer():
         
         iterate_over = new_iterate_over
 
+        # retrieve values of the arguments
         iteration_values = [kwargs[k] for k in iterate_over]
-        # expand the iterations into a list
+        # expand the iterations into a list performing the meshgrid
         iteration_values = list(zip(*[m.flatten() for m in np.meshgrid(*iteration_values, indexing='ij')]))
         # ensure json serialazability by converting to string and back
         iteration_values = ast.literal_eval(str(iteration_values))
 
+        # add the non iterative kwargs
         self.scheduled_kwargs = [{**non_iterative_kwargs, **{k: l[i] for i,k in enumerate(iterate_over)}} for l in iteration_values]
-
-        if first_from_scratch: # GM: fix the block (move below)
-            self.scheduled_kwargs[0]['load_from'] = None
-            logger.warning('Forcing the first run to be loaded from scratch')
 
         if len(self.scheduled_kwargs) == 0: # GM: this is fix to avoid empty scheduled_kwargs if it happens there are no iterative kwargs
             self.scheduled_kwargs = [non_iterative_kwargs]
@@ -1635,8 +1674,33 @@ class Trainer():
             logger.info(f'Scheduled the following {len(self.scheduled_kwargs)} runs:')
             for i,kw in enumerate(self.scheduled_kwargs):
                 logger.info(f'{i}: {kw}')
+
+        if first_from_scratch: 
+            self.scheduled_kwargs[0]['load_from'] = None # disable transfer learning for the first run
+            logger.warning('Forcing the first run to be loaded from scratch')
     
     def telegram(self, telegram_bot_token='~/ENSMLbot.txt', chat_ID=None, telegram_logging_level=31, telegram_logging_format=None):
+        '''
+        Adds a telegram handler to the logger of this module, if `telegram_bot_token` and `chat_ID` are both not None
+        To be able to receive messages on telegram from this bot go on telegram and start a conversation with `ENSMLbot`
+
+        Parameters
+        ----------
+        telegram_bot_token : str, optional
+            token for the telegram bot or path to the file where it is stored, by default '~/ENSMLbot.txt'
+        chat_ID : int, optional
+            chat id of the telegram user/group to whom send the log messages, by default None
+            To find your chat id go in telegram and type /start in a chat with `userinfobot`
+        telegram_logging_level : int, optional
+            logging level for this handler, by default 31
+        telegram_logging_format : srt, optional
+            format of the logging messages, by default None
+
+        Returns
+        -------
+        telegram_handler.handlers.TelegramHandler
+            telegram handler object
+        '''
         th = None
         if telegram_bot_token is not None and chat_ID is not None:
             th = ut.new_telegram_handler(chat_ID=chat_ID, token=telegram_bot_token, level=telegram_logging_level, formatter=telegram_logging_format)
@@ -1645,6 +1709,10 @@ class Trainer():
         return th
 
     def run_multiple(self):
+        '''
+        Performs all the scheduled runs
+        '''
+        # add telegram logger
         th = self.telegram(**self.telegram_kwargs)
         logger.log(45, f'Starting {len(self.scheduled_kwargs)} runs')
         try:
@@ -1652,27 +1720,48 @@ class Trainer():
                 self._run(**kwargs)
             logger.log(49, '\n\n\n\n\n\nALL RUNS COMPLETED\n\n')
         finally:
+            # remove telegram logger
             if th is not None:
                 logger.handlers.remove(th)
                 logger.log(45, 'Removed telegram logger')
 
     def run(self, folder, load_data_kwargs, prepare_XY_kwargs, k_fold_cross_val_kwargs, log_level=logging.INFO):
-        # GM to AL: Write a description
+        '''
+        Performs a single full run
+
+        Parameters
+        ----------
+        folder : str
+            folder where to perform the run
+        load_data_kwargs : dict
+            arguments for the function load_data
+        prepare_XY_kwargs : dict
+            arguments for the function prepare_XY
+        k_fold_cross_val_kwargs : dict
+            arguments for the function k_fold_cross_val
+        log_level : int, optional
+            logging level for the log file, by default logging.INFO
+
+        Raises
+        ------
+        RuntimeError
+            If an exception is raised during the run
+        '''
         os.mkdir(folder)
 
-        # setup logger
+        # setup logger to file
         fh = logging.FileHandler(f'{folder}/log.log')
         fh.setLevel(log_level)
         logger.handlers.append(fh)
 
         try:
-            # load the fields
+            # load the fields only if the arguments have changed, otherwise self.fields is already at the correct value
             if self._load_data_kwargs != load_data_kwargs:
                 self._load_data_kwargs = load_data_kwargs
                 self._prepare_XY_kwargs = None # force the computation of prepare_XY
                 self.fields = load_data(**load_data_kwargs)
 
-            # prepare XY
+            # prepare XY only if the arguments have changed, as above
             if self._prepare_XY_kwargs != prepare_XY_kwargs:
                 self._prepare_XY_kwargs = prepare_XY_kwargs
                 self.X, self.Y, self.year_permutation = prepare_XY(self.fields, **prepare_XY_kwargs)
@@ -1688,20 +1777,21 @@ class Trainer():
         
         except Exception as e:
             logger.critical(f'Run on {folder = } failed due to {repr(e)}')
-            tb = traceback.format_exc()
+            tb = traceback.format_exc() # log the traceback to the log file
             logger.error(tb)
             raise RuntimeError('Run failed') from e
 
         finally:
-            logger.handlers.remove(fh)
+            logger.handlers.remove(fh) # stop writing to the log file
 
 
     def _run(self, **kwargs):
         '''
         Parses kwargs and performs a single run, kwargs are not interpreted as iterables.
         It checks for transfer learning and if the run has already been performed, in which case, if `self.skip_existing_run` is True, it is skipped
+        Basically it is a wrapper of the `self.run` function.
         '''
-        runs = ut.json2dict('runs.json')
+        runs = ut.json2dict('runs.json') # get runs dictionary
 
         # check if the run has already been performed
         for r in runs.values():
@@ -1715,34 +1805,37 @@ class Trainer():
         # get run number
         run_id = str(len(runs))
 
+        # create run name from kwargs
         folder = f'{run_id}{arg_sep}'
         for k in sorted(kwargs):
             folder += f'{k}{value_sep}{kwargs[k]}{arg_sep}'
         folder = folder[:-len(arg_sep)] # remove the last arg_sep
         folder = ut.make_safe(folder) 
 
+        # correct the default kwargs with the ones provided
         run_kwargs = ut.set_values_recursive(self.default_run_kwargs, kwargs)
 
-        check_config_dict(run_kwargs)
+        check_config_dict(run_kwargs) # check if the arguments are consistent with each other
 
         # check for transfer learning
         load_from = ut.extract_nested(run_kwargs, 'load_from')
         load_from = get_run(load_from,current_run_name=folder)
         tl_from = None
-        if load_from is not None:
+        if load_from is not None: # we actually do transfer learning
             nfolds = ut.extract_nested(run_kwargs, 'nfolds')
             optimal_checkpoint_kwargs = ut.extract_nested(run_kwargs, 'optimal_checkpoint_kwargs')
-            opt_checkpoint = optimal_checkpoint(load_from,nfolds, **optimal_checkpoint_kwargs)
+            opt_checkpoint = optimal_checkpoint(load_from,nfolds, **optimal_checkpoint_kwargs) # get the optimal checkpoint
 
             tl_from = {'run': load_from, 'optimal_checkpoint': opt_checkpoint}
 
-            # avoid computing the optimal checkpoint again inside k_fold_cross_val
-            run_kwargs = ut.set_values_recursive(run_kwargs, {'load_from': load_from, 'bypass': opt_checkpoint}) # when optimal_checkpoint function will be called inside k_fold_cross_val it will take this value
+            # avoid computing the optimal checkpoint again inside k_fold_cross_val by setting up a bypass for when `optimal_checkpoint` is called inside k_fold_cross_val
+            run_kwargs = ut.set_values_recursive(run_kwargs, {'load_from': load_from, 'bypass': opt_checkpoint})
 
             # force the dataset to the same year permutation
             year_permutation = list(np.load(f'{load_from}/year_permutation.npy', allow_pickle=True))
             run_kwargs = ut.set_values_recursive(run_kwargs, {'year_permutation': year_permutation})
 
+            # these arguments are ignored due to transfer learning, so warn the user if they had been provided
             overridden_kwargs = ['do_premix', 'premix_seed', 'do_balance_folds']
             ignored_kwargs = [k for k in kwargs if k in overridden_kwargs]
             if len(ignored_kwargs) > 0:
@@ -1751,7 +1844,7 @@ class Trainer():
                     kwargs.pop(k)
                     logger.log(45, f'Ignoring provided argument {k} due to transfer learning compatibility')
 
-                # check again if the run has already been done
+                # check again if the run has already been done since now kwargs is potentially changed
                 for r in runs.values():
                     if self.skip_existing_run:
                         logger.log(45, f"Skipping already performed run {r['name']}")
@@ -1769,7 +1862,7 @@ class Trainer():
         logger.log(42, f'{folder = }\n')
         
         runs[run_id] = {'name': folder, 'args': kwargs, 'transfer_learning_from': tl_from, 'status': 'RUNNING', 'start_time': ut.now()}
-        ut.dict2json(runs, 'runs.json')
+        ut.dict2json(runs, 'runs.json') # save runs.json
 
         # run
         try:            
@@ -1779,14 +1872,14 @@ class Trainer():
             runs[run_id]['status'] = 'COMPLETED'
             logger.log(42, 'run completed!!!\n\n')
 
-        except Exception as e:
+        except Exception as e: # run failed
             runs = ut.json2dict('runs.json')
             runs[run_id]['status'] = 'FAILED'
             runs[run_id]['name'] = f'F{folder}'
             shutil.move(folder, f'F{folder}')
             raise e
 
-        finally:
+        finally: # in any case we need to save the end time and save runs to json
             runs[run_id]['end_time'] = ut.now()
             ut.dict2json(runs,'runs.json')
 
@@ -1814,10 +1907,10 @@ if __name__ == '__main__':
             move_to_folder(folder)
             
             # config file will be built from the default parameters of the functions given here
-            # GM: build_config_dict will recursively find the keyword parameters of function run (including the functions it calls) and build a corresponding dictionary tree in config file
+            # GM: build_config_dict will recursively find the keyword parameters of function run 
+            # (including the functions it calls) and build a corresponding dictionary tree in config file
             # GM: Can some of these functions be moved to ../ERA/utilities.py later at some point?
             d = build_config_dict([Trainer.run, Trainer.telegram]) 
-            # print(f"{d = }") # GM: Doing some tests
             ut.dict2json(d,f'{folder}/config.json')
 
             # runs file (which will keep track of various runs performed in newly created folder)
@@ -1857,85 +1950,9 @@ if __name__ == '__main__':
     # schedule runs
     trainer.schedule(**arg_dict)
 
-    # o = input('Start training? (Y/[n]) ')
+    # o = input('Start training? (Y/[n]) ') # ask for confirmation
     # if o != 'Y':
     #     logger.error('Aborting')
     #     sys.exit(0)
     
     trainer.run_multiple()
-
-
-
-
-    ### THIS OLD CODE USES THE FUNCTION run instead of the Trainer object. Hence it is suited only for 1 run
-
-    # # load config file
-    # config_dict = ut.json2dict('config.json')
-    # config_dict_flat = ut.collapse_dict(config_dict) # GM: flatten the dictionary
-    # print(f'{config_dict = }')
-
-    
-    # # parse command line arguments
-    # cl_args = sys.argv[1:]
-    # i = 0
-    # arg_dict = {}
-    # while(i < len(cl_args)):
-    #     key = cl_args[i]
-    #     if '=' in key:
-    #         key, value = key.split('=')
-    #         i += 1
-    #     else:
-    #         value = cl_args[i+1]
-    #         i += 2
-    #     if key not in config_dict_flat:
-    #         raise KeyError(f'Unknown argument {key}')
-    #     # `value` is a string. Here we try to cast it to the correct type
-    #     if config_dict_flat[key] is not None:
-    #         try:
-    #             value = ast.literal_eval(value)
-    #         except:
-    #             print(f'Could not evaluate {value}. Keeping string type')
-    #     # now check if the provided value is equal to the default one
-    #     if value == config_dict_flat[key]:
-    #         print(f'Skipping given argument {key} as it is at its default value {value}')
-    #     else:
-    #         arg_dict[key] = value
-
-    # print("arg_dict = ", arg_dict)
-    # # get run number
-    # runs = ut.json2dict('runs.json')
-    # run_id = len(runs)
-    # print("run_id = ", run_id)
-    
-
-    # folder = f'{run_id}__'
-    # for k in sorted(arg_dict):
-    #     folder += f'{k}_{arg_dict[k]}__'
-    # folder = folder[:-2] # remove the last '__'
-    # print(f'{folder = }')
-    # runs[run_id] = {'name': folder, 'args': arg_dict}
-    
-    # print(f'{runs = }')
-    # # set the arguments provided into the nested dictionaries
-    # run_kwargs = ut.set_values_recursive(config_dict['run'], arg_dict) # GM: set the values of arg_dict to config_dict['run']
-    # print(f'{run_kwargs = }')
-
-    # runs[run_id]['status'] = 'RUNNING'
-    # runs[run_id]['start_time'] = ut.now()
-    # ut.dict2json(runs, 'runs.json')
-
-    # try:
-    #     run(folder, **run_kwargs)
-    # except Exception as e:
-    #     runs = ut.dict2json('runs.json')
-    #     runs[run_id]['status'] = 'FAILED'
-    #     runs[run_id]['end_time'] = ut.now()
-    #     ut.dict2json(runs,'runs.json')
-    #     raise RuntimeError('Run failed') from e
-    
-    # runs = ut.dict2json('runs.json')
-    # runs[run_id]['status'] = 'COMPLETED'
-    # runs[run_id]['end_time'] = ut.now()
-    # ut.dict2json(runs,'runs.json')
-
-    # print('\n\nrun completed!!!\n\n')

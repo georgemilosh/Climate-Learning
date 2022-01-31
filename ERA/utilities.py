@@ -18,7 +18,11 @@ from datetime import datetime
 import json
 import logging
 
-logger = logging.getLogger(__name__)
+if __name__ == '__main__':
+    logger = logging.getLogger()
+    logger.handlers = [logging.StreamHandler(sys.stdout)]
+else:
+    logger = logging.getLogger(__name__)
 logger.level = logging.INFO
 
 ######## time formatting ##########
@@ -538,6 +542,13 @@ def make_safe(path):
     -------
     str
         modified path
+
+    Examples
+    --------
+    >>> make_safe("tau 5")
+    'tau5'
+    >>> make_safe("label_field__'t2m'--tau__[0, 1, 2]")
+    'label_field__t2m--tau__(0,1,2)'
     '''
     path = path.replace(' ', '')
     path = path.replace('[', '(')
