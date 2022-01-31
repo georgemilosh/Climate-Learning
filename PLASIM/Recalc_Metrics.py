@@ -84,20 +84,35 @@ def compute_metrics(Y_test, Y_pred_prob, percent, u=1, assignment_threshold=None
     '''
     Y_pred_unbiased = ut.unbias_probabilities(Y_pred_prob, u=u)
     perc = percent/100.
-    if assignment_threshold is None:
-        label_assignment = np.argmax(Y_pred_unbiased, axis=1)
-    else:
-        label_assignment = np.array(Y_pred_unbiased[:,1] > assignment_threshold, dtype=int)
-    
     climatological_entropy = ut.entropy(perc) # this is the entropy associated with just knowing that the heatwaves cover `percent` of the data
 
     metrics = {}
+
+    # metrics that do not require a deterministic classification
+    metrics['true_frequency'] = np.sum(Y_test)/len(Y_test)
     
     metrics['entropy'] = np.mean(ut.entropy(1 - Y_test, Y_pred_unbiased[:,0]))
     metrics['norm_entropy_skill'] = 1 - metrics['entropy']/climatological_entropy # max value is 1, if = 0 your model didn't learn any conditional probabilities, if < 0 your model really sucks!
     metrics['brier_score'] = np.mean((Y_test - Y_pred_unbiased[:,1])**2)
 
-    metrics['MCC'] = ef.ComputeMCC(Y_test, label_assignment)[-1]
+    # metrics that do require a deterministic classification
+    if assignment_threshold is None:
+        metrics['assignment_threshold'] = 0.5
+        label_assignment = np.argmax(Y_pred_unbiased, axis=1)
+    else:
+        if assignment_threshold == 'auto':
+            p_sorted = np.sort(Y_pred_unbiased[:,1]) # sort the predicted probabilities of having a heatwave
+            assignment_threshold = p_sorted[-int(perc*len(p_sorted))] # choose the threshold such that `percent` of the events will be considered heatwaves
+
+        metrics['assignment_threshold'] = assignment_threshold
+        label_assignment = np.array(Y_pred_unbiased[:,1] > assignment_threshold, dtype=int)
+
+    TP, TN, FP, FN, MCC = ef.ComputeMCC(Y_test, label_assignment)
+    metrics['TP'] = TP
+    metrics['TN'] = TN
+    metrics['FP'] = FP
+    metrics['FN'] = FN
+    metrics['MCC'] = MCC
     metrics['frequency'] = np.sum(label_assignment)/len(Y_test)
 
     return metrics
@@ -136,7 +151,10 @@ def get_run_arguments(run_folder):
 
 
 class MetricComputer():
-    def __init__(self):
+    def __init__(self, assignment_threshold='auto', skip_already_computed=True):
+        self.assignment_threshold = assignment_threshold
+        self.skip_already_computed = skip_already_computed
+
         self.load_data_kwargs = None
         self.prepare_XY_kwargs = None
 
@@ -193,9 +211,12 @@ class MetricComputer():
         run_folder = run_folder.rstrip('/')
         if os.path.exists(f'{run_folder}/metrics.csv'):
             run_name = run_folder.rsplit('/',1)[-1]
-            logger.warning(f'Skipping {run_name}')
-            metrics = pd.read_csv(f'{run_folder}/metrics.csv', index_col=0)
-            return metrics
+            if self.skip_already_computed:
+                logger.warning(f'Skipping {run_name}')
+                metrics = pd.read_csv(f'{run_folder}/metrics.csv', index_col=0)
+                return metrics
+            else:
+                logger.warning(f'Recomputing metrics for {run_name}')
 
         run_config_dict = get_run_arguments(run_folder)
 
@@ -242,7 +263,7 @@ class MetricComputer():
             logger.debug(f'{Y_pred_prob[0] = }')
 
             # compute metrics
-            metrics[f'fold_{i}'] = compute_metrics(Y_va,Y_pred_prob, percent=percent, u=u)
+            metrics[f'fold_{i}'] = compute_metrics(Y_va,Y_pred_prob, percent=percent, u=u, assignment_threshold=self.assignment_threshold)
 
         # create a pandas dataframe
         metrics = pd.DataFrame(metrics).T # transpose so the rows are the folds and the columns are the metrics
@@ -284,7 +305,11 @@ if __name__ == '__main__':
 
     print(f'{arg_dict = }')
 
-    mc = MetricComputer()
+    mc_kwargs = ln.get_default_params(MetricComputer.__init__)
+    mc_kwargs = {k:v for k,v in arg_dict.items() if k in mc_kwargs}
+    for k in mc_kwargs:
+        arg_dict.pop(k)
+    mc = MetricComputer(**mc_kwargs)
 
     if os.path.exists(f'{folder}/runs.json'):
         logger.info('Calculating metrics for every run')

@@ -144,9 +144,9 @@ import ERA.ERA_Fields_New as ef # general routines
 import ERA.TF_Fields as tff # tensorflow routines
 import ERA.utilities as ut
 
-
-arg_sep = '--'   #GM: explain (probably used for names of created directories)
-value_sep = '__'
+# separators to create the run name from the run arguments
+arg_sep = '--' # separator between arguments
+value_sep = '__' # separator between an argument and its value
 
 ########## USAGE ###############################
 def usage(): 
