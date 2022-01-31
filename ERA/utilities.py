@@ -548,17 +548,21 @@ def make_safe(path):
 
 ### stuff useful for computing metrics ####
 
-def entropy(p, q=None):
+def entropy(p, q=None, epsilon=1e-15):
     '''
-    Returns `-p*log(q) - (1-p)*log(1-q)`
+    Returns `-p*log(max(q, epsilon)) - (1-p)*log(max(1-q, epsilon))`
 
     If q is None, q = p
     '''
+    epsilon = np.float64(epsilon)
+    if 1 - epsilon == 1:
+        raise ValueError('Too small epsilon')
+
     if q is None:
         q = p
-    return -p*np.log(q) - (1-p)*np.log(1-q)
+    return -p*np.log(np.maximum(q, epsilon)) - (1-p)*np.log(np.maximum(1-q, epsilon))
 
-def unbias_probabilities(Y_pred_prob, u=1, epsilon=1e-15):
+def unbias_probabilities(Y_pred_prob, u=1):
     '''
     Removes the bias in probabilities due to undersampling
 
@@ -585,19 +589,13 @@ def unbias_probabilities(Y_pred_prob, u=1, epsilon=1e-15):
     ValueError
         If u < 1
     '''
-    epsilon = np.float64(epsilon)
-    if 1 - epsilon == 1:
-        raise ValueError('Too small epsilon')
 
     if u == 1:
         return Y_pred_prob
     elif u < 1:
-        raise ValueError('r must be >= 1')
+        raise ValueError('u must be >= 1')
     Y_unb = np.zeros_like(Y_pred_prob, dtype=np.float64)
     Y_unb[:,0] = u*Y_pred_prob[:,0]/(1 - (1 - u)*Y_pred_prob[:,0])
     Y_unb[:,1] = 1 - Y_unb[:,0]
-
-    # removes zeros and ones as they mess with the logarithm
-    Y_unb = np.clip(Y_unb, epsilon, 1 - epsilon)
 
     return Y_unb
