@@ -1172,7 +1172,7 @@ def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='m
         Whether the optimal checkpoint should be the same for all folds (True) or the best for each fold
     bypass : np.ndarray, optional
         If provided the function immediately returns `bypass`
-
+        (See Trainer._run for practical use)
     Returns
     -------
     if collective:
@@ -1232,6 +1232,7 @@ def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='m
 @ut.indent_logger(logger)
 def k_fold_cross_val(folder, X, Y, create_model_kwargs, train_model_kwargs, optimal_checkpoint_kwargs, load_from='last', nfolds=10, val_folds=1, u=1,
                      fullmetrics=True, training_epochs=40, training_epochs_tl=10, lr=1e-4):
+    # GM: explain train_model_kwargs more
     '''
     Performs k fold cross validation on a model architecture.
 
@@ -1247,7 +1248,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, train_model_kwargs, opti
         dictionary with the parameters to create a model
     train_model_kwargs : dict
         dictionary with the parameters to train a model
-        The follwing special arguments will override other parameters of this function:
+        The following special arguments will override other parameters of this function:
             num_epochs: overrides `training_epochs` and `training_epochs_tl`
             optimizer: overrides `lr`
             loss: overrides the default SparseCrossEntropyLoss
@@ -1366,8 +1367,8 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, train_model_kwargs, opti
             if fullmetrics:
                 metrics=[
                     'accuracy',
-                    tff.MCCMetric(2, undersampling_factor=u),
-                    tff.ConfusionMatrixMetric(2, undersampling_factor=u),
+                    tff.MCCMetric(2, undersampling_factor=u),  # GM: Freddy says 1, try both but if it is too slow not worth it
+                    tff.ConfusionMatrixMetric(2, undersampling_factor=u), # GM: Freddy says 1
                     tff.BrierScoreMetric(undersampling_factor=u),
                     tff.CustomLoss(tf_sampling)
                 ]# the last two make the code run longer but give precise discrete prediction benchmarks
@@ -1592,7 +1593,7 @@ class Trainer():
 
         new_iterate_over = []
         # arguments for loading fields
-        to_add = []
+        to_add = [] # GM: The idea here is to arrange the arguments in order that it is the most efficient (e.g. loading the fields is heavy)
         for k in iterate_over:
             if k in self.default_run_kwargs['load_data_kwargs']:
                 to_add.append(k)
@@ -1620,11 +1621,11 @@ class Trainer():
 
         self.scheduled_kwargs = [{**non_iterative_kwargs, **{k: l[i] for i,k in enumerate(iterate_over)}} for l in iteration_values]
 
-        if first_from_scratch:
+        if first_from_scratch: # GM: fix the block (move below)
             self.scheduled_kwargs[0]['load_from'] = None
             logger.warning('Forcing the first run to be loaded from scratch')
 
-        if len(self.scheduled_kwargs) == 0:
+        if len(self.scheduled_kwargs) == 0: # GM: this is fix to avoid empty scheduled_kwargs if it happens there are no iterative kwargs
             self.scheduled_kwargs = [non_iterative_kwargs]
             if len(non_iterative_kwargs) == 0:
                 logger.info('Scheduling 1 run at default values')
@@ -1736,7 +1737,7 @@ class Trainer():
             tl_from = {'run': load_from, 'optimal_checkpoint': opt_checkpoint}
 
             # avoid computing the optimal checkpoint again inside k_fold_cross_val
-            run_kwargs = ut.set_values_recursive(run_kwargs, {'load_from': load_from, 'bypass': opt_checkpoint})
+            run_kwargs = ut.set_values_recursive(run_kwargs, {'load_from': load_from, 'bypass': opt_checkpoint}) # when optimal_checkpoint function will be called inside k_fold_cross_val it will take this value
 
             # force the dataset to the same year permutation
             year_permutation = list(np.load(f'{load_from}/year_permutation.npy', allow_pickle=True))
