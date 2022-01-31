@@ -145,7 +145,7 @@ import ERA.TF_Fields as tff # tensorflow routines
 import ERA.utilities as ut
 
 
-arg_sep = '--'
+arg_sep = '--'   #GM: explain (probably used for names of created directories)
 value_sep = '__'
 
 ########## USAGE ###############################
@@ -331,7 +331,7 @@ def select_compatible(run_args, conditions, require_unique=True, path_to_config=
     KeyError
         If require_unique and either none or more than one run are found compatible.
 
-    Examples
+    Examples   
     --------
     >>> run_args = {'1': {'tau': -5}, '2': {'percent': 1, 'tau': 0}, '3': {'percent': 1, 'tau': -5}}
     >>> select_compatible(run_args, {'tau': 0})
@@ -341,6 +341,7 @@ def select_compatible(run_args, conditions, require_unique=True, path_to_config=
     >>> select_compatible(run_args, {'percent': 1}, require_unique=False)
     ['2', '3']
     '''
+    #GM: Shouldn't {'tau': 0} be a default parameter and thus not require specification?
     _run_args = deepcopy(run_args)
     if path_to_config is not None:
         path_to_config.rstrip('/')
@@ -567,6 +568,7 @@ for h in [200,300,500,850]: # geopotential heights
 
 @ut.execution_time  # GM: I guess the point is to measure elapsed time but the way this works is not transparent to me yet
 @ut.indent_logger(logger)   # GM: same, I guess the idea is to ensure something about print statements
+# GM: perhaps 'mask' is a better title, rather than filter, but given many functions already carry this name it is too late
 def load_data(dataset_years=1000, year_list=None, sampling='', Model='Plasim', area='France', filter_area='France',
               lon_start=0, lon_end=128, lat_start=0, lat_end=22, mylocal='/local/gmiloshe/PLASIM/',fields=['t2m','zg500','mrso_filtered']):
     '''
@@ -584,8 +586,8 @@ def load_data(dataset_years=1000, year_list=None, sampling='', Model='Plasim', a
         'Plasim', 'CESM', ... For now only Plasim is implemented
     area : str, optional
         region of interest, e.g. 'France'
-    filter_area : str, optionla
-        area over which to keep filtered fields, ususlly the same of `area`
+    filter_area : str, optional
+        area over which to keep filtered fields, usually the same of `area`
     lon_start, lon_end, lat_start, lat_end : int
         longitude and latitude extremes of the data expressed in indices (model specific)
     mylocal : str or Path, optional
@@ -996,7 +998,7 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     Y_va : np.ndarray
         validation labels
     folder : str or Path
-        loaction where to save the checkpoints of the model
+        location where to save the checkpoints of the model
     num_epochs : int
         number of maximum epochs for the training
     optimizer : keras.Optimizer object
