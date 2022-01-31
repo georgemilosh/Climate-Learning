@@ -1335,8 +1335,9 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, train_model_kwargs, opti
             if fullmetrics:
                 metrics=[
                     'accuracy',
-                    tff.MCCMetric(2),
-                    tff.ConfusionMatrixMetric(2),
+                    tff.MCCMetric(2, undersampling_factor=u),
+                    tff.ConfusionMatrixMetric(2, undersampling_factor=u),
+                    tff.BrierScoreMetric(undersampling_factor=u),
                     tff.CustomLoss(tf_sampling)
                 ]# the last two make the code run longer but give precise discrete prediction benchmarks
             else:
@@ -1709,7 +1710,6 @@ class Trainer():
             year_permutation = list(np.load(f'{load_from}/year_permutation.npy', allow_pickle=True))
             run_kwargs = ut.set_values_recursive(run_kwargs, {'year_permutation': year_permutation})
 
-            # TODO: warn the user about arguments that will be ignored
             overridden_kwargs = ['do_premix', 'premix_seed', 'do_balance_folds']
             ignored_kwargs = [k for k in kwargs if k in overridden_kwargs]
             if len(ignored_kwargs) > 0:
