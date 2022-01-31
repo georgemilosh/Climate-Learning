@@ -74,8 +74,9 @@ def compute_metrics(Y_test, Y_pred_prob, percent, u=1, assignment_threshold=None
         Percentage associated to how rare the events are
     u : float >= 1, optional
         undersampling factor, used to unbias the probabilities, by default 1
-    assignment_threshold : float in [0,1], optional
+    assignment_threshold : float in [0,1] or 'auto', optional
         If provided events are considered heatwaaves if their probability is higher than `assignment_threshold`, by default None
+        If 'auto' it is computed such that the amount of heatwaves is `percent`
 
     Returns
     -------
@@ -151,9 +152,11 @@ def get_run_arguments(run_folder):
 
 
 class MetricComputer():
-    def __init__(self, assignment_threshold='auto', skip_already_computed=True):
+    def __init__(self, assignment_threshold='auto', skip_already_computed=True, save_Y=True, load_Y_if_found=True):
         self.assignment_threshold = assignment_threshold
         self.skip_already_computed = skip_already_computed
+        self.save_Y = save_Y
+        self.load_Y_if_found = load_Y_if_found
 
         self.load_data_kwargs = None
         self.prepare_XY_kwargs = None
@@ -218,9 +221,14 @@ class MetricComputer():
             else:
                 logger.warning(f'Recomputing metrics for {run_name}')
 
+        recompute = True
+        if self.load_Y_if_found and os.path.exists(f'{run_folder}/fold_0/Y_va.npy'):
+            recompute = False
+
         run_config_dict = get_run_arguments(run_folder)
 
-        self.prepare_data(run_folder, run_config_dict=run_config_dict) # computes self.X, self.Y
+        if recompute:
+            self.prepare_data(run_folder, run_config_dict=run_config_dict) # computes self.X, self.Y
 
         nfolds = ut.extract_nested(run_config_dict, 'nfolds')
         val_folds = ut.extract_nested(run_config_dict, 'val_folds')
@@ -244,26 +252,38 @@ class MetricComputer():
             logger.log(35, f'fold_{i} ({i+1}/{nfolds})')
             logger.info('========')
             fold_folder = f'{run_folder}/fold_{i}'
-            # get the validation set
-            X_tr, Y_tr, X_va, Y_va = ln.k_fold_cross_val_split(i, self.X, self.Y, nfolds=nfolds, val_folds=val_folds)
 
-            # normalize data
-            X_mean = np.load(f'{fold_folder}/X_mean.npy')
-            X_std = np.load(f'{fold_folder}/X_std.npy')
-            X_va = (X_va - X_mean)/X_std
+            if recompute:
+                # get the validation set
+                X_tr, Y_tr, X_va, Y_va = ln.k_fold_cross_val_split(i, self.X, self.Y, nfolds=nfolds, val_folds=val_folds)
 
-            # load the model
-            model = keras.models.load_model(f'{fold_folder}', compile=False)
-            model.load_weights(f'{fold_folder}/cp-{opt_checkpoint[i]:04d}.ckpt')
+                # normalize data
+                X_mean = np.load(f'{fold_folder}/X_mean.npy')
+                X_std = np.load(f'{fold_folder}/X_std.npy')
+                X_va = (X_va - X_mean)/X_std
 
-            # get predicted labels
-            Y_pred = model.predict(X_va) # now these are logits, so we apply a softmax layer
-            logger.debug(f'{Y_pred[0] = }')
-            Y_pred_prob = keras.layers.Softmax()(Y_pred) # these are the probabilities
-            logger.debug(f'{Y_pred_prob[0] = }')
+                # load the model
+                model = keras.models.load_model(f'{fold_folder}', compile=False)
+                model.load_weights(f'{fold_folder}/cp-{opt_checkpoint[i]:04d}.ckpt')
+
+                # get predicted labels
+                Y_pred = model.predict(X_va) # now these are logits, so we apply a softmax layer
+                logger.debug(f'{Y_pred[0] = }')
+                Y_pred_prob = keras.layers.Softmax()(Y_pred) # these are the probabilities
+                logger.debug(f'{Y_pred_prob[0] = }')
+
+                Y_pred_unbiased = ut.unbias_probabilities(Y_pred_prob,u=u)
+
+                if self.save_Y:
+                    np.save(f'{fold_folder}/Y_va.npy', Y_va, allow_pickle=True)
+                    np.save(f'{fold_folder}/Y_pred_unbiased.npy', Y_pred_prob, allow_pickle=True)
+
+            else:
+                Y_va = np.load(f'{fold_folder}/Y_va.npy',allow_pickle=True)
+                Y_pred_unbiased = np.load(f'{fold_folder}/Y_pred_unbiased.npy',allow_pickle=True)
 
             # compute metrics
-            metrics[f'fold_{i}'] = compute_metrics(Y_va,Y_pred_prob, percent=percent, u=u, assignment_threshold=self.assignment_threshold)
+            metrics[f'fold_{i}'] = compute_metrics(Y_va,Y_pred_unbiased, percent=percent, u=1, assignment_threshold=self.assignment_threshold)
 
         # create a pandas dataframe
         metrics = pd.DataFrame(metrics).T # transpose so the rows are the folds and the columns are the metrics
