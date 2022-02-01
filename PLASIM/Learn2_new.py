@@ -524,6 +524,12 @@ def move_to_folder(folder):
 
     # copy other files in the same directory as this one
     path_to_here = path_to_here.parent
+    shutil.copy(path_to_here / 'import_config.py', folder)
+    # copy additional files
+    # History.py
+    # Metrics.py
+    # Recalc_Tau_Metrics.py
+    # Recalc_History.py
 
     # copy useful files from ../ERA/ to folder/ERA/
     path_to_here = path_to_here.parent / 'ERA'
@@ -532,12 +538,6 @@ def move_to_folder(folder):
     shutil.copy(path_to_here / 'TF_Fields.py', ERA_folder)
     shutil.copy(path_to_here / 'utilities.py', ERA_folder)
 
-    # copy additional files
-    # History.py
-    # Metrics.py
-    # Recalc_Tau_Metrics.py
-    # Recalc_History.py
-    
     print(f'Now you can go to {folder} and run the learning from there:\n')
     print(f'cd \"{folder}\"\n')
     
