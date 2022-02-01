@@ -340,7 +340,7 @@ class UnbiasedCrossentropyLoss(keras.losses.SparseCategoricalCrossentropy):
         super().__init__(from_logits=True, name=name)
         self.r = tf.cast([0.5*np.log(undersampling_factor), -0.5*np.log(undersampling_factor)], tf.float32)
 
-    def __call__(self, y_true, y_pred):
+    def __call__(self, y_true, y_pred, sample_weight=None):
         return super().__call__(y_true, y_pred + self.r)
 
 class MyMetrics_layer(tf.keras.metrics.Metric):

@@ -1413,8 +1413,10 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, train_model_kwargs, opti
 
         # train the model
         train_model(model, X_tr, Y_tr, X_va, Y_va, # arguments that are always computed inside this function
-                    folder=fold_folder, num_epochs=num_epochs, optimizer=optimizer, loss=loss, metrics=metrics, # arguments that may come from train_model_kwargs for advanced uses but usually are computed here
+                    folder=fold_folder, num_epochs=num_epochs, optimizer=optimizer, loss=loss_fn, metrics=metrics, # arguments that may come from train_model_kwargs for advanced uses but usually are computed here
                     **train_model_kwargs) # arguments which have a default value in the definition of `train_model` and thus appear in the config file
+
+        # TODO: compute metrics here where it we have easy access to model and data
 
         my_memory.append(psutil.virtual_memory())
         logger.info(f'RAM memory: {my_memory[i][3]:.3e}') # Getting % usage of virtual_memory ( 3rd field)

@@ -15,11 +15,12 @@ from Learn2_new import ut
 
 if len(sys.argv) < 2:
     print(__doc__)
+    sys.exit(0)
 
 if not os.path.exists('./config.json'):
     raise FileNotFoundError('There is no config file in this directory')
 
-if not os.acces('./config.json', os.W_OK):
+if not os.access('./config.json', os.W_OK):
     raise ValueError('config is not writeable!')
 
 config = ut.json2dict('./config.json')
