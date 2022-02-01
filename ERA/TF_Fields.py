@@ -193,22 +193,22 @@ class UnbiasedMetric(keras.metrics.Metric):
 
     
 class MCCMetric(UnbiasedMetric): # This function is designed to produce confusion matrix during training each epoch
-    def __init__(self, num_classes, threshold=None, undersampling_factor=1, **kwargs):
+    def __init__(self, num_classes=2, threshold=None, undersampling_factor=1, name='MCC', **kwargs):
         '''
         Mathews correlation coefficient metric
 
         Parameters
         ----------
-        num_classes : int
-            number of classes
+        num_classes : int, optional
+            number of classes, by default 2
         threshold : float, optional
             If num_classes == 2 allows to choose a threshold over which to consider an event positive. If None the event is positive if it has probability higher than 0.5. By default None
         '''
-        super().__init__(name='MCC',undersampling_factor=undersampling_factor, **kwargs) # handles base args (e.g., dtype)
+        super().__init__(name=name, undersampling_factor=undersampling_factor, **kwargs) # handles base args (e.g., dtype)
         self.num_classes=num_classes
         self.threshold = threshold
-        if self.num_classes > 2:
-            self.threshold = None
+        if self.num_classes != 2:
+            raise NotImplementedError('MCC works only with 2 classes')
         self.total_cm = self.add_weight("total", shape=(num_classes,num_classes), initializer="zeros")
     
     def reset_states(self):
@@ -250,8 +250,8 @@ class ConfusionMatrixMetric(UnbiasedMetric): # This function is designed to prod
     """
     A custom Keras metric to compute the running average of the confusion matrix
     """
-    def __init__(self, num_classes, undersampling_factor=1, **kwargs):
-        super().__init__(name='confusion_matrix', undersampling_factor=undersampling_factor, **kwargs) # handles base args (e.g., dtype)
+    def __init__(self, num_classes, undersampling_factor=1, name='confusion_matrix', **kwargs):
+        super().__init__(name=name, undersampling_factor=undersampling_factor, **kwargs) # handles base args (e.g., dtype)
         self.num_classes=num_classes
         self.total_cm = self.add_weight("total", shape=(num_classes,num_classes), initializer="zeros")
         
@@ -280,8 +280,8 @@ class ConfusionMatrixMetric(UnbiasedMetric): # This function is designed to prod
         results=self.result()
 
 class BrierScoreMetric(UnbiasedMetric):
-    def __init__(self, undersampling_factor=1, **kwargs):
-        super().__init__(name='BrierScore', undersampling_factor=undersampling_factor, **kwargs)
+    def __init__(self, undersampling_factor=1, name='BrierScore', **kwargs):
+        super().__init__(name=name, undersampling_factor=undersampling_factor, **kwargs)
         self.mse = keras.metrics.MeanSquaredError()
         self.my_metric = self.add_weight(name='BScore', initializer='zeros')
 
@@ -292,10 +292,10 @@ class BrierScoreMetric(UnbiasedMetric):
     def result(self):
         return self.my_metric
 
-class UnbiasedCrossEntropyLoss(UnbiasedMetric):
+class UnbiasedCrossentropyMetric(UnbiasedMetric):
 
-  def __init__(self, undersampling_factor=1, **kwargs):
-    super().__init__(name='UnbiasedCrossEntropyLoss', undersampling_factor=undersampling_factor, **kwargs)
+  def __init__(self, undersampling_factor=1, name='UnbiasedCrossentropy', **kwargs):
+    super().__init__(name=name, undersampling_factor=undersampling_factor, **kwargs)
     self.my_metric = self.add_weight(name='CLoss', initializer='zeros')
     self.m = tf.keras.metrics.SparseCategoricalCrossentropy(from_logits=True)
 
@@ -311,8 +311,8 @@ class UnbiasedCrossEntropyLoss(UnbiasedMetric):
 # same as above but less elegant
 class CustomLoss(tf.keras.metrics.Metric):
 
-  def __init__(self, r, **kwargs):
-    super().__init__(name='CustomLoss', **kwargs)
+  def __init__(self, r, name='CustomLoss', **kwargs):
+    super().__init__(name=name, **kwargs)
     self.my_metric = self.add_weight(name='CLoss', initializer='zeros')
     self.r = r # undersampling_factor array (we expect the input as tf.cast(-0.5*np.log(undersampling_factor), 0.5*np.log(undersampling_factor))
     self.m = tf.keras.metrics.SparseCategoricalCrossentropy(from_logits=True)
@@ -331,6 +331,17 @@ class CustomLoss(tf.keras.metrics.Metric):
     # The state of the metric will be reset at the start of each epoch.
     self.my_metric.assign(0.) 
   """
+
+class UnbiasedCrossentropyLoss(keras.losses.SparseCategoricalCrossentropy):
+    '''
+    This is the same as the UnbiasedCrossentropyMetric but can be used as a loss
+    '''
+    def __init__(self, undersampling_factor=1, name='unbiased_crossentropy_loss'):
+        super().__init__(from_logits=True, name=name)
+        self.r = tf.cast([0.5*np.log(undersampling_factor), -0.5*np.log(undersampling_factor)], tf.float32)
+
+    def __call__(self, y_true, y_pred):
+        return super().__call__(y_true, y_pred + self.r)
 
 class MyMetrics_layer(tf.keras.metrics.Metric):
 

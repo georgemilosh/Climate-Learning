@@ -1240,7 +1240,7 @@ def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='m
 @ut.execution_time
 @ut.indent_logger(logger)
 def k_fold_cross_val(folder, X, Y, create_model_kwargs, train_model_kwargs, optimal_checkpoint_kwargs, load_from='last', nfolds=10, val_folds=1, u=1,
-                     fullmetrics=True, training_epochs=40, training_epochs_tl=10, lr=1e-4):
+                     fullmetrics=True, training_epochs=40, training_epochs_tl=10, loss='sparse_categorical_crossentropy', lr=1e-4):
     '''
     Performs k fold cross validation on a model architecture.
 
@@ -1265,7 +1265,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, train_model_kwargs, opti
             optimizer : keras.optimizers.Optimizer
                 optimizer object, `lr` is ignored
             loss : keras.metrics.Metric
-                overrides the default SparseCrossEntropyLoss
+                overrides the `loss`
             metrics : list of metrics objects
                 overrides `fullmetrics`
     optimal_chekpoint_kwargs : dict
@@ -1285,6 +1285,10 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, train_model_kwargs, opti
         number of training epochs when creating a model from scratch
     training_epochs_tl : int, optional 
         numer of training epochs when using transfer learning
+    loss : str, optional
+        loss function to minimize, by default 'sparse_categorical_crossentropy'
+        another possibility is 'unbiased_crossentropy',
+        which will unbias the logits with the undersampling factor and then proceeds with the sparse_categorical_crossentropy
     lr : float, optional
         learning_rate for Adam optimizer       
     '''
@@ -1386,16 +1390,26 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, train_model_kwargs, opti
             if fullmetrics:
                 metrics=[
                     'accuracy',
-                    tff.MCCMetric(2, undersampling_factor=u),  # GM: Freddy says 1, try both but if it is too slow not worth it
+                    tff.MCCMetric(undersampling_factor=1),  # GM: Freddy says 1, try both but if it is too slow not worth it
+                    tff.MCCMetric(undersampling_factor=u, name='UnbiasedMCC'),
                     tff.ConfusionMatrixMetric(2, undersampling_factor=u), # GM: Freddy says 1
                     tff.BrierScoreMetric(undersampling_factor=u),
                     tff.CustomLoss(tf_sampling)
                 ]# the last two make the code run longer but give precise discrete prediction benchmarks
             else:
                 metrics=['loss']
-        # optimizer and loss
+
+        # optimizer
         optimizer = train_model_kwargs.pop('optimizer',keras.optimizers.Adam(learning_rate=lr)) # if optimizer is not provided in train_model_kwargs use Adam
-        loss = train_model_kwargs.pop('loss',keras.losses.SparseCategoricalCrossentropy(from_logits=True)) # same as above
+        # loss function
+        loss_fn = train_model_kwargs.pop('loss',None)
+        if loss_fn is None:
+            if loss.startswith('unbiased'):
+                loss_fn = tff.UnbiasedCrossentropyLoss(undersampling_factor=u)
+            else:
+                loss_fn = keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+        logger.info(f'Using {loss_fn.name} loss')
+
 
         # train the model
         train_model(model, X_tr, Y_tr, X_va, Y_va, # arguments that are always computed inside this function
