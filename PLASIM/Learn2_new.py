@@ -160,7 +160,9 @@ def usage():
     '''
     return this_module.__doc__
 
-#### CONFIG FILE #####
+#######################################
+#### CONFIG FILE RELATED ROUTINES #####
+#######################################
 
 def get_default_params(func, recursive=False):
     '''
@@ -481,7 +483,7 @@ def get_run(load_from, current_run_name=None):
     runs = {k: v for k,v in runs.items() if check_compatibility(v['name'], current_run_name, relevant_keys=relevant_keys)}
 
     if len(runs) == 0:
-        logger.warning('No valid runs to load from')
+        logger.warning('No valid runs to load from') #GM: give a precise warning, i.e. to load from previous weights? Also it would be nice if the warning specifies the function that reports them
         return None
 
     if isinstance(load_from, int):
@@ -986,8 +988,10 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
 
     return model
 
-
+########################################
 ###### TRAINING THE NETWORK ############
+########################################
+
 def early_stopping(monitor='val_CustomLoss', min_delta=0, patience=0, mode='auto'):
     '''
     Creates an early stopping callback
@@ -1436,8 +1440,10 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, train_model_kwargs, opti
         
     np.save(f'{folder}/RAM_stats.npy', my_memory)
 
-
+##################################################
 ########## PUTTING THE PIECES TOGETHER ###########
+##################################################
+
 @ut.execution_time
 @ut.indent_logger(logger)
 def prepare_XY(fields, make_XY_kwargs, roll_X_kwargs,
@@ -1573,8 +1579,9 @@ def run(folder, prepare_data_kwargs, k_fold_cross_val_kwargs, log_level=logging.
     trainer = Trainer()
     trainer.run(folder,load_data_kwargs, prepare_XY_kwargs, k_fold_cross_val_kwargs, log_level=log_level)
 
-
+####################################################
 ###### EFFICIENT MANAGEMENT OF MULTIPLE RUNS #######
+####################################################
 
 class Trainer():
     '''
