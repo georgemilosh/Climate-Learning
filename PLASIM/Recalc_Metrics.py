@@ -288,6 +288,9 @@ class MetricComputer():
         # create a pandas dataframe
         metrics = pd.DataFrame(metrics).T # transpose so the rows are the folds and the columns are the metrics
 
+        # add column with the optimal chekcpoint
+        metrics.insert(0, 'training_epochs', opt_checkpoint)
+
         # compute mean and std
         metrics.loc['mean'] = metrics.mean()
         metrics.loc['std'] = metrics.std()
