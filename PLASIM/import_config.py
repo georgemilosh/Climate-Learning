@@ -6,7 +6,7 @@ Usage:
 
 If the two config files have different arguments it is not a problem since the importation will affect only the arguments in common between the two.
 '''
-
+# GM: perhaps it would be nice to explain reasons for why this might be necessary
 import sys
 import os
 from pathlib import Path
