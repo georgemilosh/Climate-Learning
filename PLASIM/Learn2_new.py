@@ -589,8 +589,11 @@ def load_data(dataset_years=1000, year_list=None, sampling='', Model='Plasim', a
     ----------
     dataset_years : int, optional
         number of years of the dataset, for now 8000 or 1000.
-    year_list : list or None, optional
+    year_list : array-like or str or int or tuple or None, optional
         list of years to load from the dataset. If None all years are loaded
+        if str must be in the format 'range([<start>],<end>,[<step>])', where square brackets mean the argument is optional. It will be interpreted as np.range([<start>],<end>,[<step>])
+        if tuple must be in format ([<start>],<end>,[<step>])
+        if int is just like providing only <end>
     sampling : str, optional
         '' (dayly) or '3hrs'
     Model : str, optional
@@ -621,8 +624,18 @@ def load_data(dataset_years=1000, year_list=None, sampling='', Model='Plasim', a
         dataset_suffix = '_LONG'
     else:
         raise ValueError(f'Invalid number of {dataset_years = }')
-   
 
+    if isinstance(year_list, str):
+        if '(' not in year_list or ')' not in year_list:
+            raise ValueError(f'Unable to parse {year_list = }')
+        year_list = f"({year_list.split('(',1)[1].split(')',1)[0]})" # get just the arguments
+        year_list = ast.literal_eval(year_list) # now year_list is int or tuple
+
+    if isinstance(year_list,int):
+        year_list = np.arange(year_list)
+    elif isinstance(year_list, tuple):
+        year_list = np.arange(*year_list) # unpack the arguments of the tuple
+    
     mask, cell_area, lsm = ef.ExtractAreaWithMask(mylocal,Model,area) # extract land-sea mask and multiply it by cell area
 
     if sampling == '3hrs': 
