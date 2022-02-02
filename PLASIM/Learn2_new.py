@@ -580,7 +580,7 @@ for h in [200,300,500,850]: # geopotential heights
 @ut.execution_time  # prints the time it takes for the function t run
 @ut.indent_logger(logger)   # indents the log messages produced by this function
 # GM: perhaps 'mask' is a better title, rather than filter, but given many functions already carry this name it is too late
-def load_data(dataset_years=1000, year_list=None, sampling='', Model='Plasim', area='France', filter_area='France',
+def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', area='France', filter_area='France',
               lon_start=0, lon_end=128, lat_start=0, lat_end=22, mylocal='/local/gmiloshe/PLASIM/',fields=['t2m','zg500','mrso_filtered']):
     '''
     Loads the data into Plasim_Fields objects
