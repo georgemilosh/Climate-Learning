@@ -37,16 +37,16 @@ will perform three runs with tau=1, tau=2, tau=3.
 
 
 Beware that you need to enclose the list inside a string or the terminal will complain. If you are passing a list of strings, use double apices, i.e.
-    python Learn2.py area="['France', 'Scandinavia']"
+    python Learn2_new.py area="['France', 'Scandinavia']"
 
 
 If by default an argument is already a list, the provided list is not interpreted as something to be iterated over, for example the argument `fields` has default value ['t2m','zg500','mrso_filtered']. So running
-    python Learn2.py fields="['t2m', 'zg500']"
+    python Learn2_new.py fields="['t2m', 'zg500']"
 
 will result in a single run performed with fields=['t2m', 'zg500']
 
 If you provide more than one argument to iterate over, all combinations will be performed, e.g.:
-    python Learn2.py fields="[['t2m'], ['t2m', 'zg500']]" tau='[1,2]'
+    python Learn2_new.py fields="[['t2m'], ['t2m', 'zg500']]" tau='[1,2]'
 
 will result in 4 runs:
     fields=['t2m'], tau=1
@@ -83,6 +83,11 @@ level   name                events
 
 50      logging.CRITICAL    The program stops due to an error
 '''
+# GM: specify the sign of tau and what it means
+
+# GM: Why is the default to look for Data_Plasim rather than Data_Plasim_LONG?
+#        FileNotFoundError: [Errno 2] No such file or directory: b'/local/gmiloshe/PLASIM/Data_Plasim/ANO_tas.nc'
+# GM: What if I want to work with 1000 years that are a subset of 8000 years of Plasim_LONG?
 
 ### IMPORT LIBRARIES #####
 
@@ -257,7 +262,9 @@ def check_config_dict(config_dict):
         raise KeyError('Invalid config dictionary') from e
     return config_dict_flat
 
+####################################
 ### OPERATIONS WITH RUN METADATA ###
+####################################
 
 def parse_run_name(run_name):
     '''
@@ -505,7 +512,9 @@ def get_run(load_from, current_run_name=None):
     
     return run_name
 
+######################################
 ########## COPY SOURCE FILES #########
+######################################
 
 def move_to_folder(folder):
     '''
@@ -542,8 +551,9 @@ def move_to_folder(folder):
     print(f'cd \"{folder}\"\n')
     
     
-
+############################################
 ########## DATA PREPROCESSING ##############
+############################################
 
 fields_infos = {
     't2m': { # temperature
@@ -586,7 +596,7 @@ def load_data(dataset_years=1000, year_list=None, sampling='', Model='Plasim', a
     area : str, optional
         region of interest, e.g. 'France'
     filter_area : str, optional
-        area over which to keep filtered fields, usually the same of `area`
+        area over which to keep filtered fields, usually the same of `area`. `filter` implies a mask
     lon_start, lon_end, lat_start, lat_end : int
         longitude and latitude extremes of the data expressed in indices (model specific)
     mylocal : str or Path, optional
