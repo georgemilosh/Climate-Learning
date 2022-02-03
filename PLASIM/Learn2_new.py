@@ -914,8 +914,9 @@ def balance_folds(weights, nfolds=10, verbose=False):
 
     return permutation
 
-
+################################################
 ########## NEURAL NETWORK DEFINITION ###########
+################################################
 
 def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=1,
                  batch_normalizations=True, conv_activations='relu', conv_dropouts=0.2, max_pool_sizes=[2,2,False],
