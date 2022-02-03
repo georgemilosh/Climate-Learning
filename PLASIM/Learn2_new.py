@@ -18,6 +18,9 @@ This will copy this code and its dependencies to your desired location and will 
 
 The config file will store the default values for the arguments of the functions.
 
+If you want to import config parameters from another config file (for example another folder with a previous version of this code), you can do it by running
+    python import_config.py <path_to_config_from_which_to_import>
+
 When running the code you can specify some parameters to deviate from their default value, for example running
     python Learn2_new.py tau=5
 
@@ -54,6 +57,9 @@ will result in 4 runs:
     fields=['t2m', 'zg500'], tau=1
     fields=['t2m', 'zg500'], tau=2
 
+A note on parameter tau:
+    It is the delay between the prediction and the observation, and is usually supposed to be negative (prediction before observation)
+
 
 Logging levels:
 level   name                events
@@ -83,11 +89,11 @@ level   name                events
 
 50      logging.CRITICAL    The program stops due to an error
 '''
-# GM: specify the sign of tau and what it means
-
-# GM: Why is the default to look for Data_Plasim rather than Data_Plasim_LONG?
-#        FileNotFoundError: [Errno 2] No such file or directory: b'/local/gmiloshe/PLASIM/Data_Plasim/ANO_tas.nc'
-# GM: What if I want to work with 1000 years that are a subset of 8000 years of Plasim_LONG?
+# GM: What if I want to work with 1000 years that are a subset of 8000 years of Plasim_LONG? 
+#   AL: You can do it by running with `dataset_years = 8000` and `year_list = 'range(1000)'`, which will use the first 1000 years of the 8000 year dataset
+#       you can also provide `year_list = 'range(1000,3000,2)'` which will take the even years between 1000 and 3000
+#   AL: If you want to have kfold validation where the validation dataset is bigger than the training one you can do it as well by providing the argument val_folds.
+#       For example `nfolds = 10, val_folds = 9` will use 90% of the data for testing and 10% for training
 
 ### IMPORT LIBRARIES #####
 
@@ -483,7 +489,9 @@ def get_run(load_from, current_run_name=None):
     runs = {k: v for k,v in runs.items() if check_compatibility(v['name'], current_run_name, relevant_keys=relevant_keys)}
 
     if len(runs) == 0:
-        logger.warning('No valid runs to load from') #GM: give a precise warning, i.e. to load from previous weights? Also it would be nice if the warning specifies the function that reports them
+        logger.warning('None of the previous runs is compatible with this one for performing transfer learning')
+        # GM: It would be nice if the warning specifies the function that reports them.
+        # AL: This can be achieved in formatting the logger
         return None
 
     if isinstance(load_from, int):
@@ -717,7 +725,7 @@ def make_X(fields, time_start=30, time_end=120, T=14, tau=0):
     T : int, optional
         width of the window for the running average
     tau : int, optional
-        delay between observation and prediction
+        delay between observation and prediction (meaningful when negative)
 
     Returns
     -------
