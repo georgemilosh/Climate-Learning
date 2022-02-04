@@ -3,7 +3,7 @@
 
 # @author: Alessandro Lovo
 # '''
-
+# GM: It would be a good idea for log.log to specify which parameters were used to run this run (just when the run starts)
 '''
 Module for training a Convolutional Neural Network on climate data.
 
@@ -94,7 +94,7 @@ level   name                events
 #       you can also provide `year_list = 'range(1000,3000,2)'` which will take the even years between 1000 and 3000
 #   AL: If you want to have kfold validation where the validation dataset is bigger than the training one you can do it as well by providing the argument val_folds.
 #       For example `nfolds = 10, val_folds = 9` will use 90% of the data for testing and 10% for training
-
+# GM: This discussion should be moved above
 ### IMPORT LIBRARIES #####
 
 ## general purpose
