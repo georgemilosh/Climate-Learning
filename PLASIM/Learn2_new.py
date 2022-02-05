@@ -1919,6 +1919,8 @@ class Trainer():
                 folder = ut.make_safe(folder)
 
         logger.log(42, f'{folder = }\n')
+
+        start_time = time.time()
         
         runs[run_id] = {'name': folder, 'args': kwargs, 'transfer_learning_from': tl_from, 'status': 'RUNNING', 'start_time': ut.now()}
         ut.dict2json(runs, 'runs.json') # save runs.json
@@ -1956,6 +1958,11 @@ class Trainer():
 
         finally: # in any case we need to save the end time and save runs to json
             runs[run_id]['end_time'] = ut.now()
+            run_time = time.time() - start_time
+            run_time_min = int(run_time/0.6)/100 # 2 decimal places of run time in minutes
+            runs[run_id]['run_time'] = ut.pretty_time(run_time)
+            runs[run_id]['rune_time_min'] = run_time_min
+
             ut.dict2json(runs,'runs.json')
 
         
