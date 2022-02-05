@@ -3,7 +3,6 @@
 
 # @author: Alessandro Lovo
 # '''
-# GM: It would be a good idea for log.log to specify which parameters were used to run this run (just when the run starts)
 '''
 Module for training a Convolutional Neural Network on climate data.
 
@@ -57,9 +56,18 @@ will result in 4 runs:
     fields=['t2m', 'zg500'], tau=1
     fields=['t2m', 'zg500'], tau=2
 
-A note on parameter tau:
+FAQ
+---
+Q: what is tau?
     It is the delay between the prediction and the observation, and is usually supposed to be negative (prediction before observation)
 
+Q: What if I want to work with 1000 years that are a subset of 8000 years of Plasim_LONG? 
+    You can do it by running with `dataset_years = 8000` and `year_list = 'range(1000)'`, which will use the first 1000 years of the 8000 year dataset
+    you can also provide `year_list = 'range(1000,3000,2)'` which will take the even years between 1000 and 3000
+
+Q: what if I want to have a smaller training set and a bigger validation one
+    If you want to have kfold validation where the validation dataset is bigger than the training one you can do it as well by providing the argument val_folds.
+    For example `nfolds = 10, val_folds = 9` will use 90% of the data for testing and 10% for training
 
 Logging levels:
 level   name                events
@@ -89,15 +97,11 @@ level   name                events
 
 50      logging.CRITICAL    The program stops due to an error
 '''
-# GM: What if I want to work with 1000 years that are a subset of 8000 years of Plasim_LONG? 
-#   AL: You can do it by running with `dataset_years = 8000` and `year_list = 'range(1000)'`, which will use the first 1000 years of the 8000 year dataset
-#       you can also provide `year_list = 'range(1000,3000,2)'` which will take the even years between 1000 and 3000
-#   AL: If you want to have kfold validation where the validation dataset is bigger than the training one you can do it as well by providing the argument val_folds.
-#       For example `nfolds = 10, val_folds = 9` will use 90% of the data for testing and 10% for training
-# GM: This discussion should be moved above
+
 ### IMPORT LIBRARIES #####
 
 ## general purpose
+from cmath import log
 from copy import deepcopy
 import os as os
 from pathlib import Path
@@ -1918,6 +1922,22 @@ class Trainer():
         
         runs[run_id] = {'name': folder, 'args': kwargs, 'transfer_learning_from': tl_from, 'status': 'RUNNING', 'start_time': ut.now()}
         ut.dict2json(runs, 'runs.json') # save runs.json
+
+        # write kwargs to logfile
+        with open(f'{folder}/log.log', 'a') as logfile:
+            logfile.write(f'{run_id = }\n\n')
+            logfile.write('Non default parameters:\n')
+            for k,v in kwargs.items():
+                logfile.write(f'\t{k} = {v}\n')
+            logfile.write('\n')
+            if tl_from is not None:
+                logfile.write('Transfer learning from:\n')
+                for k,v in tl_from.items():
+                        logfile.write(f'\t{k} = {v}\n')
+                logfile.write('\n')
+            else:
+                logfile.write('No transfer learning\n\n')
+            logfile.write('\n\n\n')
 
         # run
         try:            
