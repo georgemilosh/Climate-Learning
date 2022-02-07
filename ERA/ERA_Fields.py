@@ -1,48 +1,123 @@
 # George Miloshevich 2021
 # Importation des librairies
+from pathlib import Path
 from netCDF4 import Dataset
 import numpy as np
+import warnings
 
 import matplotlib.pyplot as plt
 import pylab as p
 import sys
 import os
-os.environ['PROJ_LIB'] = '../usr/share/proj' # This one we need to import Basemap 
-#os.environ['PROJ_LIB'] = '/usr/share/proj' # This one we need to import Basemap 
-from mpl_toolkits.basemap import Basemap
-import pickle
-import itertools
-import matplotlib.gridspec as gridspec
+import logging
+
 import matplotlib.patheffects as PathEffects
-from sklearn.linear_model import LinearRegression
-from itertools import chain
 from matplotlib.transforms import Bbox
+
+from itertools import chain
+import collections
+from random import randrange
+
 from scipy.signal import argrelextrema
 from scipy.stats import skew, kurtosis
 from scipy import integrate
 from scipy.optimize import curve_fit
+
+from sklearn.linear_model import LinearRegression
 from sklearn.utils import shuffle
 from sklearn.preprocessing import PolynomialFeatures
-from sklearn.metrics import mean_squared_error, r2_score
-from sklearn import datasets, linear_model
+from sklearn.metrics import r2_score
+from sklearn import linear_model
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import confusion_matrix
 from skimage.transform import resize
-from random import randrange
-import collections
+
+path_to_ERA = str(Path(__file__).resolve().parent)
+if not path_to_ERA in sys.path:
+    sys.path.insert(1, path_to_ERA)
+
+from utilities import execution_time
+
+logger = logging.getLogger(__name__)
+logger.level = logging.INFO
+
+
+global plotter
+plotter = None
+
+def import_basemap():
+    old_proj_lib = os.environ['PROJ_LIB'] if 'PROJ_LIB' in os.environ else None
+    try:
+        os.environ['PROJ_LIB'] = '../usr/share/proj' # This one we need to import Basemap 
+        global Basemap
+        from mpl_toolkits.basemap import Basemap
+        logger.info('Successfully imported basemap')
+        return True
+    except (ImportError, FileNotFoundError):
+        # revert to old proj_lib
+        if old_proj_lib is not None:
+            os.environ['PROJ_LIB'] = old_proj_lib
+        logger.warning('In this environment you cannot import Basemap')
+        return False
+    
+def import_cartopy():
+    try:
+        global cplt
+        import cartopy_plots as cplt
+        logger.info('Successfully imported cartopy')
+        return True
+    except (ImportError, FileNotFoundError):
+        logger.warning('In this environment you cannot import cartopy')
+        return False
+
+# set up the plotter:
+def setup_plotter():
+    global plotter
+    if plotter is not None:
+        logger.info(f'Plotter already set to {plotter}')
+        return True
+    logger.info('Trying to import basemap')
+    if import_basemap():
+        plotter = 'basemap'
+        return True
+    logger.info('Trying to import cartopy')
+    if import_cartopy():
+        plotter = 'cartopy'
+        return True
+    logger.error('No valid plotter found')
+    return False
+            
+setup_plotter()
+
 
 
 # Definition des fonctions
-def significative_data(Data, Data_t_value, T_value, both): # CHANGE THIS FOR TEMPERATURE SO THAT THE OLD ROUTINE IS USED
+def significative_data(Data, Data_t_value=None, T_value=None, both=False, default_value=0): # CHANGE THIS FOR TEMPERATURE SO THAT THE OLD ROUTINE IS USED
     '''
     Filters `Data` depending whether `Data_t_value` exceeds a threshold `T_value`
+    
+    Data that fail the filter conditions are set to `default_value`.
+    If `Data_t_value` or `T_value` are None, all of `Data` is considered significant
     '''
+    if Data is None:
+        if both:
+            return None, 0, 0
+        else:
+            return None, 0
+    
     data = np.array(Data)
+    
+    if Data_t_value is None or T_value is None:
+        warnings.warn('Assuming all data are significant')
+        if both:
+            return data, np.ones_like(data)*default_value, np.product(data.shape)
+        else:
+            return data, np.product(data.shape)
+        
     data_t_value = np.array(Data_t_value)
     if data.shape != data_t_value.shape:
         raise ValueError('Shape mismatch')
-    Out_taken = np.zeros_like(data)
-    Out_not_taken = np.zeros_like(data)
+    Out_taken = data.copy()
     
 #     # old function definition   
 #     N_points_taken = 0
@@ -57,37 +132,52 @@ def significative_data(Data, Data_t_value, T_value, both): # CHANGE THIS FOR TEM
     # considerable speed up wrt the old nested for loops
     mask = data_t_value >= T_value
     N_points_taken = np.sum(mask)
-    Out_taken[mask] = data[mask]
+    Out_taken[np.logical_not(mask)] = default_value
     
     if both:
-        inverse_mask = np.logical_not(mask)
-        Out_not_taken[inverse_mask] = data[inverse_mask]
+        Out_not_taken = data.copy()
+        Out_not_taken[mask] = default_value
         return Out_taken, Out_not_taken, N_points_taken
     else:
         return Out_taken, N_points_taken
+    
 def significative_data2(Data, Data_t_value, T_value, both): # CHANGE THIS FOR TEMPERATURE SO THAT THE OLD ROUTINE IS USED
-    Out_taken = np.empty((np.shape(Data)))
-    Out_taken[:] = np.NaN
-    Out_not_taken = np.empty((np.shape(Data)))
-    Out_not_taken[:] = np.NaN
-    N_points_taken = 0
-    for la in range(len(Data)):
-        for lo in range(len(Data[la])):
-            if abs(Data_t_value[la, lo]) >= T_value:
-                Out_taken[la, lo] = Data[la, lo]
-                N_points_taken += 1
-            else:
-                Out_not_taken[la, lo] = Data[la, lo]
-    if both == True:
-        return Out_taken, Out_not_taken, N_points_taken
-    elif both == False:
-        return Out_taken, N_points_taken
+    '''
+    Does the same of significative_data, but with `default_value` to np.NaN
+    '''
+    return significative_data(Data, Data_t_value, T_value, both, default_value=np.NaN)
+    # OLD VERSION
+    
+    # Out_taken = np.empty((np.shape(Data)))
+    # Out_taken[:] = np.NaN
+    # Out_not_taken = np.empty((np.shape(Data)))
+    # Out_not_taken[:] = np.NaN
+    # N_points_taken = 0
+    # for la in range(len(Data)):
+    #     for lo in range(len(Data[la])):
+    #         if abs(Data_t_value[la, lo]) >= T_value:
+    #             Out_taken[la, lo] = Data[la, lo]
+    #             N_points_taken += 1
+    #         else:
+    #             Out_not_taken[la, lo] = Data[la, lo]
+    # if both == True:
+    #     return Out_taken, Out_not_taken, N_points_taken
+    # elif both == False:
+    #     return Out_taken, N_points_taken
+    
 def animate(i, m, Center_map, Nb_frame, Lon, Lat, T_value, data_colorbar_value, data_colorbar_t, data_colorbar_level,
             data_contour_value, data_contour_t, data_contour_level, title_frame, rtime):
+    '''
+    Center_map not used
+    
+    Plots at day `i` the contourf of the sigificant temperature and contour of the geopotential separating significant and non significant anomalies
+    '''
+    if plotter == 'cartopy':
+        raise NotImplementedError("Use cartopy_plots.animate")
     fmt = '%1.0f'
     temp_sign, ts_taken = significative_data(data_colorbar_value[i], data_colorbar_t[i], T_value, False)
     zg_sign, zg_not, zg_taken = significative_data2(data_contour_value[i], data_contour_t[i], T_value, True)
-    if ts_taken != 8192 and zg_taken != 8192:
+    if ts_taken != 8192 and zg_taken != 8192: #AL what is this???
         print('i:', i, 'ts_taken:', ts_taken, 'zg_taken:', zg_taken)
     plt.cla()
     m.contourf(Lon, Lat, temp_sign, levels=data_colorbar_level, cmap=plt.cm.seismic, extend='both', latlon=True)
@@ -110,7 +200,7 @@ def animate(i, m, Center_map, Nb_frame, Lon, Lat, T_value, data_colorbar_value, 
     c_sign = m.contour(Lon, Lat, zg_sign, levels=data_contour_level[:data_contour_level.shape[0]//2], colors="red", linestyles = "solid",linewidths=1, latlon=True)  #negative significant anomalies of geopotential
     c_sign = m.contour(Lon, Lat, zg_sign, levels=data_contour_level[data_contour_level.shape[0]//2:], colors="blue",linewidths=1, latlon=True)   #positive significant anomalies of geopotential
     
-    plt.title(title_frame + ', r = ' + str(rtime) + ', day: ' + str((i - Nb_frame//2)), fontsize=20)
+    plt.title(f'{title_frame}, r = {rtime}, day: {(i - Nb_frame//2)}', fontsize=20)
 
     
 def PltAnomalyHist(distrib, numlevels, mycolor, myhatch, mymonths, mylinewidths, myfieldlabel, myobjct): # Plot histogram of an anomaly based on a data series
@@ -127,7 +217,7 @@ def PltAnomalyHist(distrib, numlevels, mycolor, myhatch, mymonths, mylinewidths,
     plt.ylabel('Daily Probability')
     plt.title('MMJAS (running mean) ' + myobjct)
     
-def PltDistHist(myfield, convseq, mycolors, monthhatches, mymonth, mylinewidth, y, Tot_Mon1,area):
+def PltDistHist(myfield, convseq, mycolors, monthhatches, mymonth, mylinewidth, y, Tot_Mon1,area, start_month=5):
     # Plot Distribution for each year and histograms for the anomalies
     field_extract = myfield.abs_area_int[:,:]
     objct = "over "+area
@@ -154,17 +244,17 @@ def PltDistHist(myfield, convseq, mycolors, monthhatches, mymonth, mylinewidth, 
 
     plt.subplot(143)
     for i in range(len(mymonth)):
-        temp = field_extract[:,Tot_Mon1[5+i]-Tot_Mon1[5]:Tot_Mon1[6+i]-Tot_Mon1[5]].reshape(myfield.var.shape[0]*(Tot_Mon1[6+i]-Tot_Mon1[5+i]))
+        temp = field_extract[:,Tot_Mon1[start_month+i]-Tot_Mon1[start_month]:Tot_Mon1[start_month+1+i]-Tot_Mon1[start_month]].reshape(myfield.var.shape[0]*(Tot_Mon1[start_month+1+i]-Tot_Mon1[start_month+i]))
         PltAnomalyHist(temp, 50, mycolors[i], monthhatches[i], mymonth[i], mylinewidth[i], myfield.label, objct)
     plt.legend(loc = 'best')
 
     plt.subplot(144)
     for i in range(len(mymonth)-1): # Here you have to be careful because A(t) is not defined for the september
-        temp = field_conv[:,Tot_Mon1[5+i]-Tot_Mon1[5]:Tot_Mon1[6+i]-Tot_Mon1[5]].reshape(myfield.var.shape[0]*(Tot_Mon1[6+i]-Tot_Mon1[5+i])) # 30 DAYS MAY NOT WORK FOR CESM
+        temp = field_conv[:,Tot_Mon1[start_month+i]-Tot_Mon1[start_month]:Tot_Mon1[start_month+1+i]-Tot_Mon1[start_month]].reshape(myfield.var.shape[0]*(Tot_Mon1[start_month+1+i]-Tot_Mon1[start_month+i])) # 30 DAYS MAY NOT WORK FOR CESM
         PltAnomalyHist(temp, 50, mycolors[i], monthhatches[i], mymonth[i], mylinewidth[i], myfield.label, objct)
     plt.legend(loc = 'best')
     
-def PltReturnsHist(XX_rt, YY_rt, xx_rt, yy_rt, A_max_sorted, Tot_Mon1, area, ax1, Ax):
+def PltReturnsHist(XX_rt, YY_rt, xx_rt, yy_rt, A_max_sorted, Tot_Mon1, area, ax1, Ax, start_month=5, end_month=8):
     # Plot Return times plus the histogram during the 
     ax1.scatter(XX_rt, YY_rt, s=4, color='royalblue', marker='x')
     for i in range(len(xx_rt)):
@@ -178,17 +268,17 @@ def PltReturnsHist(XX_rt, YY_rt, xx_rt, yy_rt, A_max_sorted, Tot_Mon1, area, ax1
     years = []
     for i in range(len(A_max_sorted)):
         day, year = A_max_sorted[i][1]   # heatwaves are already ranked by Phlippine based on 14 day temperature anomalies (Notice that she counts from June 1!)
-        Days.append(day+Tot_Mon1[5])
+        Days.append(day+Tot_Mon1[start_month])
         years.append(year)
     
     # top 1/10 extreme events
-    n, bins, patches = Ax.hist(Days[:len(A_max_sorted)//10], bins = np.arange(Tot_Mon1[5],Tot_Mon1[8]-14),
+    n, bins, patches = Ax.hist(Days[:len(A_max_sorted)//10], bins = np.arange(Tot_Mon1[start_month],Tot_Mon1[end_month]-14),
                                density = True, facecolor='tab:brown', alpha=1, label = 'extreme $r=10$')
     # top 1/4 extreme events
-    Ax.hist(Days[:len(A_max_sorted)//4], bins = np.arange(Tot_Mon1[5],Tot_Mon1[8]-14),
+    Ax.hist(Days[:len(A_max_sorted)//4], bins = np.arange(Tot_Mon1[start_month],Tot_Mon1[end_month]-14),
             density = True, facecolor='tab:orange', alpha=0.7, label = 'extreme $r=4$')
     # all extreme events
-    Ax.hist(Days[:len(A_max_sorted)], bins = np.arange(Tot_Mon1[5],Tot_Mon1[8]-14),
+    Ax.hist(Days[:len(A_max_sorted)], bins = np.arange(Tot_Mon1[start_month],Tot_Mon1[end_month]-14),
             density = True, facecolor='tab:cyan', alpha=0.3, label = 'extreme $r=1$')
     Ax.set_xlabel('Time, binned by {:1.4f}'.format(bins[1]-bins[0]), fontsize=13)
     Ax.set_ylabel('Probability', fontsize=14)
@@ -196,7 +286,7 @@ def PltReturnsHist(XX_rt, YY_rt, xx_rt, yy_rt, A_max_sorted, Tot_Mon1, area, ax1
     Ax.set_title("Events conditioned", fontsize=13)
     Ax.legend(loc = 'best', fontsize=12)
     
-def BootstrapReturnsOnly(myseries, TO, Tot_Mon1, area, ax, Ts, modified='no', write_path='./'):
+def BootstrapReturnsOnly(myseries, TO, Tot_Mon1, area, ax, Ts, modified='no', write_path='./', start_month=6, end_month=9):
     write_path = write_path.rstrip('/')
     
     for T in Ts:
@@ -204,9 +294,9 @@ def BootstrapReturnsOnly(myseries, TO, Tot_Mon1, area, ax, Ts, modified='no', wr
         XX = []
         YY = []
         for j in range(10):
-            A = np.zeros((myseries.shape[0]//10, Tot_Mon1[9] - Tot_Mon1[6] - T+1))   # When we use convolve (running mean) there is an extra point that we can generate by displacing the window hence T-1 instead of T
+            A = np.zeros((myseries.shape[0]//10, Tot_Mon1[end_month] - Tot_Mon1[start_month] - T+1))   # When we use convolve (running mean) there is an extra point that we can generate by displacing the window hence T-1 instead of T
             for y in range(myseries.shape[0]//10):
-                A[y,:] = np.convolve(myseries[100*j+y,Tot_Mon1[6]:(Tot_Mon1[9])],  convseq, mode='valid')
+                A[y,:] = np.convolve(myseries[100*j+y,Tot_Mon1[start_month]:(Tot_Mon1[end_month])],  convseq, mode='valid')
             print(f"{A.shape = }")
             if A.shape[1] > 30: 
                 A_max, Ti, year_a = a_max_and_ti_postproc(A, A.shape[1])
@@ -290,12 +380,12 @@ def PltAutocorrelationFit2(autocorr_mean,colors, linewidths, x1,x2, ax, Model):
     plt.xlabel(r"Lag $\tau$")
 
     
-def CompCompositesERA(series, myfield, T, Tot_Mon1, return_index, myfieldmean, modified='no'):
+def CompCompositesERA(series, myfield, T, Tot_Mon1, return_index, myfieldmean, modified='no', start_month=6, end_month=9):
     # Computes composites conditioned to extremes of field of duration T based on months provided in Tot_Mon1, the return_index is the index of the return times
     convseq = np.ones(T)/T
-    A = np.zeros((series.shape[0], Tot_Mon1[9] - Tot_Mon1[6] - T+1))   # When we use convolve (running mean) there is an extra point that we can generate by displacing the window hence 13 instead of 14
+    A = np.zeros((series.shape[0], Tot_Mon1[end_month] - Tot_Mon1[start_month] - T+1))   # When we use convolve (running mean) there is an extra point that we can generate by displacing the window hence 13 instead of 14
     for y in range(series.shape[0]):
-        A[y,:]=np.convolve(series[y,Tot_Mon1[6]:(Tot_Mon1[9])],  convseq, mode='valid')
+        A[y,:]=np.convolve(series[y,Tot_Mon1[start_month]:(Tot_Mon1[end_month])],  convseq, mode='valid')
     print("A.shape = ",A.shape)
     A_max, Ti, year_a = a_max_and_ti_postproc(A, A.shape[1])
     year_a = range(series.shape[0])
@@ -311,7 +401,7 @@ def CompCompositesERA(series, myfield, T, Tot_Mon1, return_index, myfieldmean, m
         if A_max[y] >= yy_rt[return_index]:
             print("A_max["+str(y)+"] = ",A_max[y], "Ti["+str(y)+"] = ", Ti[y])
             nb_events += 1
-            value = (myfield.detrended[y] - myfieldmean)[tau + (Tot_Mon1[6] + Ti[y]) ]
+            value = (myfield.detrended[y] - myfieldmean)[tau + (Tot_Mon1[start_month] + Ti[y]) ]
             myfield.composite_mean += value     # This is the raw sum
             myfield.composite_std += value**2   # This is the raw square sum
     print("number of events: ",nb_events)
@@ -320,8 +410,8 @@ def CompCompositesERA(series, myfield, T, Tot_Mon1, return_index, myfieldmean, m
     myfield.composite_mean /= nb_events
     myfield.composite_t = (lambda a, b: np.divide(a, b, out=np.zeros(a.shape), where=b != 0))(np.sqrt(nb_events) * myfield.composite_mean, myfield.composite_std)
     
-def CompCompositesERAThreshold(series, myfield, T, Tot_Mon1, threshold, myfieldmean):
-    A_max, Ti, year_a = CompExtremes(series, myfield, T, Tot_Mon1, threshold)
+def CompCompositesERAThreshold(series, myfield, T, Tot_Mon1, threshold, myfieldmean, start_month=6, end_month=9):
+    A_max, Ti, year_a = CompExtremes(series, myfield, T, Tot_Mon1, threshold, start_month=start_month, end_month=end_month)
 
     tau = np.arange(-30,30,1)
     nb_events = 0
@@ -331,7 +421,7 @@ def CompCompositesERAThreshold(series, myfield, T, Tot_Mon1, threshold, myfieldm
         if A_max[y] >= threshold:
             print("A_max["+str(y)+"] = ",A_max[y], "Ti["+str(y)+"] = ", Ti[y])
             nb_events += 1
-            value = (myfield.detrended[y] - myfieldmean)[tau + (Tot_Mon1[6] + Ti[y]) ]
+            value = (myfield.detrended[y] - myfieldmean)[tau + (Tot_Mon1[start_month] + Ti[y]) ]
             myfield.composite_mean += value     # This is the raw sum
             myfield.composite_std += value**2   # This is the raw square sum
     print("number of events: ",nb_events)
@@ -341,26 +431,34 @@ def CompCompositesERAThreshold(series, myfield, T, Tot_Mon1, threshold, myfieldm
     myfield.composite_t = (lambda a, b: np.divide(a, b, out=np.zeros(a.shape), where=b != 0))(np.sqrt(nb_events) * myfield.composite_mean, myfield.composite_std)
     
     
-def CompExtremes(series, myfield, T, Tot_Mon1, threshold):
+def CompExtremes(series, myfield, T, Tot_Mon1, threshold, start_month=6, end_month=9):
     '''
+    !!!!
     myfield, threshold are not used
+    !!!!
+    
+    The computations are performed between `start_month` (included) and `end_month` (excluded).
+    Month numeration is the standard one, i.e. 1 = January, 6 = June, 12 = December
     '''
     # Computes composites conditioned to extremes of field of duration T based on months provided in Tot_Mon1, the return_index is the index of the return times
     convseq = np.ones(T)/T
-    A = np.zeros((series.shape[0], Tot_Mon1[9] - Tot_Mon1[6] - T+1)) # When we use convolve (running mean) there is an extra point that we can generate by displacing the window hence T - 1 instead of T
+    A = np.zeros((series.shape[0], Tot_Mon1[end_month] - Tot_Mon1[start_month] - T+1)) # When we use convolve (running mean) there is an extra point that we can generate by displacing the window hence T - 1 instead of T
     for y in range(series.shape[0]):
-        A[y,:]=np.convolve(series[y,Tot_Mon1[6]:(Tot_Mon1[9])],  convseq, mode='valid')
+        A[y,:]=np.convolve(series[y,Tot_Mon1[start_month]:(Tot_Mon1[end_month])],  convseq, mode='valid')
     print("A.shape = ",A.shape)
     return a_max_and_ti_postproc(A, A.shape[1])
 
-def CompCompositesThreshold(series, myfield, T, Tot_Mon1, threshold, observation_time=30, return_time_series=False):
+def CompCompositesThreshold(series, myfield, T, Tot_Mon1, threshold, start_month=6, end_month=9, observation_time=30, return_time_series=False):
     '''
     If `return_time_series` is true, then the time series are returned. All other computations are carried out anyways.
     `time_series` is a dictionary of the time series of `myfield` aroud the heatwaves keyed with the year number
-    '''
-    A_max, Ti, year_a = CompExtremes(series, myfield, T, Tot_Mon1, threshold)
     
-    tau = np.arange(-observation_time,observation_time,1) # from observation time days before to observation_time - 1  days after the heatwave
+    The computations are performed between `start_month` (included) and `end_month` (excluded).
+    Month numeration is the standard one, i.e. 1 = January, 6 = June, 12 = December
+    '''
+    A_max, Ti, year_a = CompExtremes(series, myfield, T, Tot_Mon1, threshold, start_month=start_month, end_month=end_month)
+    
+    tau = np.arange(-observation_time,observation_time,1) # from observation_time days before to observation_time - 1  days after the heatwave
     if return_time_series:
         time_series = {}
     
@@ -373,7 +471,7 @@ def CompCompositesThreshold(series, myfield, T, Tot_Mon1, threshold, observation
         if A_max[y] >= threshold:
             print(f'A_max[{y}] = {A_max[y]}, Ti[{y}] = {Ti[y]}')
             nb_events += 1
-            value = (myfield.var[y])[tau + (Tot_Mon1[6] + Ti[y]) ] # value of the field (over the Earth) around the days when the heatwave is at its maximum
+            value = (myfield.var[y])[tau + (Tot_Mon1[start_month] + Ti[y]) ] # value of the field (over the Earth) around the days when the heatwave is at its maximum
             if return_time_series:
                 time_series[y] = value
             myfield.composite_mean += value     # This is the raw sum
@@ -389,12 +487,17 @@ def CompCompositesThreshold(series, myfield, T, Tot_Mon1, threshold, observation
     else:
         return None
     
-def CompComposites(series, myfield, T, Tot_Mon1, return_index, modified):
-    # Computes composites conditioned to extremes of field of duration T based on months provided in Tot_Mon1, the return_index is the index of the return times
+def CompComposites(series, myfield, T, Tot_Mon1, return_index, modified, start_month=6, end_month=9):
+    '''
+    Computes composites conditioned to extremes of field of duration T based on months provided in Tot_Mon1, the return_index is the index of the return times
+    
+    The computations are performed between `start_month` (included) and `end_month` (excluded).
+    Month numeration is the standard one, i.e. 1 = January, 6 = June, 12 = December
+    '''
     convseq = np.ones(T)/T
-    A = np.zeros((series.shape[0], Tot_Mon1[9] - Tot_Mon1[6] - T+1))   # When we use convolve (running mean) there is an extra point that we can generate by displacing the window hence 13 instead of 14
+    A = np.zeros((series.shape[0], Tot_Mon1[end_month] - Tot_Mon1[start_month] - T+1))   # When we use convolve (running mean) there is an extra point that we can generate by displacing the window hence 13 instead of 14
     for y in range(series.shape[0]):
-        A[y,:]=np.convolve(series[y,Tot_Mon1[6]:(Tot_Mon1[9])],  convseq, mode='valid')
+        A[y,:]=np.convolve(series[y,Tot_Mon1[start_month]:(Tot_Mon1[end_month])],  convseq, mode='valid')
     print("A.shape = ",A.shape)
     A_max, Ti, year_a = a_max_and_ti_postproc(A, A.shape[1])
     year_a = range(series.shape[0])
@@ -410,7 +513,7 @@ def CompComposites(series, myfield, T, Tot_Mon1, return_index, modified):
         if A_max[y] >= yy_rt[return_index]:
             print("A_max["+str(y)+"] = ",A_max[y], "Ti["+str(y)+"] = ", Ti[y])
             nb_events += 1
-            value = (myfield.var[y])[tau + (Tot_Mon1[6] + Ti[y]) ]
+            value = (myfield.var[y])[tau + (Tot_Mon1[start_month] + Ti[y]) ]
             myfield.composite_mean += value     # This is the raw sum
             myfield.composite_std += value**2   # This is the raw square sum
     print("number of events: ",nb_events)
@@ -419,12 +522,17 @@ def CompComposites(series, myfield, T, Tot_Mon1, return_index, modified):
     myfield.composite_mean /= nb_events
     myfield.composite_t = (lambda a, b: np.divide(a, b, out=np.zeros(a.shape), where=b != 0))(np.sqrt(nb_events) * myfield.composite_mean, myfield.composite_std)
     
-def CompCompositesBetween(series, myfield, T, Tot_Mon1, return_index):
-    # Computes composites conditioned to extremes of field of duration T based on months provided in Tot_Mon1, the return_index is the index of the return times
+def CompCompositesBetween(series, myfield, T, Tot_Mon1, return_index, start_month=6, end_month=9):
+    '''
+    Computes composites conditioned to extremes of field of duration T based on months provided in Tot_Mon1, the return_index is the index of the return times
+    
+    The computations are performed between `start_month` (included) and `end_month` (excluded).
+    Month numeration is the standard one, i.e. 1 = January, 6 = June, 12 = December
+    '''
     convseq = np.ones(T)/T
-    A = np.zeros((series.shape[0], Tot_Mon1[9] - Tot_Mon1[6] - T+1))   # When we use convolve (running mean) there is an extra point that we can generate by displacing the window hence 13 instead of 14
+    A = np.zeros((series.shape[0], Tot_Mon1[end_month] - Tot_Mon1[start_month] - T+1))   # When we use convolve (running mean) there is an extra point that we can generate by displacing the window hence 13 instead of 14
     for y in range(series.shape[0]):
-        A[y,:]=np.convolve(series[y,Tot_Mon1[6]:(Tot_Mon1[9])],  convseq, mode='valid')
+        A[y,:]=np.convolve(series[y,Tot_Mon1[start_month]:(Tot_Mon1[end_month])],  convseq, mode='valid')
     print("A.shape = ",A.shape)
     A_max, Ti, year_a = a_max_and_ti_postproc(A, A.shape[1])
     year_a = range(series.shape[0])
@@ -440,7 +548,7 @@ def CompCompositesBetween(series, myfield, T, Tot_Mon1, return_index):
         if yy_rt[return_index[0]] <= A_max[y] < yy_rt[return_index[1]]:
             print("A_max["+str(y)+"] = ",A_max[y], "Ti["+str(y)+"] = ", Ti[y])
             nb_events += 1
-            value = (myfield.var[y])[tau + (Tot_Mon1[6] + Ti[y]) ]
+            value = (myfield.var[y])[tau + (Tot_Mon1[start_month] + Ti[y]) ]
             myfield.composite_mean += value     # This is the raw sum
             myfield.composite_std += value**2   # This is the raw square sum
     print("number of events: ",nb_events)
@@ -453,9 +561,12 @@ def geo_contour(m, ax, Center_map, Lon, Lat, data_contour_value, data_contour_le
     '''
     Plots a contour using two different colormaps for positive and negative anomalies
     
-    Center_map isn't used
+    ax, Center_map, aren't used
     '''
-    fmt = '%1.0f'
+    if plotter == 'cartopy':
+        return cplt.geo_contour(m, Lon, Lat, data_contour_value,
+                                levels=data_contour_level, cmap1=colmap1, cmap2=colmap2)
+    
     c_sign = m.contour(Lon, Lat, data_contour_value,
                        levels=data_contour_level, cmap=colmap1,linewidths=1, linestyles="dashed",
                        latlon=True, vmin=data_contour_level[0], vmax=0)
@@ -465,14 +576,20 @@ def geo_contour(m, ax, Center_map, Lon, Lat, data_contour_value, data_contour_le
                        levels=data_contour_level, cmap=colmap2,linewidths=1,
                        latlon=True, vmin=0, vmax=data_contour_level[-1])
     
+    # this is confusing
+    fmt = '%1.0f'
     v_sign = data_contour_level[int(len(data_contour_level) / 2)-1], data_contour_level[int(len(data_contour_level) / 2)]
-    if len(c_sign.levels) > len(v_sign):
+    if len(c_sign.levels) > len(v_sign): # len(v_sign) = 2 because it is a 2-uple
         p.clabel(c_sign, v_sign, inline=True,fmt=fmt,fontsize=14)
 
 def geo_contourf(m, ax, Center_map, Lon, Lat, data_colorbar_value, data_colorbar_level, colmap, title_frame, put_colorbar=True):
     '''
-    Center_Map isn't used
+    ax, Center_Map aren't used
     '''
+    if plotter == 'cartopy':
+        return cplt.geo_contourf(m, Lon, Lat, data_colorbar_value,
+                                 levels=data_colorbar_level, cmap=colmap, title=title_frame, put_colorbar=put_colorbar)
+    
     plt.cla()
     m.contourf(Lon, Lat, data_colorbar_value, levels=data_colorbar_level, cmap=colmap, extend='both', latlon=True)
     if put_colorbar:
@@ -483,20 +600,33 @@ def geo_contourf(m, ax, Center_map, Lon, Lat, data_colorbar_value, data_colorbar
     plt.title(title_frame, fontsize=20)
     
 def geo_contour_color(m, ax, Center_map, Lon, Lat, T_value, data_contour_value, data_contour_t, data_contour_level, colors, mylinestyles, mylinewidths):
-    zg_sign, zg_not, zg_taken = significative_data2(data_contour_value, data_contour_t, T_value, True)
+    '''
+    ax, Center_map not used
+    '''
     fmt = '%1.0f'
+    fontsize = 12
+    
+    if plotter == 'cartopy':
+        return cplt.geo_contour_color(m, Lon, Lat, data_contour_value, data_contour_t, T_value,
+                                      levels=data_contour_level, colors=colors, linestyles=mylinestyles,
+                                      linewidths=mylinewidths, fmt=fmt, fontsize=fontsize)
+    
+    zg_sign, zg_not, zg_taken = significative_data2(data_contour_value, data_contour_t, T_value, True)
     c_nots = m.contour(Lon, Lat, data_contour_value, levels=data_contour_level[:data_contour_level.shape[0]//2], colors=colors[1], linestyles = mylinestyles[1], linewidths=mylinewidths[1], latlon=True) #negative insignificant anomalies of geopotential
     v_sign = data_contour_level[int(len(data_contour_level) / 2)-1], # data_contour_level[int(len(data_contour_level) / 2)]
     if len(c_nots.levels) > len(v_sign):
-        p.clabel(c_nots, v_sign, inline=True,fmt = fmt,fontsize=12)
+        p.clabel(c_nots, v_sign, inline=True,fmt=fmt,fontsize=fontsize)
     c_nots = m.contour(Lon, Lat, data_contour_value, levels=data_contour_level[data_contour_level.shape[0]//2:], colors=colors[2], linestyles = mylinestyles[2],linewidths=mylinewidths[2], latlon=True)  #positive insignificant anomalies of geopotential
     v_sign = data_contour_level[int(len(data_contour_level) / 2)],
     if len(c_nots.levels) > len(v_sign):
-        p.clabel(c_nots, v_sign, inline=True,fmt = fmt,fontsize=12)
+        p.clabel(c_nots, v_sign, inline=True,fmt=fmt,fontsize=fontsize)
     c_sign = m.contour(Lon, Lat, zg_sign, levels=data_contour_level[:data_contour_level.shape[0]//2], colors=colors[0], linestyles = mylinestyles[0],linewidths=mylinewidths[0], latlon=True)  #negative significant anomalies of geopotential
     c_sign = m.contour(Lon, Lat, zg_sign, levels=data_contour_level[data_contour_level.shape[0]//2:], colors=colors[3], linestyles = mylinestyles[3],linewidths=mylinewidths[3], latlon=True)   #positive significant anomalies of geopotential
     
 def PltMaxMinValue(m,Lon, Lat, data_contour_value):
+    if plotter == 'cartopy':
+        return cplt.PltMaxMinValue(m, Lon, Lat, data_contour_value)
+        
     coordsmax = np.unravel_index(np.argmin(data_contour_value, axis=None), data_contour_value.shape)
     x, y = m(Lon[coordsmax[0], coordsmax[1]], Lat[coordsmax[0], coordsmax[1]])
     txt = plt.text(x, y, "{:1.0f}".format(np.min(data_contour_value)), color='red')
@@ -511,6 +641,8 @@ def PltMaxMinValue(m,Lon, Lat, data_contour_value):
         
 def anomaly_animate(m, ax, Center_map, Lon, Lat, data_colorbar_value, data_colorbar_level,
             data_contour_value, data_contour_level, colmap, title_frame):
+    if plotter == 'cartopy':
+        raise NotImplementedError("Use cartopy_plots.animate")
     fmt = '%1.0f'
     plt.cla()
     m.contourf(Lon, Lat, data_colorbar_value, levels=data_colorbar_level, cmap=colmap, extend='both', latlon=True)
@@ -539,6 +671,8 @@ def anomaly_animate(m, ax, Center_map, Lon, Lat, data_colorbar_value, data_color
     
 def absolute_animate(i, m, ax, Center_map, Nb_frame, Lon, Lat, data_colorbar_value, data_colorbar_level,
             data_contour_value, data_contour_level, colmap, title_frame):
+    if plotter == 'cartopy':
+        raise NotImplementedError("Use cartopy_plots.animate")
     fmt = '%1.0f'
     print('i:', i)
     plt.cla()
@@ -571,6 +705,8 @@ def absolute_animate(i, m, ax, Center_map, Nb_frame, Lon, Lat, data_colorbar_val
     
 def anomaly_absolute_animate(m, ax, Center_map, Lon, Lat, data_colorbar_value, data_colorbar_level,
             data_contour_value, data_contour_level, colmap, title_frame):
+    if plotter == 'cartopy':
+        raise NotImplementedError("Use cartopy_plots.animate")
     fmt = '%1.0f'
     plt.cla()
     m.contourf(Lon, Lat, data_colorbar_value, levels=data_colorbar_level, cmap=colmap, extend='both', latlon=True)
@@ -640,17 +776,21 @@ def return_time_fix(D_sorted, modified='no'): # In this function we fix the leng
 
 def a_max_and_ti_postproc(A, length=None):
     """
-    generates unranked set of maximal anomalies per each year and when they occur.
-    In the code A is expected to be loaded from June1 - 1   to August16 + 1 to check the maxima at the boundaries
-    
-    Future reminder: REMOVE HARDCODED NUMBERS!!!!
+    Generates unranked set of maximal anomalies per each year and when they occur.
+    `A` needs to have an extra point at the beginning and end of each year to check if a maximum at the extremes is local or not.    
     """
+    # Probably outdated comment
+    # In the code A is expected to be loaded from June1 - 1   to August16 + 1 to check the maxima at the boundaries
+    
     just_max_index = []
     if length is None:
-        A_summer = A[ :, 1:-1]  # why is this choice made
+        A_summer = A[ :, 1:-1]  # allow to check maxima at the edges
         length = A_summer.shape[1]
     else:
-        A_summer = A[:, 1:length-1]
+        A_summer = A[:, 1:length+1]
+        if A_summer.shape[1] < length:
+            warnings.warn('a_max_and_ti_postproc: adjusting length')
+            length = A_summer.shape[1]
     #print('    verif: we look A(t) over {} index (excepted value={})'.format(len(A_summer[0]), length))
     out_A_max = []
     out_Ti = []
@@ -665,7 +805,7 @@ def a_max_and_ti_postproc(A, length=None):
         max_index = np.argmax(A_summer[j])  # the time during season when we have a maximum this year
         max_value = A_summer[j][max_index]  # the corresponding value of the maximum of A
         just_max_index.append(max_index)  # collect t_i
-        #print("max_index = ", max_index, ", is compared to ", length - 1)
+        logger.debug(f"{max_index = } is compared to {length - 1}")
         if max_index == 0:
             if A[j][0] > max_value:  # check if the maximum is a false maximum
                 a_max, ti = maximum_inside(A_summer[j]) # find another true maximum that is a local maximum inside
@@ -678,7 +818,7 @@ def a_max_and_ti_postproc(A, length=None):
                 year_with_before.append(j)
                 start_true += 1
         elif max_index == length - 1:  # do the same on the other side
-            #print("max index = ", max_index, " triggered")
+            logger.debug(f"{max_index = } triggered")
             if A[j][-1] > max_value:
                 #print("year ",j," end rejected")
                 a_max, ti = maximum_inside(A_summer[j])
@@ -694,11 +834,11 @@ def a_max_and_ti_postproc(A, length=None):
             a_max = max_value  # if we are not at the boundary do the standard maximum extraction
             ti = max_index
         out_A_max.append(a_max)
-        out_Ti.append(ti)
+        out_Ti.append(ti + 1) # shift ti values by one to compensate the fact that we ignored the first element of A
         out_year_a.append(j)  # the year is somewhat redundant as it is always the same set of years
     #print('    there are {} years where the maximum is not the np.max maximum'.format(
     #    len(year_with_after_non_loc) + len(year_with_before_non_loc)))
-    #print("start_true = ", start_true, ", end_true", end_true)
+    #print("start_true = ", start_true, ", end_true", end_true)    
     return out_A_max, out_Ti, out_year_a
 
 def maximum_inside(data):
@@ -729,12 +869,21 @@ def a_decrese(in_A_max, in_Ti, in_year_a):
         for i in range(len(in_A_max)):
             D[in_A_max[i]] = [in_Ti[i], in_year_a[i]]
     else:
-        print('    size mismatch',len(in_A_max),len(in_Ti),len(in_year_a))
+        logger.warning(f'size mismatch: {len(in_A_max) = },{len(in_Ti) = },{len(in_year_a) = }')
     D_sorted = sorted(D.items(), key=lambda kv: kv[0], reverse=True)
     return D_sorted
 
 
-def draw_map(m, scale=0.2):
+def draw_map(m, scale=0.2, background='stock_img', **kwargs):
+    '''
+    Plots a background map.
+    
+    If plotting with basemap additional parameters are ignored
+    
+    If plotting with cartopy `scale` is ignored
+    '''
+    if plotter == 'cartopy':
+        return cplt.draw_map(m, background, **kwargs)
     # draw a shaded-relief image
     m.shadedrelief(scale=scale)
     
@@ -754,90 +903,179 @@ def draw_map(m, scale=0.2):
 
 
 # now vectorized :)
-def create_mask(model,area, data, axes='first 2'): # careful, this mask works if we load the full Earth. there might be problems if we extract fields from some edge of the map
+def create_mask(model,area, data, axes='first 2', return_full_mask=False): # careful, this mask works if we load the full Earth. there might be problems if we extract fields from some edge of the map
     """
     This function allows to extract a subset of data enclosed in the area.
     The output has the dimension of the area on the axes corresponding to latitued and longitude
     If the area includes the Greenwich meridian, a concatenation is required.
     
-    If axes == 'last 2', the slicing will be done on the last 2 axes,
-    otherwise on the last two axes
+    If `axes` == 'last 2', the slicing will be done on the last 2 axes,
+    otherwise on the first two axes
+    
+    If `return_full_mask` == True, the function returns an array with the same shape of `data`, True over the `area` and False elsewhere
+    Otherwise the return will be `data` restricted to `area`
     """
     
     if axes == 'first 2' and len(data.shape) > 2:
         # permute the shape so that the first 2 axes end up being the last 2
         _data = data.transpose(*range(2,len(data.shape)),0,1)
-        _data = create_mask(model, area, _data, axes='last 2')
+        _data = create_mask(model, area, _data, axes='last 2', return_full_mask=return_full_mask)
         # permute the axes back to their original condition
         return _data.transpose(-2, -1, *range(len(data.shape) - 2))
     
+    if return_full_mask:
+        mask = np.zeros_like(data, dtype=bool)
     
     if model == "ERA5":
         if area == "Scandinavia":
+            if return_full_mask:
+                mask[...,25:45,7:53] = True
+                return mask
             return data[...,25:45,7:53]# reconstructed from Francesco
         elif area == "Scand": # = Norway Sweden
+            if return_full_mask:
+                mask[...,25:45,7:30] = True
+                return mask
             return data[...,25:45,7:30]
         elif area == "NAtlantic":
+            if return_full_mask:
+                mask[...,25:80, -135:] = True
+                mask[...,25:80, :60] = True
+                return mask
             return np.concatenate((data[...,25:80, -135:], data[...,25:80, :60]), axis=-1)  # used for plotting
         elif area == "France":
+            if return_full_mask:
+                mask[...,51:63, -4:] = True
+                mask[...,51:63, :9] = True
+                return mask
             return np.concatenate((data[...,51:63, -4:], data[...,51:63, :9]), axis=-1)  # reconstructed from Francesco
         elif area == "France_bis":
+            if return_full_mask:
+                mask[...,52:64, -5:] = True
+                mask[...,52:64, :9] = True
+                return mask
             return np.concatenate((data[...,52:64, -5:], data[...,52:64, :9]), axis=-1)  # fixing to CESM
         elif area == "Russia":  # lat[i]<60 and lat[i]>50: index 9-15
+            if return_full_mask:
+                mask[...,37:60, 42:79] = True
+                return mask
             return data[...,37:60, 42:79] 
         elif area == "Poland":  # From stefanon
+            if return_full_mask:
+                mask[...,44:60, 18:43] = True
+                return mask
             return data[...,44:60, 18:43]
         else:
-            print(f'Unknown area {area}')
+            logger.error(f'Unknown area {area}')
             return None
     elif model == "CESM":
         if area == "France":
+            if return_full_mask:
+                mask[...,-51:-41, -3:] = True
+                mask[...,-51:-41, :6] = True
+                return mask
             return np.concatenate((data[...,-51:-41, -3:],data[...,-51:-41, :6]), axis=-1)
         elif area == "Scandinavia":
+            if return_full_mask:
+                mask[...,-36:-20, 4:32] = True
+                return mask
             return data[...,-36:-20, 4:32]
         elif area == "Scand": # = Norway Sweden
+            if return_full_mask:
+                mask[...,-36:-20, 4:18] = True
+                return mask
             return data[...,-36:-20, 4:18]
         elif area == "Russia":  # lat[i]<60 and lat[i]>50: index 9-15
+            if return_full_mask:
+                mask[...,-48:-29, 25:48] = True
+                return mask
             return data[...,-48:-29, 25:48]  # lon[i]<55 and lon[i]>35:   index 11-21
         elif area == "Poland":  # From Stefanon
+            if return_full_mask:
+                mask[...,-48:-35, 11:26] = True
+                return mask
             return data[...,-48:-35, 11:26]
         else:
-            print(f'Unknown area {area}')
+            logger.error(f'Unknown area {area}')
             return None
     elif model == "Plasim":
         if area == "NW_Europe":
+            if return_full_mask:
+                mask[...,10:16, -1:] = True
+                mask[...,10:16, :7] = True
+                return mask
             return np.concatenate((data[...,10:16, -1:], data[...,10:16, :7]), axis=-1)  # give by Valerian/Francesco 
         elif area == "Greenland":
+            if return_full_mask:
+                mask[...,2:9, 108:120] = True
+                return mask
             return data[...,2:9, 108:120]
         elif area == "Europe":
+            if return_full_mask:
+                mask[...,7:19, -3:] = True
+                mask[...,7:19, :10] = True
+                return mask
             return np.concatenate((data[...,7:19, -3:], data[...,7:19, :10]), axis=-1)  # give by Valerian/Francesco  
         elif area == "France":
+            if return_full_mask:
+                mask[...,13:17, -1:] = True
+                mask[...,13:17, :3] = True
+                return mask
             return np.concatenate((data[...,13:17, -1:], data[...,13:17, :3]), axis=-1)  # give by valerian
         elif area == "Quebec":  # lat[i]<60 and lat[i]>50:      index: 10-13
+            if return_full_mask:
+                mask[...,10:16, 98:110] = True
+                return mask
             return data[...,10:16, 98:110]  # lon[i]<180+120 and lon[i]>180+110   index:104-106
         elif area == "USA":  # lat[i]<50 and lat[i]>25:  index: 14-22
+            if return_full_mask:
+                mask[...,14:23, 89:109] = True
+                return mask
             return data[...,14:23, 89:109]  # lon[i]<180+125 and lon[i]>180+70:  index 89-108
         elif area == "US":  # lat[i]<50 and lat[i]>25:  index: 14-22   # < fixing the area of philipinne
+            if return_full_mask:
+                mask[...,14:23, 84:104] = True
+                return mask
             return data[...,14:23, 84:104]  # lon[i]<180+125 and lon[i]>180+70:  index 89-108
         elif area == "Midwest":
+            if return_full_mask:
+                mask[...,16:20, 92:99] = True
+                return mask
             return data[...,16:20, 92:99]
         elif area == "Alberta":
+            if return_full_mask:
+                mask[...,10:15, 85:90] = True
+                return mask
             return data[...,10:15, 85:90]
         elif area == "Scandinavia":  # 55<lat<72: index: 6-11
+            if return_full_mask:
+                mask[...,6:12, 2:15] = True
+                return mask
             return data[...,6:12, 2:15]  # 5<lon<40 : index 2-14
         elif area == "Scand":  #  = Norway Sweden
+            if return_full_mask:
+                mask[...,6:12, 2:8] = True
+                return mask
             return data[...,6:12, 2:8]  # 5<lon<40 : index 2-14
         elif area == "Russia":  # lat[i]<60 and lat[i]>50: index 9-15
+            if return_full_mask:
+                mask[...,9:16, 11:22] = True
+                return mask
             return data[...,9:16, 11:22]  # lon[i]<55 and lon[i]>35:   index 11-21
         elif area == "Poland":  # lat[i]<60 and lat[i]>50: index 9-15
+            if return_full_mask:
+                mask[...,11:16, 5:12] = True
+                return mask
             return data[...,11:16, 5:12]  # lon[i]<55 and lon[i]>35:   index 11-21
         elif area == 'total':  # return all data, use for total_area function and create surface over continents
+            if return_full_mask:
+                return np.ones_like(data, dtype=bool)
             return data
         else:
-            print(f'Unknown area {area}')
+            logger.error(f'Unknown area {area}')
             return None
     else:
-        print(f'Unknown model {Model}')
+        logger.error(f'Unknown model {model}')
         return None
 
 def Greenwich(Myarray):
@@ -1050,7 +1288,7 @@ class Field:
     
 class Plasim_Field:
     def __init__(self, name, filename, label, Model, lat_start=0, lat_end=241, lon_start=0, lon_end=480,
-                 myprecision='double', mysampling=''):
+                 myprecision='double', mysampling='', years=1000):
         self.name = name    # Name inside the .nc file
         self.filename = filename # Name of the .nc file 
         self.label = label  # Label to be displayed on the graph
@@ -1060,7 +1298,7 @@ class Plasim_Field:
         self.lon_start = lon_start
         self.lon_end = lon_end
         self.Model = Model
-        self.years = 1000
+        self.years = years # years must be the correct number of years in the dataset # GM: There is probably a way to just read the years from *.nc
         self.sampling = mysampling # This string is used to distinguish daily vs 3 hr sampling, which is going to be important when we compute area integrals. The idea is that if we have already computed daily we must change the name for the new 3 hrs sampling file, otherwise the daily file will be loaded (see the routine Set_area_integral)
         if myprecision == 'double':
             self.np_precision = np.float64
@@ -1068,11 +1306,17 @@ class Plasim_Field:
         else: # we can save space since for learning we don't need as much precision
             self.np_precision = np.float32
             self.np_precision_complex = np.complex64
+      
+    def load_field(self, folder, year_list=None):
+        '''
+        Load the file from the database stored in `folder`
         
-    def load_field(self, folder):   # Load the file from the database
+        `year_list` allows to load only a subset of data. If not provided all years are loaded
+        '''
+        print(f'Loading field {self.name}')
         if self.sampling == '3hrs':
             self.var = np.zeros((self.years,1200,self.lat_end-self.lat_start,self.lon_end-self.lon_start), dtype=self.np_precision)
-            for b in range(1,11):
+            for b in range(1, self.years//100 + 1):
                 print("b = ",b)
                 for y in range(1,101):
                     for m in range(5,10):
@@ -1084,19 +1328,37 @@ class Plasim_Field:
             
         else:
             dataset = Dataset(folder+self.filename+'.nc')
-            self.time = np.asarray(dataset.variables['time'][:]).reshape(self.years,-1)
-            if (self.name == 'zg') or (self.name == 'ua') or (self.name == 'va'): # we need to take out dimension that is useless (created by extracting a level)
-                self.var = np.asarray(dataset.variables[self.name][:,0,self.lat_start:self.lat_end,self.lon_start:self.lon_end],  dtype=self.np_precision)
+            if year_list is None: # load all years
+                self.time = np.asarray(dataset.variables['time']).reshape(self.years,-1) # CHANGE TO XARRAY
             else:
-                self.var = np.asarray(dataset.variables[self.name][:,self.lat_start:self.lat_end,self.lon_start:self.lon_end],  dtype=self.np_precision)
-            print("input var.shape = ",self.var.shape)
-            self.var = self.var.reshape(self.years, self.var.shape[0]//self.years, self.var.shape[1], self.var.shape[2])
+                units_per_year = dataset.variables['time'].shape[0]//self.years
+                if dataset.variables['time'].shape[0] != self.years*units_per_year:
+                    raise ValueError(f"{self.filename} doesn't have {self.years} years") 
+                self.time = np.concatenate([dataset.variables['time'][y*units_per_year:(y+1)*units_per_year,...] for y in year_list], axis=0).reshape(len(year_list),-1)
+            print('Loaded time array')
+            if (self.name == 'zg') or (self.name == 'ua') or (self.name == 'va'): # we need to take out dimension that is useless (created by extracting a level)
+                if year_list is None:
+                    self.var = np.asarray(dataset.variables[self.name][:,0,self.lat_start:self.lat_end,self.lon_start:self.lon_end],  dtype=self.np_precision)
+                else:
+                    self.var = [np.asarray(dataset.variables[self.name][y*units_per_year:(y+1)*units_per_year,0,self.lat_start:self.lat_end,self.lon_start:self.lon_end],  dtype=self.np_precision) for y in year_list]
+                    self.var = np.concatenate(self.var, axis=0)
+            else: 
+                if year_list is None:
+                    self.var = np.asarray(dataset.variables[self.name][:,self.lat_start:self.lat_end,self.lon_start:self.lon_end],  dtype=self.np_precision)
+                else:
+                    self.var = [np.asarray(dataset.variables[self.name][y*units_per_year:(y+1)*units_per_year,self.lat_start:self.lat_end,self.lon_start:self.lon_end],  dtype=self.np_precision) for y in year_list]
+                    self.var = np.concatenate(self.var, axis=0)
+            print(f"input {self.var.shape = }")
+            if year_list is None:
+                self.var = self.var.reshape(self.years, self.var.shape[0]//self.years, *self.var.shape[1:])
+            else:
+                self.var = self.var.reshape(len(year_list), units_per_year, *self.var.shape[1:])
             self.lon = dataset.variables["lon"][self.lon_start:self.lon_end]
             self.lat = dataset.variables["lat"][self.lat_start:self.lat_end]
             self.LON, self.LAT = np.meshgrid(self.lon, self.lat)
-            print("output var.shape = ",self.var.shape)
-            print("self.time.shape = ",self.time.shape)
-            print(np.min(np.diff(self.time))," < np.diff(self.time) < ",np.max(np.diff(self.time)))
+            print(f"output {self.var.shape = }")
+            print(f"{self.time.shape = }")
+            print(f'{np.min(np.diff(self.time))} < np.diff(self.time) < {np.max(np.diff(self.time))}')
             dataset.close()
         
     def load_month(self, folder,century,year,month):   # Load individual months CAREFUL: parameters are defined from 1 to 12 not from 0 to 11!!!
