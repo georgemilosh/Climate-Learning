@@ -744,7 +744,7 @@ def make_X(fields, time_start=30, time_end=120, T=14, tau=0):
 
 @ut.execution_time
 @ut.indent_logger(logger)
-def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0, percent=5, threshold=None):
+def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0, percent=5, threshold=None):  
     '''
     Combines `make_X` and `assign_labels`
 
@@ -1554,6 +1554,7 @@ def prepare_XY(fields, make_XY_kwargs, roll_X_kwargs,
 @ut.execution_time
 @ut.indent_logger(logger)
 def prepare_data(load_data_kwargs, prepare_XY_kwargs):
+    # GM: since the kwargs are passed in a recursive manner it makes it difficult to keep track of how the function such as prepare_data can be used in isolation from Trainer class, or for example prepare_XY. Perhaps some short totorial would be appropriate
     '''
     Combines all the steps from loading the data to the creation of X and Y
 
@@ -1576,7 +1577,7 @@ def prepare_data(load_data_kwargs, prepare_XY_kwargs):
     # load data
     fields = load_data(**load_data_kwargs)
 
-    return prepare_XY(fields, **prepare_XY_kwargs)
+    return prepare_XY(fields, **prepare_XY_kwargs)  
 
 @ut.execution_time
 def run(folder, prepare_data_kwargs, k_fold_cross_val_kwargs, log_level=logging.INFO):
