@@ -35,7 +35,11 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import confusion_matrix
 from skimage.transform import resize
 
-from utilities import pretty_time
+path_to_ERA = str(Path(__file__).resolve().parent)
+if not path_to_ERA in sys.path:
+    sys.path.insert(1, path_to_ERA)
+
+from utilities import execution_time
 
 
 global plotter
@@ -1356,7 +1360,7 @@ class Plasim_Field:
             print(f"{self.time.shape = }")
             print(f'{np.min(np.diff(self.time))} < np.diff(self.time) < {np.max(np.diff(self.time))}')
             dataset.close()
-            print(f'total time: {pretty_time(time.time() - start_time)}\n')
+            print(f'total time: (time.time() - start_time)\n')
             
             
         
