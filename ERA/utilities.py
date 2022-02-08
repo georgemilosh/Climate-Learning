@@ -341,6 +341,12 @@ def dict2json(d, filename):
     '''
     with open(filename, 'w') as j:
         json.dump(d, j, indent=4)
+        
+def dict2str(d, indent=4, **kwargs):
+    '''
+    A nice way of printing a nested dictionary
+    '''
+    return json.dumps(d, indent=indent, **kwargs)
 
 #### MANAGE NESTED DICTIONARIES #####
 

@@ -1,0 +1,111 @@
+{
+    "run_kwargs": {
+        "log_level": 20,
+        "load_data_kwargs": {
+            "dataset_years": 8000,
+            "year_list": null,
+            "sampling": "",
+            "Model": "Plasim",
+            "area": "France",
+            "filter_area": "France",
+            "lon_start": 0,
+            "lon_end": 128,
+            "lat_start": 0,
+            "lat_end": 22,
+            "mylocal": "/local/gmiloshe/PLASIM/",
+            "fields": [
+                "t2m",
+                "zg500",
+                "mrso_filtered"
+            ]
+        },
+        "prepare_XY_kwargs": {
+            "do_premix": false,
+            "premix_seed": 0,
+            "do_balance_folds": true,
+            "nfolds": 10,
+            "year_permutation": null,
+            "flatten_time_axis": true,
+            "make_XY_kwargs": {
+                "label_field": "t2m",
+                "time_start": 30,
+                "time_end": 120,
+                "T": 14,
+                "tau": 0,
+                "percent": 5,
+                "threshold": null
+            },
+            "roll_X_kwargs": {
+                "roll_axis": "lon",
+                "roll_steps": 64
+            }
+        },
+        "k_fold_cross_val_kwargs": {
+            "load_from": "last",
+            "nfolds": 10,
+            "val_folds": 1,
+            "u": 1,
+            "fullmetrics": true,
+            "training_epochs": 40,
+            "training_epochs_tl": 10,
+            "loss": "sparse_categorical_crossentropy",
+            "lr": 0.0001,
+            "create_model_kwargs": {
+                "conv_channels": [
+                    32,
+                    64,
+                    64
+                ],
+                "kernel_sizes": 3,
+                "strides": 1,
+                "batch_normalizations": true,
+                "conv_activations": "relu",
+                "conv_dropouts": 0.2,
+                "max_pool_sizes": [
+                    2,
+                    2,
+                    false
+                ],
+                "dense_units": [
+                    64,
+                    2
+                ],
+                "dense_activations": [
+                    "relu",
+                    null
+                ],
+                "dense_dropouts": [
+                    0.2,
+                    false
+                ]
+            },
+            "train_model_kwargs": {
+                "enable_early_stopping": false,
+                "batch_size": 1024,
+                "checkpoint_every": 1,
+                "additional_callbacks": [
+                    "csv_logger"
+                ],
+                "early_stopping_kwargs": {
+                    "monitor": "val_CustomLoss",
+                    "min_delta": 0,
+                    "patience": 0,
+                    "mode": "auto"
+                }
+            },
+            "optimal_checkpoint_kwargs": {
+                "metric": "val_CustomLoss",
+                "direction": "minimize",
+                "first_epoch": 1,
+                "collective": true,
+                "bypass": null
+            }
+        }
+    },
+    "telegram_kwargs": {
+        "telegram_bot_token": "~/ENSMLbot.txt",
+        "chat_ID": null,
+        "telegram_logging_level": 31,
+        "telegram_logging_format": null
+    }
+}
