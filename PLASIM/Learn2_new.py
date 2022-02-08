@@ -784,12 +784,12 @@ def roll_X(X, roll_axis='lon', roll_steps=64):
     ----------
     X : np.ndarray
         with shape (years, days, lat, lon, field)
-    axis : str, optional
+    roll_axis : str, optional
         'year' (or 'y'), 'day' (or 'd'), 'lat', 'lon', 'field' (or 'f')
-    steps : int, optional
-        number of gridsteps to roll: a positive value for 'steps' means that the elements of the array are moved forward in it,
-        e.g. `steps` = 1 means that the old first element is now in the second place
-        This means that for every axis a positive value of `steps` yields a shift of the array
+    roll_steps : int, optional
+        number of gridsteps to roll: a positive value for `roll_steps` means that the elements of the array are moved forward in it,
+        e.g. `roll_steps` = 1 means that the old first element is now in the second place
+        This means that for every axis a positive value of `roll_steps` yields a shift of the array
         'year', 'day' : forward in time
         'lat' : southward
         'lon' : eastward
@@ -797,7 +797,7 @@ def roll_X(X, roll_axis='lon', roll_steps=64):
     
     Returns
     -------
-    X_rolled : np.ndarray
+    np.ndarray
         of the same shape of `X`
     '''
     if roll_steps == 0:
@@ -836,9 +836,9 @@ def shuffle_years(X, permutation=None, seed=0, apply=False):
     Returns
     -------
     if apply:
-        np.ndarray of the same shape of X
+        np.ndarray of the same shape of X (permuted data)
     else:
-        np.ndarray of shape (X.shape[0],)
+        np.ndarray of shape (X.shape[0],) (permutation)
     '''
     if permutation is None:
         if seed is not None:

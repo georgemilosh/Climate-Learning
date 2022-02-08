@@ -162,10 +162,19 @@ def indent_logger(logger=None):
     def wrapper_outer(func):
         @wraps(func)
         def wrapper_inner(*args, **kwargs):
-            streams = [h.stream for h in logger.handlers if hasattr(h, 'stream')]
-            # save old write and emit functions
+            streams = []
+            # get the handlers of the logger and its parents
+            c = logger
+            while c:
+                streams += [h.stream for h in c.handlers if hasattr(h, 'stream')]
+                if not c.propagate:
+                    c = None    #break out
+                else:
+                    c = c.parent
+            
+            # save old write functions
             old_write = [stream.write if hasattr(stream, 'write') else None for stream in streams]
-            # indent write and emit functions
+            # indent write functions
             for i,stream in enumerate(streams):
                 if old_write[i] is not None:
                     stream.write = indent_write(stream.write)
