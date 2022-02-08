@@ -587,8 +587,8 @@ def RescaleNormalize(X,RESCALE_TYPE, creation,checkpoint_name):
     else:
         print("===Rescaling X===")
         if creation == None:
-            maxX = np.max(X)
-            minX = np.min(X)
+            maxX = np.max(X,tuple(list(range(len(X.shape)-1)))) # Equivalent to np.max(X,(0,1,...,last-1))
+            minX = np.min(X,tuple(list(range(len(X.shape)-1))))
             np.save(checkpoint_name+'/maxX', maxX)
             np.save(checkpoint_name+'/minX', minX)
         else:
