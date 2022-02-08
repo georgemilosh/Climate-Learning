@@ -41,25 +41,11 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers, models
 
-## user defined modules
-this_module = sys.modules[__name__]
-path_to_here = Path(__file__).resolve().parent
-path_to_ERA = path_to_here / 'ERA' # when absolute path, so you can run the script from another folder (outside plasim)
-if not os.path.exists(path_to_ERA):
-    path_to_ERA = path_to_here.parent / 'ERA'
-    if not os.path.exists(path_to_ERA):
-        raise FileNotFoundError('Could not find ERA folder')
+sys.path.insert(1, '../ERA')
 
-# go to the parent so vscode is happy with code completion :)
-path_to_ERA = path_to_ERA.parent
-path_to_ERA = str(path_to_ERA)
-print(f'{path_to_ERA = }/ERA/')
-if not path_to_ERA in sys.path:
-    sys.path.insert(1, path_to_ERA)
-
-import ERA.ERA_Fields as ef # general routines
-import ERA.TF_Fields as tff # tensorflow routines
-import ERA.utilities as ut
+import ERA_Fields as ef # general routines
+import TF_Fields as tff # tensorflow routines
+import utilities as ut
 
 
 
