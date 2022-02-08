@@ -162,10 +162,27 @@ def indent_logger(logger=None):
     def wrapper_outer(func):
         @wraps(func)
         def wrapper_inner(*args, **kwargs):
-            streams = [h.stream for h in logger.handlers if hasattr(h, 'stream')]
-            # save old write and emit functions
+            streams = []
+            # get the handlers of the logger and its parents
+            c = logger
+            while c:
+                # # avoid indenting the same stream more than once
+                # # in case both a logger and one of its parent log to the same stream, which would be silly anyways
+                # _streams = [h.stream for h in c.handlers if hasattr(h, 'stream')]
+                # for s in _streams:
+                #     if s not in streams:
+                #         streams.append(s)
+
+                # assuming the loggers are not silly and so no stream is repeated
+                streams = [h.stream for h in c.handlers if hasattr(h, 'stream')]
+                if not c.propagate:
+                    c = None    #break out
+                else:
+                    c = c.parent
+            
+            # save old write functions
             old_write = [stream.write if hasattr(stream, 'write') else None for stream in streams]
-            # indent write and emit functions
+            # indent write functions
             for i,stream in enumerate(streams):
                 if old_write[i] is not None:
                     stream.write = indent_write(stream.write)
@@ -341,6 +358,12 @@ def dict2json(d, filename):
     '''
     with open(filename, 'w') as j:
         json.dump(d, j, indent=4)
+        
+def dict2str(d, indent=4, **kwargs):
+    '''
+    A nice way of printing a nested dictionary
+    '''
+    return json.dumps(d, indent=indent, **kwargs)
 
 #### MANAGE NESTED DICTIONARIES #####
 

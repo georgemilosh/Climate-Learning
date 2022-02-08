@@ -36,7 +36,7 @@ path_to_ERA = str(Path(__file__).resolve().parent)
 if not path_to_ERA in sys.path:
     sys.path.insert(1, path_to_ERA)
 
-from utilities import execution_time
+from utilities import execution_time, indent_logger
 
 logger = logging.getLogger(__name__)
 logger.level = logging.INFO
@@ -1309,6 +1309,7 @@ class Plasim_Field:
             self.np_precision_complex = np.complex64
         
     @execution_time
+    @indent_logger(logger)
     def load_field(self, folder, year_list=None):
         '''
         Load the file from the database stored in `folder`
