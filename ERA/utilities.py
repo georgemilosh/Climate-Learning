@@ -166,7 +166,15 @@ def indent_logger(logger=None):
             # get the handlers of the logger and its parents
             c = logger
             while c:
-                streams += [h.stream for h in c.handlers if hasattr(h, 'stream')]
+                # # avoid indenting the same stream more than once
+                # # in case both a logger and one of its parent log to the same stream, which would be silly anyways
+                # _streams = [h.stream for h in c.handlers if hasattr(h, 'stream')]
+                # for s in _streams:
+                #     if s not in streams:
+                #         streams.append(s)
+
+                # assuming the loggers are not silly and so no stream is repeated
+                streams = [h.stream for h in c.handlers if hasattr(h, 'stream')]
                 if not c.propagate:
                     c = None    #break out
                 else:
