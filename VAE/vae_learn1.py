@@ -570,36 +570,6 @@ def CreateFolder(creation,checkpoint_name):
         shutil.copy('reconstruction.py', checkpoint_name)
     return myinput
 
-def LoadData(creation, Model, lat_start, lat_end, lon_start, lon_end, year_list, filter_area='France'):
-    print("==Reading data==")
-
-    ###### THIS FILEDS ARE ANOMALIES!
-    t2m   = ef.Plasim_Field('tas','ANO_LONG_tas','Temperature',            Model, lat_start=lat_start, lat_end=lat_end, lon_start=lon_start, lon_end=lon_end, myprecision='single',mysampling='',years=8000)
-    zg500 = ef.Plasim_Field('zg','ANO_LONG_zg500','500 mbar Geopotential', Model, lat_start=lat_start, lat_end=lat_end, lon_start=lon_start, lon_end=lon_end, myprecision='single',mysampling='',years=8000)
-    mrso  = ef.Plasim_Field('mrso','ANO_LONG_mrso','soil moisture',        Model, lat_start=lat_start, lat_end=lat_end, lon_start=lon_start, lon_end=lon_end, myprecision='single',mysampling='',years=8000)
-    if year_list == range(8000): # we are asking the full data set
-        t2m.load_field('/local/gmiloshe/PLASIM/Data_Plasim_LONG/')
-        zg500.load_field('/local/gmiloshe/PLASIM/Data_Plasim_LONG/')
-        mrso.load_field('/local/gmiloshe/PLASIM/Data_Plasim_LONG/')
-    else:
-        t2m.load_field('/local/gmiloshe/PLASIM/Data_Plasim_LONG/', year_list=year_list)
-        zg500.load_field('/local/gmiloshe/PLASIM/Data_Plasim_LONG/', year_list=year_list)
-        mrso.load_field('/local/gmiloshe/PLASIM/Data_Plasim_LONG/', year_list=year_list)
-    
-    # set to zero all values outside `filter_area`
-    
-    filter_mask = ef.create_mask(Model, filter_area, t2m.var, axes='last 2', return_full_mask=True)
-    t2m.var *= filter_mask
-    filter_mask = ef.create_mask(Model, filter_area, mrso.var, axes='last 2', return_full_mask=True)
-    mrso.var *= filter_mask
-    
-    X = zg500.var.reshape(zg500.var.shape[0]*zg500.var.shape[1],zg500.var.shape[2],zg500.var.shape[3],1)
-
-    INPUT_DIM = X.shape[1:]  # Image dimension
-    print("X.shape = ", X.shape, "np.mean(X) = ", np.mean(X), " ,np.std(X) = ", np.std(X))
-    
-    return X, INPUT_DIM
-
 def RescaleNormalize(X,RESCALE_TYPE, creation,checkpoint_name):
     if RESCALE_TYPE == 'normalize':
         print("===Normalizing X===")
@@ -688,7 +658,7 @@ def PrepareDataAndVAE(creation=None, DIFFERENT_YEARS=None):
     
     myinput = CreateFolder(creation,checkpoint_name)
     
-    _fields = load_data() # Fix support for different years
+    _fields = load_data(dataset_years=8000, year_list=SET_YEARS) # Fix support for different years
   
     X, _Y, _year_permutation = prepare_XY(_fields)
     #X = X.reshape(-1,*X.shape[2:])
