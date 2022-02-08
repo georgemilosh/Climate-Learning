@@ -568,6 +568,8 @@ def CreateFolder(creation,checkpoint_name):
         shutil.copy(__file__, checkpoint_name+'/Funs.py') # Copy this file to the directory of the training
         shutil.copy('history.py', checkpoint_name)  # Also copy a version of the files we work with to analyze the results of the training
         shutil.copy('reconstruction.py', checkpoint_name)
+        shutil.copy('../ERA/ERA_Fields.py', checkpoint_name)
+        shutil.copy('../ERA/TF_Fields.py', checkpoint_name)
     return myinput
 
 def RescaleNormalize(X,RESCALE_TYPE, creation,checkpoint_name):
@@ -659,7 +661,10 @@ def PrepareDataAndVAE(creation=None, DIFFERENT_YEARS=None):
     myinput = CreateFolder(creation,checkpoint_name)
     
     _fields = load_data(dataset_years=8000, year_list=SET_YEARS) # Fix support for different years
-  
+    firstkey = next(iter(_fields))
+    LON = _fields[firstkey].LON
+    LAT = _fields[firstkey].LAT
+    print("LON.shape = ", LON.shape, " ; LAT.shape = ", LAT.shape)
     X, _Y, _year_permutation = prepare_XY(_fields)
     #X = X.reshape(-1,*X.shape[2:])
     
@@ -670,7 +675,7 @@ def PrepareDataAndVAE(creation=None, DIFFERENT_YEARS=None):
 
     vae, history, N_EPOCHS, INITIAL_EPOCH, checkpoint, checkpoint_path = ConstructVAE(INPUT_DIM, Z_DIM, checkpoint_name, N_EPOCHS, myinput, K1, K2)
     
-    return X, vae, Z_DIM, N_EPOCHS, INITIAL_EPOCH, BATCH_SIZE, LEARNING_RATE, checkpoint_path, checkpoint_name, myinput, history
+    return X, LON, LAT, vae, Z_DIM, N_EPOCHS, INITIAL_EPOCH, BATCH_SIZE, LEARNING_RATE, checkpoint_path, checkpoint_name, myinput, history
 
 if __name__ == '__main__': # we do this so that we can then load this file as a module in reconstruction.py
     print("==Checking GPU==")
@@ -683,7 +688,7 @@ if __name__ == '__main__': # we do this so that we can then load this file as a 
     tf.test.is_built_with_cuda()
 
     start = time.time()
-    X, vae, Z_DIM, N_EPOCHS, INITIAL_EPOCH, BATCH_SIZE, LEARNING_RATE, checkpoint_path, checkpoint_name, myinput, history = PrepareDataAndVAE()
+    X, LON, LAT, vae, Z_DIM, N_EPOCHS, INITIAL_EPOCH, BATCH_SIZE, LEARNING_RATE, checkpoint_path, checkpoint_name, myinput, history = PrepareDataAndVAE()
 
     cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_path,save_weights_only=True,verbose=1)
 
