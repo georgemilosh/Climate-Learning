@@ -97,7 +97,7 @@ for h in [200,300,500,850]: # geopotential heights
 
     
 def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', area='France', filter_area='France',
-              lon_start=0, lon_end=128, lat_start=0, lat_end=22, mylocal='/local/gmiloshe/PLASIM/',fields=['t2m_filtered','zg500','mrso_filtered']):
+              lon_start=0, lon_end=128, lat_start=0, lat_end=24, mylocal='/local/gmiloshe/PLASIM/',fields=['t2m_filtered','zg500','mrso_filtered']):
     '''
     Loads the data into Plasim_Fields objects
 
@@ -188,7 +188,8 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
     
     return _fields
 
-def prepare_data(load_data_kwargs, prepare_XY_kwargs):
+def prepare_data(load_data_kwargs=None, prepare_XY_kwargs=None):
+    # GM: since the kwargs are passed in a recursive manner it makes it difficult to keep track of how the function such as prepare_data can be used in isolation from Trainer class, or for example prepare_XY. Perhaps some short totorial would be appropriate
     '''
     Combines all the steps from loading the data to the creation of X and Y
 
@@ -208,10 +209,14 @@ def prepare_data(load_data_kwargs, prepare_XY_kwargs):
     year_permutation : np.ndarray
         with shape (years,), final permutaion of the years that reproduces X and Y once applied to the just loaded data
     '''
+    if load_data_kwargs is None:
+        load_data_kwargs = {}
+    if prepare_XY_kwargs is None:
+        prepare_XY_kwargs = {}
     # load data
     fields = load_data(**load_data_kwargs)
 
-    return prepare_XY(fields, **prepare_XY_kwargs)
+    return prepare_XY(fields, **prepare_XY_kwargs)  
 
 def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0, percent=5, threshold=None):
     '''
@@ -273,7 +278,50 @@ def assign_labels(field, time_start=30, time_end=120, T=14, percent=5, threshold
     A, A_flattened, threshold =  field.ComputeTimeAverage(time_start, time_end, T=T, percent=percent, threshold=threshold)[:3]
     return np.array(A >= threshold, dtype=int)
 
-def prepare_XY(fields, make_XY_kwargs, roll_X_kwargs,
+def roll_X(X, roll_axis='lon', roll_steps=64):
+    '''
+    Rolls `X` along a given axis. useful for example for moving France away from the Greenwich meridian.
+    In other words this allows one, for example, to shift the grid so that desired areas are not found at the boundary.
+    In principle this function allows us to roll along arbitrary axis, including days or years.
+
+    Parameters
+    ----------
+    X : np.ndarray
+        with shape (years, days, lat, lon, field)
+    axis : str, optional
+        'year' (or 'y'), 'day' (or 'd'), 'lat', 'lon', 'field' (or 'f')
+    steps : int, optional
+        number of gridsteps to roll: a positive value for 'steps' means that the elements of the array are moved forward in it,
+        e.g. `steps` = 1 means that the old first element is now in the second place
+        This means that for every axis a positive value of `steps` yields a shift of the array
+        'year', 'day' : forward in time
+        'lat' : southward
+        'lon' : eastward
+        'field' : forward in the numbering of the fields
+    
+    Returns
+    -------
+    X_rolled : np.ndarray
+        of the same shape of `X`
+    '''
+    if roll_steps == 0:
+        return X
+    if roll_axis.startswith('y'):
+        roll_axis = 0
+    elif roll_axis.startswith('d'):
+        roll_axis = 1
+    elif roll_axis == 'lat':
+        roll_axis = 2
+    elif roll_axis == 'lon':
+        roll_axis = 3
+    elif roll_axis.startswith('f'):
+        roll_axis = 4
+    else:
+        raise ValueError(f'Unknown valur for axis: {roll_axis}')
+    return np.roll(X,roll_steps,axis=roll_axis)
+
+
+def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
                do_premix=False, premix_seed=0, do_balance_folds=True, nfolds=10, year_permutation=None, flatten_time_axis=True):
     '''
     Performs all operations to extract from the fields X and Y ready to be fed to the neural network.
@@ -307,6 +355,10 @@ def prepare_XY(fields, make_XY_kwargs, roll_X_kwargs,
     tot_permutation : np.ndarray
         with shape (years,), final permutaion of the years that reproduces X and Y once applied to the just loaded data
     '''
+    if make_XY_kwargs is None:
+        make_XY_kwargs = {}
+    if roll_X_kwargs is None:
+        roll_X_kwargs = {}
     X,Y = make_XY(fields, **make_XY_kwargs)
     
     # move greenwich_meridian
@@ -652,8 +704,8 @@ def PrepareDataAndVAE(creation=None, DIFFERENT_YEARS=None):
     
     _fields = load_data() # Fix support for different years
   
-    prepare_XY_kwargs=dict(label_field='t2m', time_start=30, time_end=120, T=14, tau=0, percent=5, threshold=None, roll_axis='lon', roll_steps=64)
-    X, _Y, _year_permutation = prepare_XY(_fields, **prepare_XY_kwargs)
+    X, _Y, _year_permutation = prepare_XY(_fields)
+    #X = X.reshape(-1,*X.shape[2:])
     
     INPUT_DIM = X.shape[1:]  # Image dimension
     
