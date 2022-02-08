@@ -101,21 +101,16 @@ level   name                events
 ### IMPORT LIBRARIES #####
 
 ## general purpose
-from cmath import log
 from copy import deepcopy
 import os as os
 from pathlib import Path
 from stat import S_IREAD
 import sys
-from tkinter.messagebox import NO
 import traceback
-from unittest import skip
 import warnings
 import time
 import shutil
 import gc
-from matplotlib import path
-from matplotlib.pyplot import hist, loglog
 import psutil
 import numpy as np
 import inspect
@@ -204,10 +199,10 @@ def get_default_params(func, recursive=False):
     s = inspect.signature(func)
     default_params = {
         k:v.default for k,v in s.parameters.items()
-        if v.default is not inspect.Parameter.empty
+        if (v.default is not inspect.Parameter.empty and not k.endswith('_kwargs'))
     }
     if recursive: # look for parameters ending in '_kwargs' and extract further default arguments
-        possible_other_params = [k for k,v in s.parameters.items() if (v.default is inspect.Parameter.empty and k.endswith('_kwargs'))]
+        possible_other_params = [k for k,v in s.parameters.items() if k.endswith('_kwargs')]
         for k in possible_other_params:
             func_name = k.rsplit('_',1)[0] # remove '_kwargs'
             try:
@@ -1048,7 +1043,7 @@ def early_stopping(monitor='val_CustomLoss', min_delta=0, patience=0, mode='auto
 
 @ut.execution_time
 @ut.indent_logger(logger)
-def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics, early_stopping_kwargs, enable_early_stopping=False,
+def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics, early_stopping_kwargs=None, enable_early_stopping=False,
                 batch_size=1024, checkpoint_every=1, additional_callbacks=['csv_logger']):
     '''
     Trains a given model checkpointing its weights
@@ -1086,6 +1081,8 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     additional_callbacks : list of keras.callbacks.Callback objects or list of str, optional
         string items are interpreted, for example 'csv_logger' creates a CSVLogger callback
     '''
+    if early_stopping_kwargs is None:
+        early_stopping_kwargs = {}
     folder = folder.rstrip('/')
     ckpt_name = folder + '/cp-{epoch:04d}.ckpt'
 
@@ -1279,7 +1276,7 @@ def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='m
 
 @ut.execution_time
 @ut.indent_logger(logger)
-def k_fold_cross_val(folder, X, Y, create_model_kwargs, train_model_kwargs, optimal_checkpoint_kwargs, load_from='last', nfolds=10, val_folds=1, u=1,
+def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=None, optimal_checkpoint_kwargs=None, load_from='last', nfolds=10, val_folds=1, u=1,
                      fullmetrics=True, training_epochs=40, training_epochs_tl=10, loss='sparse_categorical_crossentropy', lr=1e-4):
     '''
     Performs k fold cross validation on a model architecture.
@@ -1332,6 +1329,12 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, train_model_kwargs, opti
     lr : float, optional
         learning_rate for Adam optimizer       
     '''
+    if create_model_kwargs is None:
+        create_model_kwargs = {}
+    if train_model_kwargs is None:
+        train_model_kwargs = {}
+    if optimal_checkpoint_kwargs is None:
+        optimal_checkpoint_kwargs = {}
     folder = folder.rstrip('/')
 
     # get the actual run name from where to load
@@ -1472,7 +1475,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs, train_model_kwargs, opti
 
 @ut.execution_time
 @ut.indent_logger(logger)
-def prepare_XY(fields, make_XY_kwargs, roll_X_kwargs,
+def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
                do_premix=False, premix_seed=0, do_balance_folds=True, nfolds=10, year_permutation=None, flatten_time_axis=True):
     '''
     Performs all operations to extract from the fields X and Y ready to be fed to the neural network.
@@ -1506,6 +1509,10 @@ def prepare_XY(fields, make_XY_kwargs, roll_X_kwargs,
     tot_permutation : np.ndarray
         with shape (years,), final permutaion of the years that reproduces X and Y once applied to the just loaded data
     '''
+    if make_XY_kwargs is None:
+        make_XY_kwargs = {}
+    if roll_X_kwargs is None:
+        roll_X_kwargs = {}
     X,Y = make_XY(fields, **make_XY_kwargs)
     
     # move greenwich_meridian
@@ -1553,7 +1560,7 @@ def prepare_XY(fields, make_XY_kwargs, roll_X_kwargs,
 
 @ut.execution_time
 @ut.indent_logger(logger)
-def prepare_data(load_data_kwargs, prepare_XY_kwargs):
+def prepare_data(load_data_kwargs=None, prepare_XY_kwargs=None):
     # GM: since the kwargs are passed in a recursive manner it makes it difficult to keep track of how the function such as prepare_data can be used in isolation from Trainer class, or for example prepare_XY. Perhaps some short totorial would be appropriate
     '''
     Combines all the steps from loading the data to the creation of X and Y
@@ -1574,13 +1581,17 @@ def prepare_data(load_data_kwargs, prepare_XY_kwargs):
     year_permutation : np.ndarray
         with shape (years,), final permutaion of the years that reproduces X and Y once applied to the just loaded data
     '''
+    if load_data_kwargs is None:
+        load_data_kwargs = {}
+    if prepare_XY_kwargs is None:
+        prepare_XY_kwargs = {}
     # load data
     fields = load_data(**load_data_kwargs)
 
     return prepare_XY(fields, **prepare_XY_kwargs)  
 
 @ut.execution_time
-def run(folder, prepare_data_kwargs, k_fold_cross_val_kwargs, log_level=logging.INFO):
+def run(folder, prepare_data_kwargs=None, k_fold_cross_val_kwargs=None, log_level=logging.INFO):
     '''
     Perfroms a single full run
 
@@ -1593,6 +1604,11 @@ def run(folder, prepare_data_kwargs, k_fold_cross_val_kwargs, log_level=logging.
     k_fold_cross_val_kwargs : dict
         arguments to pass to the `k_fold_cross_val` function
     '''
+    if prepare_data_kwargs is None:
+        prepare_data_kwargs = get_default_params(prepare_data, recursive=True)
+    if k_fold_cross_val_kwargs is None:
+        k_fold_cross_val_kwargs = get_default_params(k_fold_cross_val, recursive=True)
+    
     load_data_kwargs = prepare_data_kwargs['load_data_kwargs']
     prepare_XY_kwargs = prepare_data_kwargs['prepare_XY_kwargs']
     label_field = ut.extract_nested(prepare_data_kwargs, 'label_field')
@@ -1718,7 +1734,7 @@ class Trainer():
         iteration_values = [kwargs[k] for k in iterate_over]
         # expand the iterations into a list performing the meshgrid
         iteration_values = list(zip(*[m.flatten() for m in np.meshgrid(*iteration_values, indexing='ij')]))
-        # ensure json serialazability by converting to string and back
+        # ensure json serializability by converting to string and back
         iteration_values = ast.literal_eval(str(iteration_values))
 
         # add the non iterative kwargs
@@ -1785,7 +1801,7 @@ class Trainer():
                 logger.handlers.remove(th)
                 logger.log(45, 'Removed telegram logger')
 
-    def run(self, folder, load_data_kwargs, prepare_XY_kwargs, k_fold_cross_val_kwargs, log_level=logging.INFO):
+    def run(self, folder, load_data_kwargs=None, prepare_XY_kwargs=None, k_fold_cross_val_kwargs=None, log_level=logging.INFO):
         '''
         Performs a single full run
 
@@ -1807,6 +1823,13 @@ class Trainer():
         RuntimeError
             If an exception is raised during the run
         '''
+        if load_data_kwargs is None:
+            load_data_kwargs = {}
+        if prepare_XY_kwargs is None:
+            prepare_XY_kwargs = {}
+        if k_fold_cross_val_kwargs is None:
+            k_fold_cross_val_kwargs = {}
+
         os.mkdir(folder)
 
         # setup logger to file
