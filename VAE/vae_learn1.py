@@ -524,15 +524,15 @@ def PrepareParameters(creation):
     print("==Preparing Parameters==")
     WEIGHTS_FOLDER = './models/'
     
-    RESCALE_TYPE =  'rescale' # 'nomralize' # 
+    RESCALE_TYPE = 'normalize' # 'rescale' #  # 
     Z_DIM = 64 #8 #16 #256 # Dimension of the latent vector (z)
     BATCH_SIZE = 128#512
     LEARNING_RATE = 1e-3#5e-4# 1e-3#5e-6
     N_EPOCHS = 20#600#200
     SET_YEARS = range(8000) # the set of years that variational autoencoder sees
     SET_YEARS_LABEL = 'range8000'
-    K1 = 0.9 # 1#100
-    K2 = 0.1 #1
+    K1 = 0.5 # 1#100
+    K2 = 0.5 #1
     
     data_path='../../gmiloshe/PLASIM/'
     
@@ -544,7 +544,7 @@ def PrepareParameters(creation):
     lat_end = 24
     Months1 = [0, 0, 0, 0, 0, 0, 30, 30, 30, 30, 30, 0, 0, 0] 
     Tot_Mon1 = list(itertools.accumulate(Months1))
-    checkpoint_name = WEIGHTS_FOLDER+Model+'_t2mzg500mrso_yrs-'+SET_YEARS_LABEL+'_'+RESCALE_TYPE+'_k1_'+str(K1)+'_k2_'+str(K2)+'_LR_'+str(LEARNING_RATE)+'_ZDIM_'+str(Z_DIM)
+    checkpoint_name = WEIGHTS_FOLDER+Model+'_t2mzg500mrso_yrs-'+SET_YEARS_LABEL+'_last9folds_'+RESCALE_TYPE+'_k1_'+str(K1)+'_k2_'+str(K2)+'_LR_'+str(LEARNING_RATE)+'_ZDIM_'+str(Z_DIM)
     return WEIGHTS_FOLDER, RESCALE_TYPE, Z_DIM, BATCH_SIZE, LEARNING_RATE, N_EPOCHS, SET_YEARS, K1, K2, checkpoint_name, data_path, Model, lon_start, lon_end, lat_start, lat_end, Tot_Mon1
     
 def CreateFolder(creation,checkpoint_name):
@@ -666,6 +666,8 @@ def PrepareDataAndVAE(creation=None, DIFFERENT_YEARS=None):
     LAT = _fields[firstkey].LAT
     print("LON.shape = ", LON.shape, " ; LAT.shape = ", LAT.shape)
     X, _Y, _year_permutation = prepare_XY(_fields)
+    np.save(checkpoint_name+'/year_permutation',_year_permutation)
+    np.save(checkpoint_name+'/Y',_Y)
     #X = X.reshape(-1,*X.shape[2:])
     
     INPUT_DIM = X.shape[1:]  # Image dimension
@@ -696,7 +698,8 @@ if __name__ == '__main__': # we do this so that we can then load this file as a 
     #vae.summary()
 
     print("==fit ==")
-    my_history = vae.fit(X, epochs=N_EPOCHS, initial_epoch=INITIAL_EPOCH, batch_size=BATCH_SIZE, shuffle=True, callbacks=[cp_callback])
+    print("X[X.shape[0]//10:,...] = ", X[X.shape[0]//10:,...])
+    my_history = vae.fit(X[X.shape[0]//10:,...], epochs=N_EPOCHS, initial_epoch=INITIAL_EPOCH, batch_size=BATCH_SIZE, shuffle=True, callbacks=[cp_callback]) # train on the last 9 folds
     if myinput == 'C':
         print("we merge the history dictionaries")
         print("len(history['loss'] = ", len(history['loss']))
