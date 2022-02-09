@@ -451,7 +451,7 @@ def group_by_varying(run_args, variable='tau', config_dict_flat=None):
         groups.append({'args': group_args[i], 'runs': group_runs[i], variable:[variable_dict[k] for k in group_runs[i]]})
     return groups
 
-def get_run(load_from, current_run_name=None):
+def get_run(load_from, current_run_name=None, additional_relevant_keys=None):
     '''
     Parameters
     ----------
@@ -476,8 +476,11 @@ def get_run(load_from, current_run_name=None):
     if load_from is None:
         return None
 
+    if additional_relevant_keys is None:
+        additional_relevant_keys = []
+
     # arguments relevant for model architecture
-    relevant_keys = list(get_default_params(create_model).keys()) + list(get_default_params(load_data).keys()) + ['nfolds']
+    relevant_keys = list(get_default_params(create_model).keys()) + list(get_default_params(load_data).keys()) + ['nfolds'] + additional_relevant_keys
     
     runs = ut.json2dict('runs.json')
 
@@ -1742,9 +1745,19 @@ class Trainer():
         iteration_values = ast.literal_eval(str(iteration_values))
 
         # add the non iterative kwargs
-        self.scheduled_kwargs = [{**non_iterative_kwargs, **{k: l[i] for i,k in enumerate(iterate_over)}} for l in iteration_values]
+        self.scheduled_kwargs = [{**non_iterative_kwargs, **{k: l[i] for i,k in enumerate(iterate_over) if l[i] != self.config_dict_flat[k]}} for l in iteration_values]
 
-        if len(self.scheduled_kwargs) == 0: # GM: this is fix to avoid empty scheduled_kwargs if it happens there are no iterative kwargs
+        ## this block of code does exactly the same of the previous line but possibly in a clearer way
+        # self.scheduled_kwargs = []
+        # for l in iteration_values:
+        #     self.scheduled_kwargs.append(non_iterative_kwargs) # add non iterative kwargs
+        #     # add the iterative kwargs one by one checking if they are at their default value
+        #     for i,k in enumerate(iterate_over):
+        #         v = l[i]
+        #         if v != self.config_dict_flat[k]: # skip parameters at their default value
+        #             self.scheduled_kwargs[-1][k] = v
+
+        if len(self.scheduled_kwargs) == 0: # this is fix to avoid empty scheduled_kwargs if it happens there are no iterative kwargs
             self.scheduled_kwargs = [non_iterative_kwargs]
             if len(non_iterative_kwargs) == 0:
                 logger.info('Scheduling 1 run at default values')
