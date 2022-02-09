@@ -531,8 +531,8 @@ def PrepareParameters(creation):
     N_EPOCHS = 20#600#200
     SET_YEARS = range(8000) # the set of years that variational autoencoder sees
     SET_YEARS_LABEL = 'range8000'
-    K1 = 0.5 # 1#100
-    K2 = 0.5 #1
+    K1 = 0.9 # 1#100
+    K2 = 0.1 #1
     
     data_path='../../gmiloshe/PLASIM/'
     
@@ -544,7 +544,7 @@ def PrepareParameters(creation):
     lat_end = 24
     Months1 = [0, 0, 0, 0, 0, 0, 30, 30, 30, 30, 30, 0, 0, 0] 
     Tot_Mon1 = list(itertools.accumulate(Months1))
-    checkpoint_name = WEIGHTS_FOLDER+Model+'_t2mzg500mrso_yrs-'+SET_YEARS_LABEL+'_last9folds_'+RESCALE_TYPE+'_k1_'+str(K1)+'_k2_'+str(K2)+'_LR_'+str(LEARNING_RATE)+'_ZDIM_'+str(Z_DIM)
+    checkpoint_name = WEIGHTS_FOLDER+Model+'_t2mzg500mrso_linear_yrs-'+SET_YEARS_LABEL+'_last9folds_'+RESCALE_TYPE+'_k1_'+str(K1)+'_k2_'+str(K2)+'_LR_'+str(LEARNING_RATE)+'_ZDIM_'+str(Z_DIM)
     return WEIGHTS_FOLDER, RESCALE_TYPE, Z_DIM, BATCH_SIZE, LEARNING_RATE, N_EPOCHS, SET_YEARS, K1, K2, checkpoint_name, data_path, Model, lon_start, lon_end, lat_start, lat_end, Tot_Mon1
     
 def CreateFolder(creation,checkpoint_name):
@@ -585,7 +585,7 @@ def RescaleNormalize(X,RESCALE_TYPE, creation,checkpoint_name):
             X_mean = np.load(checkpoint_name+'/X_mean.npy')
             X_std = np.load(checkpoint_name+'/X_std.npy')
 
-        return 1./(1.+np.exp(-(X-X_mean)/X_std)) # we have apply sigmoid because variational autoencoder reconstructs with this activation
+        return   (X-X_mean)/X_std #1./(1.+np.exp(-(X-X_mean)/X_std)) # we have apply sigmoid because variational autoencoder reconstructs with this activation
     else:
         print("===Rescaling X===")
         if creation == None:
@@ -600,21 +600,23 @@ def RescaleNormalize(X,RESCALE_TYPE, creation,checkpoint_name):
 
 def ConstructVAE(INPUT_DIM, Z_DIM, checkpoint_name, N_EPOCHS, myinput, K1, K2):
     print("==Building encoder==")
-    encoder_inputs, encoder_outputs, shape_before_flattening, encoder  = tff.build_encoder(input_dim = INPUT_DIM, 
+    encoder_inputs, encoder_outputs, shape_before_flattening, encoder  = tff.build_encoder2(input_dim = INPUT_DIM, 
                                                 output_dim = Z_DIM, 
                                                 conv_filters = [32, 64, 64, 64],
                                                 conv_kernel_size = [3,3,3,3],
                                                 conv_strides = [2,2,2,1],
-                                                conv_padding = ["same","same","same","valid"], use_batch_norm=True, use_dropout=True)
+                                                conv_padding = ["same","same","same","valid"], 
+                                                conv_activation = ["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"],use_batch_norm=True, use_dropout=True)
     encoder.summary()
     print("==Building decoder==")      
     # Decoder
-    decoder_input, decoder_output, decoder = tff.build_decoder(input_dim = Z_DIM,  
+    decoder_input, decoder_output, decoder = tff.build_decoder2(input_dim = Z_DIM,  
                                         shape_before_flattening = shape_before_flattening,
                                         conv_filters = [64,64,32,3],
                                         conv_kernel_size = [3,3,3,3],
                                         conv_strides = [1,2,2,2],
-                                        conv_padding = ["valid","same","same","same"])
+                                        conv_padding = ["valid","same","same","same"], 
+                                        conv_activation = ["LeakyRelu","LeakyRelu","LeakyRelu","linear"])
     decoder.summary()
 
 
