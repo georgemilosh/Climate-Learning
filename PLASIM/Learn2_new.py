@@ -784,7 +784,7 @@ def roll_X(X, roll_axis='lon', roll_steps=64):
     ----------
     X : np.ndarray
         with shape (years, days, lat, lon, field)
-    roll_axis : str, optional
+    roll_axis : int or str, optional
         'year' (or 'y'), 'day' (or 'd'), 'lat', 'lon', 'field' (or 'f')
     roll_steps : int, optional
         number of gridsteps to roll: a positive value for `roll_steps` means that the elements of the array are moved forward in it,
@@ -802,18 +802,22 @@ def roll_X(X, roll_axis='lon', roll_steps=64):
     '''
     if roll_steps == 0:
         return X
-    if roll_axis.startswith('y'):
-        roll_axis = 0
-    elif roll_axis.startswith('d'):
-        roll_axis = 1
-    elif roll_axis == 'lat':
-        roll_axis = 2
-    elif roll_axis == 'lon':
-        roll_axis = 3
-    elif roll_axis.startswith('f'):
-        roll_axis = 4
-    else:
-        raise ValueError(f'Unknown valur for axis: {roll_axis}')
+    if isinstance(roll_axis, str):
+        if roll_axis.startswith('y'):
+            roll_axis = 0
+        elif roll_axis.startswith('d'):
+            roll_axis = 1
+        elif roll_axis == 'lat':
+            roll_axis = 2
+        elif roll_axis == 'lon':
+            roll_axis = 3
+        elif roll_axis.startswith('f'):
+            roll_axis = 4
+        else:
+            raise ValueError(f'Unknown valur for axis: {roll_axis}')
+    elif not isinstance(roll_axis, int):
+        raise TypeError(f'roll_axis can be int or str, not {type(roll_axis)}')
+    # at this point roll_axis is an int
     return np.roll(X,roll_steps,axis=roll_axis)
 
 ####### MIXING ########    
