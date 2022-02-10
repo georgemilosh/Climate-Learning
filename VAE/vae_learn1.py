@@ -524,7 +524,7 @@ def PrepareParameters(creation):
     print("==Preparing Parameters==")
     WEIGHTS_FOLDER = './models/'
     
-    RESCALE_TYPE = 'normalize' # 'rescale' #  # 
+    RESCALE_TYPE =    'normalize' #    'rescale'  
     Z_DIM = 64 #8 #16 #256 # Dimension of the latent vector (z)
     BATCH_SIZE = 128#512
     LEARNING_RATE = 1e-3#5e-4# 1e-3#5e-6
@@ -585,7 +585,7 @@ def RescaleNormalize(X,RESCALE_TYPE, creation,checkpoint_name):
             X_mean = np.load(checkpoint_name+'/X_mean.npy')
             X_std = np.load(checkpoint_name+'/X_std.npy')
 
-        return   (X-X_mean)/X_std #1./(1.+np.exp(-(X-X_mean)/X_std)) # we have apply sigmoid because variational autoencoder reconstructs with this activation
+        return   1./(1.+np.exp(-(X-X_mean)/X_std)) # (X-X_mean)/X_std # # we have apply sigmoid because variational autoencoder reconstructs with this activation
     else:
         print("===Rescaling X===")
         if creation == None:
@@ -596,13 +596,13 @@ def RescaleNormalize(X,RESCALE_TYPE, creation,checkpoint_name):
         else:
             maxX = np.load(checkpoint_name+'/maxX.npy')
             minX = np.load(checkpoint_name+'/minX.npy')
-    return (X - minX) / (maxX - minX)
+    return (X - minX) / (maxX - minX) # 2*(X - minX)/(maxX - minX)-1  #
 
-def ConstructVAE(INPUT_DIM, Z_DIM, checkpoint_name, N_EPOCHS, myinput, K1, K2):
+def ConstructVAE(INPUT_DIM, Z_DIM, checkpoint_name, N_EPOCHS, myinput, K1, K2, from_logits=False):
     print("==Building encoder==")
     encoder_inputs, encoder_outputs, shape_before_flattening, encoder  = tff.build_encoder2(input_dim = INPUT_DIM, 
                                                 output_dim = Z_DIM, 
-                                                conv_filters = [32, 64, 64, 64],
+                                                conv_filters = [32,64,64,64],
                                                 conv_kernel_size = [3,3,3,3],
                                                 conv_strides = [2,2,2,1],
                                                 conv_padding = ["same","same","same","valid"], 
@@ -616,13 +616,13 @@ def ConstructVAE(INPUT_DIM, Z_DIM, checkpoint_name, N_EPOCHS, myinput, K1, K2):
                                         conv_kernel_size = [3,3,3,3],
                                         conv_strides = [1,2,2,2],
                                         conv_padding = ["valid","same","same","same"], 
-                                        conv_activation = ["LeakyRelu","LeakyRelu","LeakyRelu","linear"])
+                                        conv_activation = ["LeakyRelu","LeakyRelu","LeakyRelu","sigmoid"])
     decoder.summary()
 
 
     print("==Attaching decoder and encoder and compiling==")
 
-    vae = tff.VAE(encoder, decoder, k1=K1, k2=K2)
+    vae = tff.VAE(encoder, decoder, k1=K1, k2=K2, from_logits=from_logits)
     print("vae.k1 = ", vae.k1, " , vae.k2 = ", vae.k2)
     if myinput == 'Y':
         INITIAL_EPOCH = 0
@@ -677,7 +677,7 @@ def PrepareDataAndVAE(creation=None, DIFFERENT_YEARS=None):
     X = RescaleNormalize(X,RESCALE_TYPE, creation, checkpoint_name)
     print("X.shape = ", X.shape,  " ,np.mean(X[:,5,5,0]) = ", np.mean(X[:,5,5,0]), " ,np.std(X[:,5,5,0]) = ", np.std(X[:,5,5,0]), " , np.min(X) = ", np.min(X), " , np.max(X) = ", np.max(X))
 
-    vae, history, N_EPOCHS, INITIAL_EPOCH, checkpoint, checkpoint_path = ConstructVAE(INPUT_DIM, Z_DIM, checkpoint_name, N_EPOCHS, myinput, K1, K2)
+    vae, history, N_EPOCHS, INITIAL_EPOCH, checkpoint, checkpoint_path = ConstructVAE(INPUT_DIM, Z_DIM, checkpoint_name, N_EPOCHS, myinput, K1, K2, from_logits=False)
     
     return X, LON, LAT, vae, Z_DIM, N_EPOCHS, INITIAL_EPOCH, BATCH_SIZE, LEARNING_RATE, checkpoint_path, checkpoint_name, myinput, history
 
@@ -693,14 +693,15 @@ if __name__ == '__main__': # we do this so that we can then load this file as a 
 
     start = time.time()
     X, LON, LAT, vae, Z_DIM, N_EPOCHS, INITIAL_EPOCH, BATCH_SIZE, LEARNING_RATE, checkpoint_path, checkpoint_name, myinput, history = PrepareDataAndVAE()
-
+    print("np.max(X) = ", np.max(X),"np.min(X) = ", np.min(X))
+    
     cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_path,save_weights_only=True,verbose=1)
 
     vae.compile(optimizer=tf.keras.optimizers.Adam(lr = LEARNING_RATE))
     #vae.summary()
 
     print("==fit ==")
-    print("X[X.shape[0]//10:,...] = ", X[X.shape[0]//10:,...])
+    print("X[X.shape[0]//10:,...].shape = ", X[X.shape[0]//10:,...].shape)
     my_history = vae.fit(X[X.shape[0]//10:,...], epochs=N_EPOCHS, initial_epoch=INITIAL_EPOCH, batch_size=BATCH_SIZE, shuffle=True, callbacks=[cp_callback]) # train on the last 9 folds
     if myinput == 'C':
         print("we merge the history dictionaries")

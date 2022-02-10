@@ -23,7 +23,7 @@ class Sampling(tf.keras.layers.Layer):  # Normal distribution sampling for the e
         return z_mean + tf.exp(0.5 * z_log_var) * epsilon
     
 class VAE(tf.keras.Model): # Class of variational autoencoder
-    def __init__(self, encoder, decoder, k1=1, k2=1, **kwargs):
+    def __init__(self, encoder, decoder, k1=1, k2=1, from_logits=False, **kwargs):
         super(VAE, self).__init__(**kwargs)
         self.encoder = encoder
         self.decoder = decoder
@@ -34,6 +34,8 @@ class VAE(tf.keras.Model): # Class of variational autoencoder
             name="reconstruction_loss"
         )
         self.kl_loss_tracker = tf.keras.metrics.Mean(name="kl_loss")
+        self.from_logits = from_logits
+        print("VAE: self.from_logits = ", self.from_logits)
 
     @property
     def metrics(self):
@@ -52,7 +54,7 @@ class VAE(tf.keras.Model): # Class of variational autoencoder
             reconstruction = self.decoder(z)
             reconstruction_loss = self.k1*tf.reduce_mean(
                 tf.reduce_sum(
-                    tf.keras.losses.binary_crossentropy(data, reconstruction), axis=(1, 2)
+                    tf.keras.losses.binary_crossentropy(data, reconstruction, from_logits=self.from_logits), axis=(1, 2) # -Y_n Log( P_n) - (1 - Y_n) Log( 1 - P_n) is the expression for binary entropy
                 )
             )
             kl_loss = -0.5 * (1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var))
@@ -139,6 +141,8 @@ def build_decoder2(input_dim, shape_before_flattening, conv_filters, conv_kernel
     decoder = tf.keras.Model(decoder_inputs, decoder_outputs, name="decoder")
 
     return decoder_inputs, decoder_outputs, decoder  
+
+
 def build_decoder(input_dim, shape_before_flattening, conv_filters, conv_kernel_size, conv_strides,conv_padding):
     # For backward compatibility we keep the old version that used to have prescribed activation
     conv_activation = ['LeakyRelu' for i in range(len(conv_filters))]
