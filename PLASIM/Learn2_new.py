@@ -85,6 +85,7 @@ level   name                events
 40      logging.ERROR
 
 41                          From where the models are loaded or created
+                            Final score of k_fold_cross_val
 
 42                          Folder name of the run
                             Single run completes
@@ -116,6 +117,7 @@ import numpy as np
 import inspect
 import ast
 import logging
+from uncertainties import ufloat
 
 if __name__ == '__main__':
     logger = logging.getLogger()
@@ -1046,12 +1048,12 @@ def early_stopping(monitor='val_CustomLoss', min_delta=0, patience=0, mode='auto
             if v in monitor:
                 mode = 'max'
                 break
-    return keras.callbacks.EarlyStopping(monitor=monitor, min_delta=min_delta, patience=patience, mode=mode)
+    return keras.callbacks.EarlyStopping(monitor=monitor, min_delta=min_delta, patience=patience, mode=mode, restore_best_weights=True)
 
 @ut.execution_time
 @ut.indent_logger(logger)
 def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics, early_stopping_kwargs=None, enable_early_stopping=False,
-                batch_size=1024, checkpoint_every=1, additional_callbacks=['csv_logger']):
+                batch_size=1024, checkpoint_every=1, additional_callbacks=['csv_logger'], return_metric='val_CustomLoss'):
     '''
     Trains a given model checkpointing its weights
 
@@ -1087,6 +1089,13 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
         'best custom_loss': every time 'custom_loss' reaches a new minimum. 'custom_loss' must be in the list of metrics
     additional_callbacks : list of keras.callbacks.Callback objects or list of str, optional
         string items are interpreted, for example 'csv_logger' creates a CSVLogger callback
+    return_metric : str, optional
+        name of the metric of which the minimum value will be returned at the end of training
+
+    Returns
+    -------
+    float
+        minimum value of `return_metric` during training
     '''
     if early_stopping_kwargs is None:
         early_stopping_kwargs = {}
@@ -1141,6 +1150,7 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     if enable_early_stopping:
         if 'patience' not in early_stopping_kwargs or early_stopping_kwargs['patience'] == 0:
             logger.warning('Skipping early stopping with patience = 0')
+            enable_early_stopping = False
         else:
             callbacks.append(early_stopping(**early_stopping_kwargs))
 
@@ -1154,6 +1164,9 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
 
     model.save(folder)
     np.save(f'{folder}/history.npy', my_history.history)
+
+    # return the best value of val_CustomLoss
+    return np.min(my_history.history[return_metric])
 
 @ut.execution_time
 @ut.indent_logger(logger)
@@ -1334,7 +1347,12 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
         another possibility is 'unbiased_crossentropy',
         which will unbias the logits with the undersampling factor and then proceeds with the sparse_categorical_crossentropy
     lr : float, optional
-        learning_rate for Adam optimizer       
+        learning_rate for Adam optimizer
+
+    Returns
+    -------
+    float
+        average score of the run
     '''
     if create_model_kwargs is None:
         create_model_kwargs = {}
@@ -1364,6 +1382,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
             opt_checkpoint = [opt_checkpoint]*nfolds
 
     # k fold cross validation
+    scores = []
     for i in range(nfolds):
         logger.info('=============')
         logger.log(35, f'fold {i} ({i+1}/{nfolds})')
@@ -1462,11 +1481,11 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
 
 
         # train the model
-        train_model(model, X_tr, Y_tr, X_va, Y_va, # arguments that are always computed inside this function
-                    folder=fold_folder, num_epochs=num_epochs, optimizer=optimizer, loss=loss_fn, metrics=metrics, # arguments that may come from train_model_kwargs for advanced uses but usually are computed here
-                    **train_model_kwargs) # arguments which have a default value in the definition of `train_model` and thus appear in the config file
+        score = train_model(model, X_tr, Y_tr, X_va, Y_va, # arguments that are always computed inside this function
+                            folder=fold_folder, num_epochs=num_epochs, optimizer=optimizer, loss=loss_fn, metrics=metrics, # arguments that may come from train_model_kwargs for advanced uses but usually are computed here
+                            **train_model_kwargs) # arguments which have a default value in the definition of `train_model` and thus appear in the config file
 
-        # TODO: compute metrics here where it we have easy access to model and data
+        scores.append(score)
 
         my_memory.append(psutil.virtual_memory())
         logger.info(f'RAM memory: {my_memory[i][3]:.3e}') # Getting % usage of virtual_memory ( 3rd field)
@@ -1475,6 +1494,20 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
         gc.collect() # Garbage collector which removes some extra references to the objects
         
     np.save(f'{folder}/RAM_stats.npy', my_memory)
+
+    # TODO: recompute the score if we want to calculate the optimal checkpoint collectively
+
+    score_mean = np.mean(scores)
+    score_std = np.std(scores)
+
+    # log the scores
+    logger.info('\nFinal scores:')
+    for i,s in enumerate(scores):
+        logger.info(f'\tfold {i}: {s}')
+    logger.log(41,f'Average score: {ufloat(score_mean, score_std)}')
+
+    # return the average score
+    return score_mean
 
 ##################################################
 ########## PUTTING THE PIECES TOGETHER ###########
@@ -1602,14 +1635,19 @@ def run(folder, prepare_data_kwargs=None, k_fold_cross_val_kwargs=None, log_leve
     '''
     Perfroms a single full run
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     folder : str
         folder where to perform the run
     prepare_data_kwargs : dict
         arguments to pass to the `prepare_data` function
     k_fold_cross_val_kwargs : dict
         arguments to pass to the `k_fold_cross_val` function
+
+    Returns
+    -------
+    float
+        average score of the run
     '''
     if prepare_data_kwargs is None:
         prepare_data_kwargs = get_default_params(prepare_data, recursive=True)
@@ -1627,7 +1665,7 @@ def run(folder, prepare_data_kwargs=None, k_fold_cross_val_kwargs=None, log_leve
         raise KeyError(f"field {label_field} is not a loaded field")
 
     trainer = Trainer()
-    trainer.run(folder,load_data_kwargs, prepare_XY_kwargs, k_fold_cross_val_kwargs, log_level=log_level)
+    return trainer.run(folder,load_data_kwargs, prepare_XY_kwargs, k_fold_cross_val_kwargs, log_level=log_level)
 
 ####################################################
 ###### EFFICIENT MANAGEMENT OF MULTIPLE RUNS #######
@@ -1839,6 +1877,11 @@ class Trainer():
         ------
         RuntimeError
             If an exception is raised during the run
+
+        Returns
+        -------
+        float
+            average score of the run
         '''
         if load_data_kwargs is None:
             load_data_kwargs = {}
@@ -1869,7 +1912,7 @@ class Trainer():
                 np.save(f'{folder}/year_permutation.npy',self.year_permutation)
 
             # do kfold
-            k_fold_cross_val(folder, self.X, self.Y, **k_fold_cross_val_kwargs)
+            score = k_fold_cross_val(folder, self.X, self.Y, **k_fold_cross_val_kwargs)
 
             # make the config file read-only after the first successful run
             if os.access('config.json', os.W_OK): # the file is writeable
@@ -1883,6 +1926,8 @@ class Trainer():
 
         finally:
             logger.handlers.remove(fh) # stop writing to the log file
+
+        return score
 
 
     def _run(self, **kwargs):
@@ -1984,10 +2029,11 @@ class Trainer():
 
         # run
         try:            
-            self.run(folder, **run_kwargs)
-
+            score = self.run(folder, **run_kwargs)
+            
             runs = ut.json2dict('runs.json')
             runs[run_id]['status'] = 'COMPLETED'
+            runs[run_id]['score'] = ast.literal_eval(str(score)) # ensure json serializability
             logger.log(42, 'run completed!!!\n\n')
 
         except Exception as e: # run failed
@@ -2005,6 +2051,8 @@ class Trainer():
             runs[run_id]['rune_time_min'] = run_time_min
 
             ut.dict2json(runs,'runs.json')
+
+        return score
 
         
 
