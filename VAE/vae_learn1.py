@@ -528,7 +528,7 @@ def PrepareParameters(creation):
     Z_DIM = 64 #8 #16 #256 # Dimension of the latent vector (z)
     BATCH_SIZE = 128#512
     LEARNING_RATE = 1e-3#5e-4# 1e-3#5e-6
-    N_EPOCHS = 20#600#200
+    N_EPOCHS = 10#600#200
     SET_YEARS = range(8000) # the set of years that variational autoencoder sees
     SET_YEARS_LABEL = 'range8000'
     K1 = 0.9 # 1#100
@@ -544,7 +544,7 @@ def PrepareParameters(creation):
     lat_end = 24
     Months1 = [0, 0, 0, 0, 0, 0, 30, 30, 30, 30, 30, 0, 0, 0] 
     Tot_Mon1 = list(itertools.accumulate(Months1))
-    checkpoint_name = WEIGHTS_FOLDER+Model+'_t2mzg500mrso_linear_yrs-'+SET_YEARS_LABEL+'_last9folds_'+RESCALE_TYPE+'_k1_'+str(K1)+'_k2_'+str(K2)+'_LR_'+str(LEARNING_RATE)+'_ZDIM_'+str(Z_DIM)
+    checkpoint_name = WEIGHTS_FOLDER+Model+'_t2mzg500mrso_resdeep_filt5_yrs-'+SET_YEARS_LABEL+'_last9folds_'+RESCALE_TYPE+'_k1_'+str(K1)+'_k2_'+str(K2)+'_LR_'+str(LEARNING_RATE)+'_ZDIM_'+str(Z_DIM)
     return WEIGHTS_FOLDER, RESCALE_TYPE, Z_DIM, BATCH_SIZE, LEARNING_RATE, N_EPOCHS, SET_YEARS, K1, K2, checkpoint_name, data_path, Model, lon_start, lon_end, lat_start, lat_end, Tot_Mon1
     
 def CreateFolder(creation,checkpoint_name):
@@ -600,6 +600,7 @@ def RescaleNormalize(X,RESCALE_TYPE, creation,checkpoint_name):
 
 def ConstructVAE(INPUT_DIM, Z_DIM, checkpoint_name, N_EPOCHS, myinput, K1, K2, from_logits=False):
     print("==Building encoder==")
+    """
     encoder_inputs, encoder_outputs, shape_before_flattening, encoder  = tff.build_encoder2(input_dim = INPUT_DIM, 
                                                 output_dim = Z_DIM, 
                                                 conv_filters = [32,64,64,64],
@@ -607,9 +608,19 @@ def ConstructVAE(INPUT_DIM, Z_DIM, checkpoint_name, N_EPOCHS, myinput, K1, K2, f
                                                 conv_strides = [2,2,2,1],
                                                 conv_padding = ["same","same","same","valid"], 
                                                 conv_activation = ["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"],use_batch_norm=True, use_dropout=True)
+    """
+    encoder_inputs, encoder_outputs, shape_before_flattening, encoder  = tff.build_encoder_skip(input_dim = INPUT_DIM, 
+                                                output_dim = Z_DIM, 
+                                                conv_filters =     [16, 16, 16, 32, 32,  32,   64, 64],
+                                                conv_kernel_size = [5,  5,  5,  5,   5,   5,   5,  3],
+                                                conv_strides =     [2,  1,  1,  2,   1,   1,   2,  1],
+                                                conv_padding =     ["same","same","same","same","same","same","same","valid"], 
+                                                conv_activation =  ["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"],
+                                                #conv_skip = dict({}),use_batch_norm=True, use_dropout=True)
+                                                conv_skip = dict({(0,2),(3,5)}),use_batch_norm=True, use_dropout=True)
     encoder.summary()
     print("==Building decoder==")      
-    # Decoder
+    """
     decoder_input, decoder_output, decoder = tff.build_decoder2(input_dim = Z_DIM,  
                                         shape_before_flattening = shape_before_flattening,
                                         conv_filters = [64,64,32,3],
@@ -617,6 +628,16 @@ def ConstructVAE(INPUT_DIM, Z_DIM, checkpoint_name, N_EPOCHS, myinput, K1, K2, f
                                         conv_strides = [1,2,2,2],
                                         conv_padding = ["valid","same","same","same"], 
                                         conv_activation = ["LeakyRelu","LeakyRelu","LeakyRelu","sigmoid"])
+    """
+    decoder_input, decoder_output, decoder = tff.build_decoder_skip(input_dim = 64,  
+                                        shape_before_flattening = shape_before_flattening,
+                                        conv_filters =     [64,32,32,32,16,16,16,3],
+                                        conv_kernel_size = [3, 5, 5, 5, 5, 5, 5, 5],
+                                        conv_strides =     [1, 2, 1, 1, 2, 1, 1, 2],
+                                        conv_padding =     ["valid","same","same","same","same","same","same","same"], 
+                                        conv_activation =  ["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","sigmoid"], 
+                                        #conv_skip = dict({}), use_batch_norm = True, use_dropout = True)
+                                        conv_skip = dict({(1,3),(4,6)}), use_batch_norm = True, use_dropout = True)
     decoder.summary()
 
 
