@@ -62,7 +62,7 @@ class VAE(tf.keras.Model): # Class of variational autoencoder
             z_mean, z_log_var, z = self.encoder(data)
             reconstruction = self.decoder(z)
             
-            # With tensorflow 2.6:
+            # We should try tf.reduce_mean([0.1,0.1,0.4]*tf.cast([bce(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis],sample_weight=np.ones((2,4,3))) for i in range(3)], dtype=np.float32))
             if self.field_weights == None:
                 reconstruction_loss = self.k1*self.encoder_input_shape[1]*self.encoder_input_shape[2]*tf.reduce_mean([tf.reduce_mean(self.bce(data[...,i], reconstruction[...,i])) for i in range(reconstruction.shape[3])] )
             else: 
