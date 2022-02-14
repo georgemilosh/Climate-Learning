@@ -23,18 +23,27 @@ class Sampling(tf.keras.layers.Layer):  # Normal distribution sampling for the e
         return z_mean + tf.exp(0.5 * z_log_var) * epsilon
     
 class VAE(tf.keras.Model): # Class of variational autoencoder
-    def __init__(self, encoder, decoder, k1=1, k2=1, from_logits=False, **kwargs):
+    def __init__(self, encoder, decoder, k1=1, k2=1, from_logits=False, field_weights=None, **kwargs):
         super(VAE, self).__init__(**kwargs)
         self.encoder = encoder
         self.decoder = decoder
-        self.k1 = k1
-        self.k2 = k2
+        self.k1 = k1 # Reconstruction weight
+        self.k2 = k2 # K-L divergence weight
         self.total_loss_tracker = tf.keras.metrics.Mean(name="total_loss")
         self.reconstruction_loss_tracker = tf.keras.metrics.Mean(
             name="reconstruction_loss"
         )
         self.kl_loss_tracker = tf.keras.metrics.Mean(name="kl_loss")
         self.from_logits = from_logits
+        self.encoder_input_shape = encoder.input.shape   # i.e. TensorShape([None, 24, 128, 3])
+        self.field_weights = field_weights
+        """
+        if field_weights==None:
+            self.field_weights = field_weights
+        else:
+            self.field_weights = tf.cast(field_weights,dtype=np.float32)  # we expect list of shape (3,)
+        """
+        self.bce = tf.keras.losses.BinaryCrossentropy(from_logits=from_logits)
         print("VAE: self.from_logits = ", self.from_logits)
 
     @property
@@ -52,11 +61,23 @@ class VAE(tf.keras.Model): # Class of variational autoencoder
         with tf.GradientTape() as tape:
             z_mean, z_log_var, z = self.encoder(data)
             reconstruction = self.decoder(z)
-            reconstruction_loss = self.k1*tf.reduce_mean(
+            
+            # With tensorflow 2.6:
+            if self.field_weights == None:
+                reconstruction_loss = self.k1*self.encoder_input_shape[1]*self.encoder_input_shape[2]*tf.reduce_mean([tf.reduce_mean(self.bce(data[...,i], reconstruction[...,i])) for i in range(reconstruction.shape[3])] )
+            else: 
+                reconstruction_loss = self.k1*self.encoder_input_shape[1]*self.encoder_input_shape[2]*tf.reduce_mean([self.field_weights[i]*tf.reduce_mean(self.bce(data[...,i], reconstruction[...,i])) for i in range(reconstruction.shape[3])])
+            """
+            if self.field_weights == None:
+                reconstruction_loss = self.k1*self.encoder_input_shape[1]*self.encoder_input_shape[2]*tf.reduce_mean(tf.cast([ tf.reduce_mean(self.bce(data[...,i], reconstruction[...,i])) for i in range(reconstruction.shape[3])], dtype=np.float32))
+            else: 
+                reconstruction_loss = self.k1*self.encoder_input_shape[1]*self.encoder_input_shape[2]*tf.reduce_mean(self.field_weights*tf.cast([ tf.reduce_mean(self.bce(data[...,i], reconstruction[...,i])) for i in range(reconstruction.shape[3])], dtype=np.float32)) # This is supposed to do the same as the one below it in comments, but we also add weights with respect to the last dimension. Unfortunately in tensorflow2.4 there is no way to add axis parameter in tf.keras.losses.binary_crossentropy, and tensroflow2.6 was not working well with large arrays that we are using here s
+                
+            reconstruction_loss = self.k1*tf.reduce_mean( # Use this loss for older versions of tensorflow
                 tf.reduce_sum(
                     tf.keras.losses.binary_crossentropy(data, reconstruction, from_logits=self.from_logits), axis=(1, 2) # -Y_n Log( P_n) - (1 - Y_n) Log( 1 - P_n) is the expression for binary entropy
-                )
-            )
+                )                  # tf.keras.losses.binary_crossentropy ~ np.mean(-data*np.log(reconstruction)-(1-data)*np.log(1-reconstruction),-1)
+            )"""
             kl_loss = -0.5 * (1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var))
             kl_loss = self.k2*tf.reduce_mean(tf.reduce_sum(kl_loss, axis=1))
             total_loss = reconstruction_loss + kl_loss
@@ -158,7 +179,6 @@ def build_encoder2(input_dim, output_dim, conv_filters, conv_kernel_size, conv_s
     z = Sampling()([z_mean, z_log_var])
     encoder_outputs = [z_mean, z_log_var, z]
     encoder = tf.keras.Model(encoder_inputs, encoder_outputs, name="encoder")
-    encoder.summary()
     return encoder_inputs, encoder_outputs,  shape_before_flattening, encoder
 
 def build_encoder(input_dim, output_dim, conv_filters, conv_kernel_size, conv_strides, conv_padding, use_batch_norm = False, use_dropout = False):
@@ -167,7 +187,7 @@ def build_encoder(input_dim, output_dim, conv_filters, conv_kernel_size, conv_st
     
     return build_encoder2(input_dim, output_dim, conv_filters, conv_kernel_size, conv_strides, conv_padding, conv_activation, use_batch_norm, use_dropout)
 
-def build_decoder_skip(input_dim, shape_before_flattening, conv_filters, conv_kernel_size, conv_strides,conv_padding, conv_activation, conv_skip, use_batch_norm = False, use_dropout = False):
+def build_decoder_skip(input_dim, shape_before_flattening, conv_filters, conv_kernel_size, conv_strides,conv_padding, conv_activation, conv_skip, use_batch_norm = False, use_dropout = False, mask = None):
     # Number of Conv layers
     n_layers = len(conv_filters)
     decoder_inputs = tf.keras.Input(shape=input_dim)
@@ -218,7 +238,8 @@ def build_decoder_skip(input_dim, shape_before_flattening, conv_filters, conv_ke
 
     decoder_outputs = x[-1]
     decoder = tf.keras.Model(decoder_inputs, decoder_outputs, name="decoder")
-    decoder.summary()
+    if mask != None: # a tensorflow array that will typically contain 
+        decoder = decoder*mask
     return decoder_inputs, decoder_outputs, decoder  
 
 def build_decoder2(input_dim, shape_before_flattening, conv_filters, conv_kernel_size, conv_strides,conv_padding, conv_activation):
