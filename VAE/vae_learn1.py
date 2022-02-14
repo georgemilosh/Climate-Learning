@@ -292,18 +292,22 @@ def roll_X(X, roll_axis='lon', roll_steps=64):
     '''
     if roll_steps == 0:
         return X
-    if roll_axis.startswith('y'):
-        roll_axis = 0
-    elif roll_axis.startswith('d'):
-        roll_axis = 1
-    elif roll_axis == 'lat':
-        roll_axis = 2
-    elif roll_axis == 'lon':
-        roll_axis = 3
-    elif roll_axis.startswith('f'):
-        roll_axis = 4
-    else:
-        raise ValueError(f'Unknown valur for axis: {roll_axis}')
+    if isinstance(roll_axis, str):
+        if roll_axis.startswith('y'):
+            roll_axis = 0
+        elif roll_axis.startswith('d'):
+            roll_axis = 1
+        elif roll_axis == 'lat':
+            roll_axis = 2
+        elif roll_axis == 'lon':
+            roll_axis = 3
+        elif roll_axis.startswith('f'):
+            roll_axis = 4
+        else:
+            raise ValueError(f'Unknown valur for axis: {roll_axis}')
+    elif not isinstance(roll_axis, int):
+        raise TypeError(f'roll_axis can be int or str, not {type(roll_axis)}')
+    # at this point roll_axis is an int
     return np.roll(X,roll_steps,axis=roll_axis)
 
 
@@ -529,8 +533,8 @@ def PrepareParameters(creation):
     BATCH_SIZE = 128#512
     LEARNING_RATE = 1e-3#5e-4# 1e-3#5e-6
     N_EPOCHS = 10#600#200
-    SET_YEARS = range(8000) # the set of years that variational autoencoder sees
-    SET_YEARS_LABEL = 'range8000'
+    SET_YEARS =     range(8000) #range(1000)   # the set of years that variational autoencoder sees
+    SET_YEARS_LABEL =   'range8000' #'range1000' # 
     K1 = 0.9 # 1#100
     K2 = 0.1 #1
     
@@ -544,7 +548,7 @@ def PrepareParameters(creation):
     lat_end = 24
     Months1 = [0, 0, 0, 0, 0, 0, 30, 30, 30, 30, 30, 0, 0, 0] 
     Tot_Mon1 = list(itertools.accumulate(Months1))
-    checkpoint_name = WEIGHTS_FOLDER+Model+'_t2mzg500mrso_resdeep_filt5_yrs-'+SET_YEARS_LABEL+'_last9folds_'+RESCALE_TYPE+'_k1_'+str(K1)+'_k2_'+str(K2)+'_LR_'+str(LEARNING_RATE)+'_ZDIM_'+str(Z_DIM)
+    checkpoint_name = WEIGHTS_FOLDER+Model+'_weight212loss_t2mzg500mrso_resdeep_filt5_yrs-'+SET_YEARS_LABEL+'_last9folds_'+RESCALE_TYPE+'_k1_'+str(K1)+'_k2_'+str(K2)+'_LR_'+str(LEARNING_RATE)+'_ZDIM_'+str(Z_DIM)
     return WEIGHTS_FOLDER, RESCALE_TYPE, Z_DIM, BATCH_SIZE, LEARNING_RATE, N_EPOCHS, SET_YEARS, K1, K2, checkpoint_name, data_path, Model, lon_start, lon_end, lat_start, lat_end, Tot_Mon1
     
 def CreateFolder(creation,checkpoint_name):
@@ -643,7 +647,8 @@ def ConstructVAE(INPUT_DIM, Z_DIM, checkpoint_name, N_EPOCHS, myinput, K1, K2, f
 
     print("==Attaching decoder and encoder and compiling==")
 
-    vae = tff.VAE(encoder, decoder, k1=K1, k2=K2, from_logits=from_logits)
+    #vae = tff.VAE(encoder, decoder, k1=K1, k2=K2, from_logits=from_logits, field_weights=None) 
+    vae = tff.VAE(encoder, decoder, k1=K1, k2=K2, from_logits=from_logits, field_weights=[2.0, 1.0, 2.0])
     print("vae.k1 = ", vae.k1, " , vae.k2 = ", vae.k2)
     if myinput == 'Y':
         INITIAL_EPOCH = 0
