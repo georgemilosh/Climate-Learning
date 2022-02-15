@@ -118,6 +118,7 @@ import inspect
 import ast
 import logging
 from uncertainties import ufloat
+from functools import wraps
 
 if __name__ == '__main__':
     logger = logging.getLogger()
@@ -1883,6 +1884,23 @@ class Trainer():
                 logger.handlers.remove(th)
                 logger.log(45, 'Removed telegram logger')
 
+    @wraps(load_data) # it transfers the docstring, signature and default values
+    def load_data(self, **load_data_kwargs):
+        # load the fields only if the arguments have changed, otherwise self.fields is already at the correct value
+        if self._load_data_kwargs != load_data_kwargs:
+            self._load_data_kwargs = load_data_kwargs
+            self._prepare_XY_kwargs = None # force the computation of prepare_XY
+            self.fields = load_data(**load_data_kwargs)
+        return self.fields
+
+    @wraps(prepare_XY)
+    def prepare_XY(self, fields, **prepare_XY_kwargs):
+        # prepare XY only if the arguments have changed, as above
+        if self._prepare_XY_kwargs != prepare_XY_kwargs:
+            self._prepare_XY_kwargs = prepare_XY_kwargs
+            self.X, self.Y, self.year_permutation = prepare_XY(fields, **prepare_XY_kwargs)
+        return self.X, self.Y, self.year_permutation
+
     def run(self, folder, load_data_kwargs=None, prepare_XY_kwargs=None, k_fold_cross_val_kwargs=None, log_level=logging.INFO):
         '''
         Performs a single full run
@@ -1925,16 +1943,10 @@ class Trainer():
         logger.handlers.append(fh)
 
         try:
-            # load the fields only if the arguments have changed, otherwise self.fields is already at the correct value
-            if self._load_data_kwargs != load_data_kwargs:
-                self._load_data_kwargs = load_data_kwargs
-                self._prepare_XY_kwargs = None # force the computation of prepare_XY
-                self.fields = load_data(**load_data_kwargs)
+            self.load_data(**load_data_kwargs) # compute self.fields
 
-            # prepare XY only if the arguments have changed, as above
-            if self._prepare_XY_kwargs != prepare_XY_kwargs:
-                self._prepare_XY_kwargs = prepare_XY_kwargs
-                self.X, self.Y, self.year_permutation = prepare_XY(self.fields, **prepare_XY_kwargs)
+            self.prepare_XY(self.fields, **prepare_XY_kwargs) # compute self.X, self.Y, self.year_permutation
+
             if self.year_permutation is not None:
                 np.save(f'{folder}/year_permutation.npy',self.year_permutation)
 
