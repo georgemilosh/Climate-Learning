@@ -118,6 +118,7 @@ import inspect
 import ast
 import logging
 from uncertainties import ufloat
+from functools import wraps
 
 if __name__ == '__main__':
     logger = logging.getLogger()
@@ -319,7 +320,7 @@ def check_compatibility(run_name, current_run_name=None, relevant_keys=None):
     current_run_dict = {k:v for k,v in current_run_dict.items() if k in relevant_keys}
     return run_dict == current_run_dict
 
-def select_compatible(run_args, conditions, require_unique=True, path_to_config=None):
+def select_compatible(run_args, conditions, require_unique=True, config=None):
     '''
     Selects which runs are compatible with given conditions
 
@@ -331,9 +332,10 @@ def select_compatible(run_args, conditions, require_unique=True, path_to_config=
         dictionary of run arguments that has to be contained in the arguments of a compatible run
     require_unique : bool, optional
         whether you want a single run or a subset of compatible runs, by default True
-    path_to_config : str, optional
-        path to where the config file is located (without 'config.json').
-        If provided allows to beter check when a candition is at its default level, since it won't appear in the list of arguments of the run
+    config : dict or str, optional
+        if dict: config file
+        if str: path to the config file
+        If provided allows to beter check when a condition is at its default level, since it won't appear in the list of arguments of the run
 
     Returns
     -------
@@ -358,9 +360,14 @@ def select_compatible(run_args, conditions, require_unique=True, path_to_config=
     ['2', '3']
     '''
     _run_args = deepcopy(run_args)
-    if path_to_config is not None:
-        path_to_config.rstrip('/')
-        config_dict_flat = ut.collapse_dict(ut.json2dict(f'{path_to_config}/config.json'))
+    if config is not None:
+        if isinstance(config, dict):
+            config_dict = config
+        elif isinstance(config, str):
+            config_dict = ut.json2dict(config)
+        else:
+            raise TypeError(f'Invalid type {type(config)} for config')
+        config_dict_flat = ut.collapse_dict(config_dict)
         conditions_at_default = {k:v for k,v in conditions.items() if v == config_dict_flat[k]}
         for args in _run_args.values():
             for k,v in conditions_at_default.items():
@@ -1165,7 +1172,10 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     model.save(folder)
     np.save(f'{folder}/history.npy', my_history.history)
 
-    # return the best value of val_CustomLoss
+    # return the best value of the return metric
+    if return_metric not in my_history.history:
+        logger.error(f'{return_metric = } is not one of the metrics monitored during training, returning NaN')
+        return np.NaN
     return np.min(my_history.history[return_metric])
 
 @ut.execution_time
@@ -1297,7 +1307,7 @@ def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='m
 @ut.execution_time
 @ut.indent_logger(logger)
 def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=None, optimal_checkpoint_kwargs=None, load_from='last', nfolds=10, val_folds=1, u=1,
-                     fullmetrics=True, training_epochs=40, training_epochs_tl=10, loss='sparse_categorical_crossentropy', lr=1e-4):
+                     fullmetrics=True, training_epochs=40, training_epochs_tl=10, loss='sparse_categorical_crossentropy', lr=1e-4, prune_threshold=None, min_folds_before_pruning=None):
     '''
     Performs k fold cross validation on a model architecture.
 
@@ -1349,6 +1359,11 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
     lr : float, optional
         learning_rate for Adam optimizer
 
+    prune_threshold : float, optional
+        if the average score in the first `min_folds_before_pruning` is above `prune_threshold`, the run is pruned.
+    min_folds_before_pruning : int, optional
+        minimum number of folds to train before checking whether to prune the run
+
     Returns
     -------
     float
@@ -1370,15 +1385,16 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
         logger.log(41, f'Models will be loaded from {load_from}')
 
     my_memory = []
+    info = {'status': 'RUNNING'}
 
     # find the optimal checkpoint
     opt_checkpoint = None
     if load_from is not None:
         load_from = load_from.rstrip('/')
         opt_checkpoint = optimal_checkpoint(load_from, nfolds, **optimal_checkpoint_kwargs)
+        info['tl_from'] = {'run': load_from, 'optimal_checkpoint': opt_checkpoint}
         if isinstance(opt_checkpoint,int):
-            # this happens if the optimal checkpoint is computed with `collective` = True
-            #  so we simply broadcast the single optimal checkpoint to all the folds
+            # this happens if the optimal checkpoint is computed with `collective` = True, so we simply broadcast the single optimal checkpoint to all the folds
             opt_checkpoint = [opt_checkpoint]*nfolds
 
     # k fold cross validation
@@ -1492,6 +1508,15 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
 
         keras.backend.clear_session()
         gc.collect() # Garbage collector which removes some extra references to the objects
+
+        # check for pruning
+        if min_folds_before_pruning and prune_threshold is not None:
+            if i >= min_folds_before_pruning - 1 and i < nfolds - 1:
+                score_mean = np.mean(scores)
+                if score_mean > prune_threshold:
+                    info['status'] = 'PRUNED'
+                    logger.log(41,f'Pruning after {i+1}/{nfolds} folds')
+                    break
         
     np.save(f'{folder}/RAM_stats.npy', my_memory)
 
@@ -1501,13 +1526,22 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
     score_std = np.std(scores)
 
     # log the scores
+    info['scores'] = {}
     logger.info('\nFinal scores:')
     for i,s in enumerate(scores):
         logger.info(f'\tfold {i}: {s}')
+        info['scores'][f'fold_{i}'] = s
     logger.log(41,f'Average score: {ufloat(score_mean, score_std)}')
+    info['scores']['mean'] = score_mean
+    info['scores']['std'] = score_std
+
+    info['scores'] = ast.literal_eval(str(info['scores']))
+
+    if info['status'] != 'PRUNED':
+        info['status'] = 'COMPLETED'
 
     # return the average score
-    return score_mean
+    return score_mean, info
 
 ##################################################
 ########## PUTTING THE PIECES TOGETHER ###########
@@ -1675,12 +1709,16 @@ class Trainer():
     '''
     Class for performing training of neural networks over multiple runs with different paramters in an efficient way
     '''
-    def __init__(self, skip_existing_run=True):
+    def __init__(self, config=None, skip_existing_run=True):
         '''
         Constructor
 
         Parameters
         ----------
+        config : dict or str or None, optional
+            if dict: config dictionary
+            if str: path to config file
+            if None: the default values specified in this file will be used
         skip_existing_run : bool, optional
             Whether to skip runs that have already been performed in the same folder, by default True
             If False the existing run is not overwritten but a new one is performed
@@ -1688,7 +1726,17 @@ class Trainer():
         self.skip_existing_run = skip_existing_run
 
         # load config file and parse arguments
-        self.config_dict = ut.json2dict('config.json')
+        self.config_file = None
+        if config is None:
+            self.config_dict = CONFIG_DICT
+        elif isinstance(config, dict):
+            self.config_dict = config
+        elif isinstance(config, str):
+            self.config_file = config
+            self.config_dict = ut.json2dict(config)
+        else:
+            raise TypeError(f'Invalid type {type(config)} for config')
+        
         self.config_dict_flat = check_config_dict(self.config_dict)
         
         # cached (heavy) variables
@@ -1856,6 +1904,33 @@ class Trainer():
                 logger.handlers.remove(th)
                 logger.log(45, 'Removed telegram logger')
 
+    @wraps(load_data) # it transfers the docstring, signature and default values
+    def load_data(self, **load_data_kwargs):
+        # load the fields only if the arguments have changed, otherwise self.fields is already at the correct value
+        if self._load_data_kwargs != load_data_kwargs:
+            self._load_data_kwargs = load_data_kwargs
+            self._prepare_XY_kwargs = None # force the computation of prepare_XY
+            self.fields = load_data(**load_data_kwargs)
+        return self.fields
+
+    @wraps(prepare_XY)
+    def prepare_XY(self, fields, **prepare_XY_kwargs):
+        # prepare XY only if the arguments have changed, as above
+        if self._prepare_XY_kwargs != prepare_XY_kwargs:
+            self._prepare_XY_kwargs = prepare_XY_kwargs
+            self.X, self.Y, self.year_permutation = prepare_XY(fields, **prepare_XY_kwargs)
+        return self.X, self.Y, self.year_permutation
+
+    @wraps(prepare_data)
+    def prepare_data(self, load_data_kwargs=None, prepare_XY_kwargs=None):
+        if load_data_kwargs is None:
+            load_data_kwargs = ut.extract_nested(self.default_run_kwargs, 'load_data_kwargs')
+        if prepare_XY_kwargs is None:
+            prepare_XY_kwargs = ut.extract_nested(self.default_run_kwargs, 'prepare_XY_kwargs')
+
+        self.load_data(**load_data_kwargs)
+        return self.prepare_XY(self.fields, **prepare_XY_kwargs)
+
     def run(self, folder, load_data_kwargs=None, prepare_XY_kwargs=None, k_fold_cross_val_kwargs=None, log_level=logging.INFO):
         '''
         Performs a single full run
@@ -1890,7 +1965,10 @@ class Trainer():
         if k_fold_cross_val_kwargs is None:
             k_fold_cross_val_kwargs = {}
 
-        os.mkdir(folder)
+        if not os.path.exists(folder):
+            os.mkdir(folder)
+        elif os.path.exists(f'{folder}/fold_0'):
+            raise FileExistsError(f'A run has already been performed in {folder = }')
 
         # setup logger to file
         fh = logging.FileHandler(f'{folder}/log.log')
@@ -1898,25 +1976,19 @@ class Trainer():
         logger.handlers.append(fh)
 
         try:
-            # load the fields only if the arguments have changed, otherwise self.fields is already at the correct value
-            if self._load_data_kwargs != load_data_kwargs:
-                self._load_data_kwargs = load_data_kwargs
-                self._prepare_XY_kwargs = None # force the computation of prepare_XY
-                self.fields = load_data(**load_data_kwargs)
+            self.load_data(**load_data_kwargs) # compute self.fields
 
-            # prepare XY only if the arguments have changed, as above
-            if self._prepare_XY_kwargs != prepare_XY_kwargs:
-                self._prepare_XY_kwargs = prepare_XY_kwargs
-                self.X, self.Y, self.year_permutation = prepare_XY(self.fields, **prepare_XY_kwargs)
+            self.prepare_XY(self.fields, **prepare_XY_kwargs) # compute self.X, self.Y, self.year_permutation
+
             if self.year_permutation is not None:
                 np.save(f'{folder}/year_permutation.npy',self.year_permutation)
 
             # do kfold
-            score = k_fold_cross_val(folder, self.X, self.Y, **k_fold_cross_val_kwargs)
+            score, info = k_fold_cross_val(folder, self.X, self.Y, **k_fold_cross_val_kwargs)
 
             # make the config file read-only after the first successful run
-            if os.access('config.json', os.W_OK): # the file is writeable
-                os.chmod('config.json', S_IREAD)
+            if os.access(self.config_file, os.W_OK): # the file is writeable
+                os.chmod(self.config_file, S_IREAD)
         
         except Exception as e:
             logger.critical(f'Run on {folder = } failed due to {repr(e)}')
@@ -1927,7 +1999,7 @@ class Trainer():
         finally:
             logger.handlers.remove(fh) # stop writing to the log file
 
-        return score
+        return score, info
 
 
     def _run(self, **kwargs):
@@ -2012,6 +2084,7 @@ class Trainer():
         ut.dict2json(runs, 'runs.json') # save runs.json
 
         # write kwargs to logfile
+        os.mkdir(folder)
         with open(f'{folder}/log.log', 'a') as logfile:
             logfile.write(f'{run_id = }\n\n')
             logfile.write('Non default parameters:\n')
@@ -2029,11 +2102,15 @@ class Trainer():
 
         # run
         try:            
-            score = self.run(folder, **run_kwargs)
+            score, info = self.run(folder, **run_kwargs)
             
             runs = ut.json2dict('runs.json')
-            runs[run_id]['status'] = 'COMPLETED'
+            runs[run_id]['status'] = info['status'] # either COMPLETED or PRUNED
+            if info['status'] == 'PRUNED':
+                runs[run_id]['name'] = f'P{folder}'
+                shutil.move(folder, f'P{folder}')
             runs[run_id]['score'] = ast.literal_eval(str(score)) # ensure json serializability
+            runs[run_id]['scores'] = info['scores']
             logger.log(42, 'run completed!!!\n\n')
 
         except Exception as e: # run failed
@@ -2054,8 +2131,9 @@ class Trainer():
 
         return score
 
-        
 
+
+CONFIG_DICT = build_config_dict([Trainer.run, Trainer.telegram]) # module level config dictionary
         
 
         
@@ -2081,8 +2159,7 @@ if __name__ == '__main__':
             # GM: build_config_dict will recursively find the keyword parameters of function run 
             # (including the functions it calls) and build a corresponding dictionary tree in config file
             # GM: Can some of these functions be moved to ../ERA/utilities.py later at some point?
-            d = build_config_dict([Trainer.run, Trainer.telegram]) 
-            ut.dict2json(d,f'{folder}/config.json')
+            ut.dict2json(CONFIG_DICT,f'{folder}/config.json')
 
             # runs file (which will keep track of various runs performed in newly created folder)
             ut.dict2json({},f'{folder}/runs.json')
@@ -2116,7 +2193,7 @@ if __name__ == '__main__':
     logger.info(f'{arg_dict = }')
 
     # create trainer
-    trainer = Trainer()
+    trainer = Trainer(config='./config.json')
 
     # schedule runs
     trainer.schedule(**arg_dict)
