@@ -548,7 +548,7 @@ def PrepareParameters(creation):
     lat_end = 24
     Months1 = [0, 0, 0, 0, 0, 0, 30, 30, 30, 30, 30, 0, 0, 0] 
     Tot_Mon1 = list(itertools.accumulate(Months1))
-    checkpoint_name = WEIGHTS_FOLDER+Model+'_weight212loss_t2mzg500mrso_resdeep_filt5_yrs-'+SET_YEARS_LABEL+'_last9folds_'+RESCALE_TYPE+'_k1_'+str(K1)+'_k2_'+str(K2)+'_LR_'+str(LEARNING_RATE)+'_ZDIM_'+str(Z_DIM)
+    checkpoint_name = WEIGHTS_FOLDER+Model+'_weight212losswithfilter_t2mzg500mrso_resdeep_filt5_yrs-'+SET_YEARS_LABEL+'_last9folds_'+RESCALE_TYPE+'_k1_'+str(K1)+'_k2_'+str(K2)+'_LR_'+str(LEARNING_RATE)+'_ZDIM_'+str(Z_DIM)
     return WEIGHTS_FOLDER, RESCALE_TYPE, Z_DIM, BATCH_SIZE, LEARNING_RATE, N_EPOCHS, SET_YEARS, K1, K2, checkpoint_name, data_path, Model, lon_start, lon_end, lat_start, lat_end, Tot_Mon1
     
 def CreateFolder(creation,checkpoint_name):
@@ -602,7 +602,7 @@ def RescaleNormalize(X,RESCALE_TYPE, creation,checkpoint_name):
             minX = np.load(checkpoint_name+'/minX.npy')
     return (X - minX) / (maxX - minX) # 2*(X - minX)/(maxX - minX)-1  #
 
-def ConstructVAE(INPUT_DIM, Z_DIM, checkpoint_name, N_EPOCHS, myinput, K1, K2, from_logits=False):
+def ConstructVAE(INPUT_DIM, Z_DIM, checkpoint_name, N_EPOCHS, myinput, K1, K2, from_logits=False, mask_weights=None):
     print("==Building encoder==")
     """
     encoder_inputs, encoder_outputs, shape_before_flattening, encoder  = tff.build_encoder2(input_dim = INPUT_DIM, 
@@ -641,14 +641,16 @@ def ConstructVAE(INPUT_DIM, Z_DIM, checkpoint_name, N_EPOCHS, myinput, K1, K2, f
                                         conv_padding =     ["valid","same","same","same","same","same","same","same"], 
                                         conv_activation =  ["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","sigmoid"], 
                                         #conv_skip = dict({}), use_batch_norm = True, use_dropout = True)
-                                        conv_skip = dict({(1,3),(4,6)}), use_batch_norm = True, use_dropout = True)
+                                        conv_skip = dict({(1,3),(4,6)}), use_batch_norm = True, use_dropout = True, mask = mask_weights)
     decoder.summary()
 
 
     print("==Attaching decoder and encoder and compiling==")
-
+    
+    
+    
     #vae = tff.VAE(encoder, decoder, k1=K1, k2=K2, from_logits=from_logits, field_weights=None) 
-    vae = tff.VAE(encoder, decoder, k1=K1, k2=K2, from_logits=from_logits, field_weights=[2.0, 1.0, 2.0])
+    vae = tff.VAE(encoder, decoder, k1=K1, k2=K2, from_logits=from_logits, field_weights=[2.0, 1.0, 2.0]) #, mask_weights=mask_weights)
     print("vae.k1 = ", vae.k1, " , vae.k2 = ", vae.k2)
     if myinput == 'Y':
         INITIAL_EPOCH = 0
@@ -701,9 +703,27 @@ def PrepareDataAndVAE(creation=None, DIFFERENT_YEARS=None):
     INPUT_DIM = X.shape[1:]  # Image dimension
     
     X = RescaleNormalize(X,RESCALE_TYPE, creation, checkpoint_name)
-    print("X.shape = ", X.shape,  " ,np.mean(X[:,5,5,0]) = ", np.mean(X[:,5,5,0]), " ,np.std(X[:,5,5,0]) = ", np.std(X[:,5,5,0]), " , np.min(X) = ", np.min(X), " , np.max(X) = ", np.max(X))
+    
 
-    vae, history, N_EPOCHS, INITIAL_EPOCH, checkpoint, checkpoint_path = ConstructVAE(INPUT_DIM, Z_DIM, checkpoint_name, N_EPOCHS, myinput, K1, K2, from_logits=False)
+    print("X.shape = ", X.shape,  " ,np.mean(X[:,5,5,0]) = ", np.mean(X[:,5,5,0]), " ,np.std(X[:,5,5,0]) = ", np.std(X[:,5,5,0]), " , np.min(X) = ", np.min(X), " , np.max(X) = ", np.max(X))
+    
+    """
+    BATCH_SIZE2 = 128 #testing an idea to put a mask dependent weight on the reconstruction loss. This idea caused errors so i am giving up
+    # The idea is to create the mask in accordance to what we believe are relevant fields for the proper classification of the heat waves
+    filter_mask = roll_X(ef.create_mask(Model,'France', X[:BATCH_SIZE2,...,0], axes='first 2', return_full_mask=True),1)  # this mask can be used in filtering the weights of reconstruction loss in VAE
+    print('filter_mask.shape = ', filter_mask.shape)
+    print('np.ones(X[:BATCH_SIZE2,...,0].shape).shape = ', np.ones(X[:BATCH_SIZE2,...,0].shape).shape)
+    print('np.array([filter_mask,np.ones(X[:BATCH_SIZE2,...,0].shape),filter_mask], dtype=bool).shape = ', np.array([filter_mask,np.ones(X[:BATCH_SIZE2,...,0].shape),filter_mask], dtype=bool).shape)
+    filter_mask = np.array([filter_mask,np.ones(X[:BATCH_SIZE2,...,0].shape),filter_mask], dtype=bool).transpose(1,2,3,0) # Stack truth mask (for zg500) between two layers that have a mask
+    print('filter_mask.shape = ', filter_mask.shape)
+    """
+    filter_mask = roll_X(ef.create_mask(Model,'France', X[0,...,0], axes='first 2', return_full_mask=True),1)
+    print('filter_mask.shape = ', filter_mask.shape)
+    print('np.ones(X[0,...,0].shape).shape = ', np.ones(X[0,...,0].shape).shape)
+    print('np.array([filter_mask,np.ones(X[0,...,0].shape),filter_mask], dtype=bool).shape = ', np.array([filter_mask,np.ones(X[0,...,0].shape),filter_mask], dtype=bool).shape)
+    filter_mask = np.array([filter_mask,np.ones(X[0,...,0].shape),filter_mask], dtype=bool).transpose(1,2,0) 
+    
+    vae, history, N_EPOCHS, INITIAL_EPOCH, checkpoint, checkpoint_path = ConstructVAE(INPUT_DIM, Z_DIM, checkpoint_name, N_EPOCHS, myinput, K1, K2, from_logits=False, mask_weights=filter_mask)
     
     return X, LON, LAT, vae, Z_DIM, N_EPOCHS, INITIAL_EPOCH, BATCH_SIZE, LEARNING_RATE, checkpoint_path, checkpoint_name, myinput, history
 

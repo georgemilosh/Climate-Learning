@@ -36,13 +36,8 @@ class VAE(tf.keras.Model): # Class of variational autoencoder
         self.kl_loss_tracker = tf.keras.metrics.Mean(name="kl_loss")
         self.from_logits = from_logits
         self.encoder_input_shape = encoder.input.shape   # i.e. TensorShape([None, 24, 128, 3])
-        self.field_weights = field_weights
-        """
-        if field_weights==None:
-            self.field_weights = field_weights
-        else:
-            self.field_weights = tf.cast(field_weights,dtype=np.float32)  # we expect list of shape (3,)
-        """
+        self.field_weights = field_weights # Choose which fields the reconstruction loss cares about
+        #self.mask_weights = mask_weights # Choose which grid points the reconstruction loss cares about  # This idea didn't work due to some errors
         self.bce = tf.keras.losses.BinaryCrossentropy(from_logits=from_logits)
         print("VAE: self.from_logits = ", self.from_logits)
 
@@ -61,12 +56,28 @@ class VAE(tf.keras.Model): # Class of variational autoencoder
         with tf.GradientTape() as tape:
             z_mean, z_log_var, z = self.encoder(data)
             reconstruction = self.decoder(z)
+            factor = self.k1*self.encoder_input_shape[1]*self.encoder_input_shape[2] # this factor is designed for consistency with the previous defintion of the loss (see commented section below)
+            # We should try tf.reduce_mean([0.1,0.1,0.4]*tf.cast([bce(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis],sample_weight=np.ones((2,4,3))) for i in range(3)], dtype=np.float32))
+            if self.field_weights is None: # I am forced to use this awkward way of apply field weights since I cannot use the new version of tensorflow where axis parameter can be given
+                reconstruction_loss = factor*tf.reduce_mean([tf.reduce_mean(self.bce(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis])) for i in range(reconstruction.shape[3])] )
+            else:  # The idea behind adding [..., np.newaxis] is to be able to use sample_weight in self.bce on three dimensional input
+                reconstruction_loss = factor*tf.reduce_mean([self.field_weights[i]*tf.reduce_mean(self.bce(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis])) for i in range(reconstruction.shape[3])])
+                
+            """The following idea didn't work:
             
             # We should try tf.reduce_mean([0.1,0.1,0.4]*tf.cast([bce(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis],sample_weight=np.ones((2,4,3))) for i in range(3)], dtype=np.float32))
-            if self.field_weights == None:
-                reconstruction_loss = self.k1*self.encoder_input_shape[1]*self.encoder_input_shape[2]*tf.reduce_mean([tf.reduce_mean(self.bce(data[...,i], reconstruction[...,i])) for i in range(reconstruction.shape[3])] )
-            else: 
-                reconstruction_loss = self.k1*self.encoder_input_shape[1]*self.encoder_input_shape[2]*tf.reduce_mean([self.field_weights[i]*tf.reduce_mean(self.bce(data[...,i], reconstruction[...,i])) for i in range(reconstruction.shape[3])])
+            if self.field_weights is None: # I am forced to use this awkward way of apply field weights since I cannot use the new version of tensorflow where axis parameter can be given
+                if self.mask_weights is None:
+                    reconstruction_loss = factor*tf.reduce_mean([tf.reduce_mean(self.bce(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis])) for i in range(reconstruction.shape[3])] )
+                else:
+                    reconstruction_loss = factor*tf.reduce_mean([tf.reduce_mean(self.bce(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis], sample_weight=self.mask_weights[...,i])) for i in range(reconstruction.shape[3])] )
+            else:  # The idea behind adding [..., np.newaxis] is to be able to use sample_weight in self.bce on three dimensional input
+                if self.mask_weights is None:
+                    reconstruction_loss = factor*tf.reduce_mean([self.field_weights[i]*tf.reduce_mean(self.bce(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis])) for i in range(reconstruction.shape[3])])
+                else:
+                    reconstruction_loss = factor*tf.reduce_mean([self.field_weights[i]*tf.reduce_mean(self.bce(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis], sample_weight=self.mask_weights[...,i])) for i in range(reconstruction.shape[3])])
+            """
+            
             """
             if self.field_weights == None:
                 reconstruction_loss = self.k1*self.encoder_input_shape[1]*self.encoder_input_shape[2]*tf.reduce_mean(tf.cast([ tf.reduce_mean(self.bce(data[...,i], reconstruction[...,i])) for i in range(reconstruction.shape[3])], dtype=np.float32))
@@ -238,7 +249,7 @@ def build_decoder_skip(input_dim, shape_before_flattening, conv_filters, conv_ke
 
     decoder_outputs = x[-1]
     decoder = tf.keras.Model(decoder_inputs, decoder_outputs, name="decoder")
-    if mask != None: # a tensorflow array that will typically contain 
+    if mask is not None: # a tensorflow array that will typically contain 
         decoder = decoder*mask
     return decoder_inputs, decoder_outputs, decoder  
 
