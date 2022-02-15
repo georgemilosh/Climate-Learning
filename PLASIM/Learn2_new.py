@@ -320,7 +320,7 @@ def check_compatibility(run_name, current_run_name=None, relevant_keys=None):
     current_run_dict = {k:v for k,v in current_run_dict.items() if k in relevant_keys}
     return run_dict == current_run_dict
 
-def select_compatible(run_args, conditions, require_unique=True, path_to_config=None):
+def select_compatible(run_args, conditions, require_unique=True, config=None):
     '''
     Selects which runs are compatible with given conditions
 
@@ -332,9 +332,10 @@ def select_compatible(run_args, conditions, require_unique=True, path_to_config=
         dictionary of run arguments that has to be contained in the arguments of a compatible run
     require_unique : bool, optional
         whether you want a single run or a subset of compatible runs, by default True
-    path_to_config : str, optional
-        path to where the config file is located (without 'config.json').
-        If provided allows to beter check when a candition is at its default level, since it won't appear in the list of arguments of the run
+    config : dict or str, optional
+        if dict: config file
+        if str: path to the config file
+        If provided allows to beter check when a condition is at its default level, since it won't appear in the list of arguments of the run
 
     Returns
     -------
@@ -359,9 +360,14 @@ def select_compatible(run_args, conditions, require_unique=True, path_to_config=
     ['2', '3']
     '''
     _run_args = deepcopy(run_args)
-    if path_to_config is not None:
-        path_to_config.rstrip('/')
-        config_dict_flat = ut.collapse_dict(ut.json2dict(f'{path_to_config}/config.json'))
+    if config is not None:
+        if isinstance(config, dict):
+            config_dict = config
+        elif isinstance(config, str):
+            config_dict = ut.json2dict(config)
+        else:
+            raise TypeError(f'Invalid type {type(config)} for config')
+        config_dict_flat = ut.collapse_dict(config_dict)
         conditions_at_default = {k:v for k,v in conditions.items() if v == config_dict_flat[k]}
         for args in _run_args.values():
             for k,v in conditions_at_default.items():
@@ -1703,12 +1709,16 @@ class Trainer():
     '''
     Class for performing training of neural networks over multiple runs with different paramters in an efficient way
     '''
-    def __init__(self, skip_existing_run=True):
+    def __init__(self, config=None, skip_existing_run=True):
         '''
         Constructor
 
         Parameters
         ----------
+        config : dict or str or None, optional
+            if dict: config dictionary
+            if str: path to config file
+            if None: the default values specified in this file will be used
         skip_existing_run : bool, optional
             Whether to skip runs that have already been performed in the same folder, by default True
             If False the existing run is not overwritten but a new one is performed
@@ -1716,7 +1726,17 @@ class Trainer():
         self.skip_existing_run = skip_existing_run
 
         # load config file and parse arguments
-        self.config_dict = ut.json2dict('config.json')
+        self.config_file = None
+        if config is None:
+            self.config_dict = CONFIG_DICT
+        elif isinstance(config, dict):
+            self.config_dict = config
+        elif isinstance(config, str):
+            self.config_file = config
+            self.config_dict = ut.json2dict(config)
+        else:
+            raise TypeError(f'Invalid type {type(config)} for config')
+        
         self.config_dict_flat = check_config_dict(self.config_dict)
         
         # cached (heavy) variables
@@ -1901,6 +1921,16 @@ class Trainer():
             self.X, self.Y, self.year_permutation = prepare_XY(fields, **prepare_XY_kwargs)
         return self.X, self.Y, self.year_permutation
 
+    @wraps(prepare_data)
+    def prepare_data(self, load_data_kwargs=None, prepare_XY_kwargs=None):
+        if load_data_kwargs is None:
+            load_data_kwargs = ut.extract_nested(self.default_run_kwargs, 'load_data_kwargs')
+        if prepare_XY_kwargs is None:
+            prepare_XY_kwargs = ut.extract_nested(self.default_run_kwargs, 'prepare_XY_kwargs')
+
+        self.load_data(**load_data_kwargs)
+        return self.prepare_XY(self.fields, **prepare_XY_kwargs)
+
     def run(self, folder, load_data_kwargs=None, prepare_XY_kwargs=None, k_fold_cross_val_kwargs=None, log_level=logging.INFO):
         '''
         Performs a single full run
@@ -1954,8 +1984,8 @@ class Trainer():
             score, info = k_fold_cross_val(folder, self.X, self.Y, **k_fold_cross_val_kwargs)
 
             # make the config file read-only after the first successful run
-            if os.access('config.json', os.W_OK): # the file is writeable
-                os.chmod('config.json', S_IREAD)
+            if os.access(self.config_file, os.W_OK): # the file is writeable
+                os.chmod(self.config_file, S_IREAD)
         
         except Exception as e:
             logger.critical(f'Run on {folder = } failed due to {repr(e)}')
@@ -2097,8 +2127,9 @@ class Trainer():
 
         return score
 
-        
 
+
+CONFIG_DICT = build_config_dict([Trainer.run, Trainer.telegram]) # module level config dictionary
         
 
         
@@ -2124,8 +2155,7 @@ if __name__ == '__main__':
             # GM: build_config_dict will recursively find the keyword parameters of function run 
             # (including the functions it calls) and build a corresponding dictionary tree in config file
             # GM: Can some of these functions be moved to ../ERA/utilities.py later at some point?
-            d = build_config_dict([Trainer.run, Trainer.telegram]) 
-            ut.dict2json(d,f'{folder}/config.json')
+            ut.dict2json(CONFIG_DICT,f'{folder}/config.json')
 
             # runs file (which will keep track of various runs performed in newly created folder)
             ut.dict2json({},f'{folder}/runs.json')
@@ -2159,7 +2189,7 @@ if __name__ == '__main__':
     logger.info(f'{arg_dict = }')
 
     # create trainer
-    trainer = Trainer()
+    trainer = Trainer(config='./config.json')
 
     # schedule runs
     trainer.schedule(**arg_dict)
