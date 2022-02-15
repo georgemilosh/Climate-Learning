@@ -1165,7 +1165,10 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     model.save(folder)
     np.save(f'{folder}/history.npy', my_history.history)
 
-    # return the best value of val_CustomLoss
+    # return the best value of the return metric
+    if return_metric not in my_history.history:
+        logger.error(f'{return_metric = } is not one of the metrics monitored during training, returning NaN')
+        return np.NaN
     return np.min(my_history.history[return_metric])
 
 @ut.execution_time
@@ -1297,7 +1300,7 @@ def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='m
 @ut.execution_time
 @ut.indent_logger(logger)
 def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=None, optimal_checkpoint_kwargs=None, load_from='last', nfolds=10, val_folds=1, u=1,
-                     fullmetrics=True, training_epochs=40, training_epochs_tl=10, loss='sparse_categorical_crossentropy', lr=1e-4):
+                     fullmetrics=True, training_epochs=40, training_epochs_tl=10, loss='sparse_categorical_crossentropy', lr=1e-4, prune_threshold=None, min_folds_before_pruning=None):
     '''
     Performs k fold cross validation on a model architecture.
 
@@ -1349,6 +1352,11 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
     lr : float, optional
         learning_rate for Adam optimizer
 
+    prune_threshold : float, optional
+        if the average score in the first `min_folds_before_pruning` is above `prune_threshold`, the run is pruned.
+    min_folds_before_pruning : int, optional
+        minimum number of folds to train before checking whether to prune the run
+
     Returns
     -------
     float
@@ -1370,15 +1378,16 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
         logger.log(41, f'Models will be loaded from {load_from}')
 
     my_memory = []
+    info = {'status': 'RUNNING'}
 
     # find the optimal checkpoint
     opt_checkpoint = None
     if load_from is not None:
         load_from = load_from.rstrip('/')
         opt_checkpoint = optimal_checkpoint(load_from, nfolds, **optimal_checkpoint_kwargs)
+        info['tl_from'] = {'run': load_from, 'optimal_checkpoint': opt_checkpoint}
         if isinstance(opt_checkpoint,int):
-            # this happens if the optimal checkpoint is computed with `collective` = True
-            #  so we simply broadcast the single optimal checkpoint to all the folds
+            # this happens if the optimal checkpoint is computed with `collective` = True, so we simply broadcast the single optimal checkpoint to all the folds
             opt_checkpoint = [opt_checkpoint]*nfolds
 
     # k fold cross validation
@@ -1492,6 +1501,15 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
 
         keras.backend.clear_session()
         gc.collect() # Garbage collector which removes some extra references to the objects
+
+        # check for pruning
+        if min_folds_before_pruning and prune_threshold is not None:
+            if i >= min_folds_before_pruning - 1:
+                score_mean = np.mean(scores)
+                if score_mean > prune_threshold:
+                    info['status'] = 'PRUNED'
+                    logger.error('PRUNING')
+                    break
         
     np.save(f'{folder}/RAM_stats.npy', my_memory)
 
@@ -1501,13 +1519,22 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
     score_std = np.std(scores)
 
     # log the scores
+    info['scores'] = {}
     logger.info('\nFinal scores:')
     for i,s in enumerate(scores):
         logger.info(f'\tfold {i}: {s}')
+        info['scores'][f'fold_{i}'] = s
     logger.log(41,f'Average score: {ufloat(score_mean, score_std)}')
+    info['scores']['mean'] = score_mean
+    info['scores']['std'] = score_std
+
+    info['scores'] = ast.literal_eval(str(info['scores']))
+
+    if info['status'] != 'PRUNED':
+        info['status'] = 'COMPLETED'
 
     # return the average score
-    return score_mean
+    return score_mean, info
 
 ##################################################
 ########## PUTTING THE PIECES TOGETHER ###########
@@ -1912,7 +1939,7 @@ class Trainer():
                 np.save(f'{folder}/year_permutation.npy',self.year_permutation)
 
             # do kfold
-            score = k_fold_cross_val(folder, self.X, self.Y, **k_fold_cross_val_kwargs)
+            score, info = k_fold_cross_val(folder, self.X, self.Y, **k_fold_cross_val_kwargs)
 
             # make the config file read-only after the first successful run
             if os.access('config.json', os.W_OK): # the file is writeable
@@ -1927,7 +1954,7 @@ class Trainer():
         finally:
             logger.handlers.remove(fh) # stop writing to the log file
 
-        return score
+        return score, info
 
 
     def _run(self, **kwargs):
@@ -2029,11 +2056,15 @@ class Trainer():
 
         # run
         try:            
-            score = self.run(folder, **run_kwargs)
+            score, info = self.run(folder, **run_kwargs)
             
             runs = ut.json2dict('runs.json')
-            runs[run_id]['status'] = 'COMPLETED'
+            runs[run_id]['status'] = info['status'] # either COMPLETED or PRUNED
+            if info['status'] == 'PRUNED':
+                runs[run_id]['name'] = f'P{folder}'
+                shutil.move(folder, f'P{folder}')
             runs[run_id]['score'] = ast.literal_eval(str(score)) # ensure json serializability
+            runs[run_id]['scores'] = info['scores']
             logger.log(42, 'run completed!!!\n\n')
 
         except Exception as e: # run failed
