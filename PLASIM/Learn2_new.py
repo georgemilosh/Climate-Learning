@@ -1965,7 +1965,10 @@ class Trainer():
         if k_fold_cross_val_kwargs is None:
             k_fold_cross_val_kwargs = {}
 
-        os.mkdir(folder)
+        if not os.path.exists(folder):
+            os.mkdir(folder)
+        elif os.path.exists(f'{folder}/fold_0'):
+            raise FileExistsError(f'A run has already been performed in {folder = }')
 
         # setup logger to file
         fh = logging.FileHandler(f'{folder}/log.log')
@@ -2081,6 +2084,7 @@ class Trainer():
         ut.dict2json(runs, 'runs.json') # save runs.json
 
         # write kwargs to logfile
+        os.mkdir(folder)
         with open(f'{folder}/log.log', 'a') as logfile:
             logfile.write(f'{run_id = }\n\n')
             logfile.write('Non default parameters:\n')
