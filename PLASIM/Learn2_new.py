@@ -1511,11 +1511,11 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
 
         # check for pruning
         if min_folds_before_pruning and prune_threshold is not None:
-            if i >= min_folds_before_pruning - 1:
+            if i >= min_folds_before_pruning - 1 and i < nfolds - 1:
                 score_mean = np.mean(scores)
                 if score_mean > prune_threshold:
                     info['status'] = 'PRUNED'
-                    logger.error('PRUNING')
+                    logger.log(41,f'Pruning after {i+1}/{nfolds} folds')
                     break
         
     np.save(f'{folder}/RAM_stats.npy', my_memory)
