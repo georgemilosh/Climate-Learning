@@ -15,29 +15,30 @@ import matplotlib.pyplot as plt
 
 class ConstMul(tf.keras.layers.Layer):
     '''
-        A layer of constant values
+        A layer of constant values. Modified from
             see https://stackoverflow.com/questions/61211101/how-to-multiply-a-fixed-weight-matrix-to-a-keras-layer-output
 
         Additional Parameters
         ----------
         const_val : 
-            Either a scalar or a numpy array that contains the values that will multiply the input.
+            Either a scalar or a numpy array that contains the values that will multiply the input and add an intercept.
             
         Example Usage:
         ----------
             inputs = tf.keras.Input(shape=(2,2))
-            outputs = ConstMul(np.array([[3,2],[0,0]]))(inputs)
+            outputs = ConstMul(np.array([[3,2],[0,0]]),0.5)(inputs)
             mymodel = tf.keras.Model(inputs, outputs)
             test = np.random.rand(2,2,2)
             mymodel(test)
         
         '''
-    def __init__(self, const_val, *args, **kwargs):
+    def __init__(self, const_a, const_b, *args, **kwargs):
         super(ConstMul, self).__init__(**kwargs)
-        self.const = const_val
+        self.const_a = const_a
+        self.const_b = const_b
 
     def call(self, inputs, **kwargs):
-        return inputs * self.const
+        return inputs * self.const_a + self.const_b
 
 class Sampling(tf.keras.layers.Layer):  # Normal distribution sampling for the encoder output of the variational autoencoder
     """Uses (z_mean, z_log_var) to sample z, the vector encoding a digit."""
@@ -274,7 +275,7 @@ def build_decoder_skip(input_dim, shape_before_flattening, conv_filters, conv_ke
         x.append(actv)
         
     if mask is not None: # a tensorflow array that will typically contain 
-        decoder_outputs = ConstMul(mask)(x[-1])
+        decoder_outputs = ConstMul(mask,(~mask)*0.5)(x[-1])  # This will multiply the input by mask consisting of 0's (False) and 1's (True). Because the decoder is expected to reconstruct sigmoid function we add 0.5 where there were 0's
     else:
         decoder_outputs = x[-1]
     decoder = tf.keras.Model(decoder_inputs, decoder_outputs, name="decoder")
