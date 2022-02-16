@@ -12,6 +12,33 @@ from tensorflow.keras import datasets, layers, models # from https://www.tensorf
 from tensorflow.keras import backend as K
 import matplotlib.pyplot as plt
 
+
+class ConstMul(tf.keras.layers.Layer):
+    '''
+        A layer of constant values
+            see https://stackoverflow.com/questions/61211101/how-to-multiply-a-fixed-weight-matrix-to-a-keras-layer-output
+
+        Additional Parameters
+        ----------
+        const_val : 
+            Either a scalar or a numpy array that contains the values that will multiply the input.
+            
+        Example Usage:
+        ----------
+            inputs = tf.keras.Input(shape=(2,2))
+            outputs = ConstMul(np.array([[3,2],[0,0]]))(inputs)
+            mymodel = tf.keras.Model(inputs, outputs)
+            test = np.random.rand(2,2,2)
+            mymodel(test)
+        
+        '''
+    def __init__(self, const_val, *args, **kwargs):
+        super(ConstMul, self).__init__(**kwargs)
+        self.const = const_val
+
+    def call(self, inputs, **kwargs):
+        return inputs * self.const
+
 class Sampling(tf.keras.layers.Layer):  # Normal distribution sampling for the encoder output of the variational autoencoder
     """Uses (z_mean, z_log_var) to sample z, the vector encoding a digit."""
 
@@ -63,7 +90,7 @@ class VAE(tf.keras.Model): # Class of variational autoencoder
             else:  # The idea behind adding [..., np.newaxis] is to be able to use sample_weight in self.bce on three dimensional input
                 reconstruction_loss = factor*tf.reduce_mean([self.field_weights[i]*tf.reduce_mean(self.bce(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis])) for i in range(reconstruction.shape[3])])
                 
-            """The following idea didn't work:
+            """#The following idea didn't work: (I think the reason is that during training the batch size somehow changes. Normally it should be 128 as specified, but the error message read that the input shape was 32. I tried that as input for the mask but this also lead to a shape mismatch. Another alternative is to write a custom binary cross entropy loss, which I will postpone for now
             
             # We should try tf.reduce_mean([0.1,0.1,0.4]*tf.cast([bce(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis],sample_weight=np.ones((2,4,3))) for i in range(3)], dtype=np.float32))
             if self.field_weights is None: # I am forced to use this awkward way of apply field weights since I cannot use the new version of tensorflow where axis parameter can be given
@@ -78,7 +105,7 @@ class VAE(tf.keras.Model): # Class of variational autoencoder
                     reconstruction_loss = factor*tf.reduce_mean([self.field_weights[i]*tf.reduce_mean(self.bce(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis], sample_weight=self.mask_weights[...,i])) for i in range(reconstruction.shape[3])])
             """
             
-            """
+            """ #These are some previous versions 
             if self.field_weights == None:
                 reconstruction_loss = self.k1*self.encoder_input_shape[1]*self.encoder_input_shape[2]*tf.reduce_mean(tf.cast([ tf.reduce_mean(self.bce(data[...,i], reconstruction[...,i])) for i in range(reconstruction.shape[3])], dtype=np.float32))
             else: 
@@ -246,11 +273,12 @@ def build_decoder_skip(input_dim, shape_before_flattening, conv_filters, conv_ke
         
         x.append(actv)
         
-
-    decoder_outputs = x[-1]
-    decoder = tf.keras.Model(decoder_inputs, decoder_outputs, name="decoder")
     if mask is not None: # a tensorflow array that will typically contain 
-        decoder = decoder*mask
+        decoder_outputs = ConstMul(mask)(x[-1])
+    else:
+        decoder_outputs = x[-1]
+    decoder = tf.keras.Model(decoder_inputs, decoder_outputs, name="decoder")
+    
     return decoder_inputs, decoder_outputs, decoder  
 
 def build_decoder2(input_dim, shape_before_flattening, conv_filters, conv_kernel_size, conv_strides,conv_padding, conv_activation):
