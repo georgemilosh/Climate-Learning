@@ -12,6 +12,14 @@ from tensorflow.keras import datasets, layers, models # from https://www.tensorf
 from tensorflow.keras import backend as K
 import matplotlib.pyplot as plt
 
+def Custom_BCE(y_true,y_pred):
+    '''
+        binary cross entropy
+    '''
+    p1 = y_true * tf.math.log(  tf.clip_by_value( y_pred , tf.keras.backend.epsilon() , 1 - tf.keras.backend.epsilon() ) + tf.keras.backend.epsilon() )
+    p2 = ( 1 - y_true ) * tf.math.log( 1 -  tf.clip_by_value( y_pred , tf.keras.backend.epsilon() , 1 - tf.keras.backend.epsilon() ) + tf.keras.backend.epsilon() )
+    return -tf.reduce_mean( p1 + p2 )
+
 
 class ConstMul(tf.keras.layers.Layer):
     '''
@@ -67,6 +75,7 @@ class VAE(tf.keras.Model): # Class of variational autoencoder
         self.field_weights = field_weights # Choose which fields the reconstruction loss cares about
         #self.mask_weights = mask_weights # Choose which grid points the reconstruction loss cares about  # This idea didn't work due to some errors
         self.bce = tf.keras.losses.BinaryCrossentropy(from_logits=from_logits)
+        #self.bce = Custom_BCE # Trying how custom binary cross entropy compares
         print("VAE: self.from_logits = ", self.from_logits)
 
     @property

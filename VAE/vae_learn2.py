@@ -30,6 +30,12 @@ import logging
 import pickle
 import itertools
 
+if __name__ == '__main__':
+    logger = logging.getLogger()
+    logger.handlers = [logging.StreamHandler(sys.stdout)]
+else:
+    logger = logging.getLogger(__name__)
+logger.level = logging.INFO
 
 
 ## machine learning
@@ -43,7 +49,7 @@ from tensorflow.keras import layers, models
 
 sys.path.insert(1, '../ERA')
 
-import ERA_Fields as ef # general routines
+import ERA_Fields_New as ef # general routines
 import TF_Fields as tff # tensorflow routines
 import utilities as ut
 
