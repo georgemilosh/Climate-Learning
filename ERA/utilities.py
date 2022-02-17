@@ -147,6 +147,7 @@ def indent(*streams):
     return wrapper_outer
 
 def indent_logger(logger=None):
+    #GM: Perhaps smaller indents would be more satisfying
     '''
     Indents all handlers of a given logger when the decorated function is running
 
