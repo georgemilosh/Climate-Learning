@@ -1635,6 +1635,7 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
 @ut.execution_time
 @ut.indent_logger(logger)
 def prepare_data(load_data_kwargs=None, prepare_XY_kwargs=None):
+    # GM: It would be convenient if load data also provided LON, LAT, which are stored in fields[0].LON etc. Also possibly rolled version. Make sure that this rolled version works properly when plotted with Greenwich meridian.
     '''
     Combines all the steps from loading the data to the creation of X and Y
 
