@@ -1582,6 +1582,10 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
         labels. If flatten_time_axis with shape (days,), else (years, days)
     tot_permutation : np.ndarray
         with shape (years,), final permutaion of the years that reproduces X and Y once applied to the just loaded data
+    lat : np.ndarray
+        latitude, with shape (lat,) (rolled if necessary)
+    lon : np.ndarray
+        longitude, with shape (lon,) (rolled if necessary)
     '''
     if make_XY_kwargs is None:
         make_XY_kwargs = {}
@@ -1603,6 +1607,19 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
     roll_steps = roll_X_kwargs['steps']
     if roll_axis == 'lon':
         lon = np.roll(lon, roll_steps)
+
+        # make the longitude monotonically increasing
+        lon = lon % 360 # move all values between 0 and 360
+        i = np.argmin(lon) # index of the minimum longitude (most close to Greenwich)
+        if i+1 == len(lon):
+            increases = lon[i-1] < lon[i] # whether lon is monotonically increasing or not 
+        else:
+            increases = lon[i] < lon[i+1] # whether lon is monotonically increasing or not 
+        if increases:
+            lon[:i] -= 360 # make negative the values before i
+        else:
+            if i+1 < len(lon):
+                lon[i+1:] -= 360 # make negative the values after i
     if roll_axis == 'lat':
         lat = np.roll(lat, roll_steps)
 
@@ -1758,6 +1775,11 @@ class Trainer():
         self.X = None
         self.Y = None
         self.year_permutation = None
+        self.lon = None
+        self.lat = None
+
+        self._old_lat_lon = None
+        self._LONLAT = None
 
         # extract default arguments for each function
         self.default_run_kwargs = ut.extract_nested(self.config_dict, 'run_kwargs')
@@ -1779,6 +1801,26 @@ class Trainer():
             GPU = len(tf.config.list_physical_devices('GPU'))
         if not GPU:
             warnings.warn('\nThis machine does not have a GPU: training may be very slow\n')
+
+    @property
+    def LON(self):
+        '''
+        Meshgridded longitude
+        '''
+        if (self.lat, self.lon) != self._old_lat_lon:
+            self._old_lat_lon = (self.lat, self.lon)
+            self._LONLAT = np.meshgrid(self.lon, self.lat)
+        return self._LONLAT[0]
+
+    @property
+    def LAT(self):
+        '''
+        Meshgridded latitude
+        '''
+        if (self.lat, self.lon) != self._old_lat_lon:
+            self._old_lat_lon = (self.lat, self.lon)
+            self._LONLAT = np.meshgrid(self.lon, self.lat)
+        return self._LONLAT[1]
 
     def schedule(self, **kwargs):
         '''
@@ -1932,8 +1974,8 @@ class Trainer():
         # prepare XY only if the arguments have changed, as above
         if self._prepare_XY_kwargs != prepare_XY_kwargs:
             self._prepare_XY_kwargs = prepare_XY_kwargs
-            self.X, self.Y, self.year_permutation = prepare_XY(fields, **prepare_XY_kwargs)
-        return self.X, self.Y, self.year_permutation
+            self.X, self.Y, self.year_permutation, self.lat, self.lon = prepare_XY(fields, **prepare_XY_kwargs)
+        return self.X, self.Y, self.year_permutation, self.lat, self.lon
 
     @wraps(prepare_data)
     def prepare_data(self, load_data_kwargs=None, prepare_XY_kwargs=None):
@@ -1992,7 +2034,7 @@ class Trainer():
         try:
             self.load_data(**load_data_kwargs) # compute self.fields
 
-            self.prepare_XY(self.fields, **prepare_XY_kwargs) # compute self.X, self.Y, self.year_permutation
+            self.prepare_XY(self.fields, **prepare_XY_kwargs) # compute self.X, self.Y, self.year_permutation, self.lat, self.lon
 
             if self.year_permutation is not None:
                 np.save(f'{folder}/year_permutation.npy',self.year_permutation)
