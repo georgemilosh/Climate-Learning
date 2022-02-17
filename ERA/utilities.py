@@ -60,6 +60,7 @@ default_formatter = logging.Formatter('%(asctime)s %(message)s', datefmt='%m/%d/
 ###### function decorators for logging ###
 
 ## indenting ####
+indentation_sep = '\t' # spacing amount at each indentation
 
 def indent_write(write):
     '''
@@ -82,7 +83,7 @@ def indent_write(write):
     '''
     @wraps(write)
     def wrapper(message):
-        message = ('\t'+'\n\t'.join(message[:-1].split('\n')) + message[-1])
+        message = (indentation_sep+f'\n{indentation_sep}'.join(message[:-1].split('\n')) + message[-1])
         return write(message)
     return wrapper
 
@@ -147,7 +148,6 @@ def indent(*streams):
     return wrapper_outer
 
 def indent_logger(logger=None):
-    #GM: Perhaps smaller indents would be more satisfying
     '''
     Indents all handlers of a given logger when the decorated function is running
 

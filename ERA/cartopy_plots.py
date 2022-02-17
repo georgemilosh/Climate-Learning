@@ -42,7 +42,7 @@ def Greenwich(*args):
     if len(args) == 1:
         return acp(args[0])
     args = [acp(a) for a in args]
-    args[0][...,-1] = 360 # fix the longitude
+    args[0][...,-1] += 360 # fix the longitude
     return args
 
 def draw_map(m, background='stock_img', **kwargs):

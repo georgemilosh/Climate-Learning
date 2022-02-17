@@ -1587,10 +1587,24 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
         make_XY_kwargs = {}
     if roll_X_kwargs is None:
         roll_X_kwargs = {}
+    roll_X_kwargs = ut.set_values_recursive(get_default_params(roll_X), roll_X_kwargs) # get the default values not provided
+
+    # get lat and lon
+    f = list(fields.values())[0] # take the first field
+    lat = f.lat # 1d array
+    lon = f.lon # 1d array
+
     X,Y = make_XY(fields, **make_XY_kwargs)
     
     # move greenwich_meridian
     X = roll_X(X, **roll_X_kwargs)
+    # roll also lat and lon
+    roll_axis = roll_X_kwargs['roll_axis']
+    roll_steps = roll_X_kwargs['steps']
+    if roll_axis == 'lon':
+        lon = np.roll(lon, roll_steps)
+    if roll_axis == 'lat':
+        lat = np.roll(lat, roll_steps)
 
     # mixing
     logger.info('Mixing')
@@ -1629,7 +1643,7 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
         Y = Y.reshape((Y.shape[0]*Y.shape[1]))
         logger.info(f'Flattened time: {X.shape = }, {Y.shape = }')
 
-    return X, Y, year_permutation
+    return X, Y, year_permutation, lat, lon
 
 
 @ut.execution_time
