@@ -1635,7 +1635,6 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
 @ut.execution_time
 @ut.indent_logger(logger)
 def prepare_data(load_data_kwargs=None, prepare_XY_kwargs=None):
-    # GM: since the kwargs are passed in a recursive manner it makes it difficult to keep track of how the function such as prepare_data can be used in isolation from Trainer class, or for example prepare_XY. Perhaps some short totorial would be appropriate
     '''
     Combines all the steps from loading the data to the creation of X and Y
 
