@@ -26,6 +26,7 @@ else:
     logger = logging.getLogger(__name__)
 logger.level = logging.INFO
 
+
 ## user defined modules
 this_module = sys.modules[__name__]
 path_to_here = Path(__file__).resolve().parent
@@ -45,7 +46,10 @@ if not path_to_PLASIM in sys.path:
 import PLASIM.Learn2_new as ln
 ut = ln.ut # utilities
 ef = ln.ef # ERA_Fields_New
+tff = ln.tff # TF_Fields
 
+# set spacing of the indentation
+ut.indentation_sep = '  '
 
 
 
@@ -219,14 +223,12 @@ def PrepareDataAndVAE(creation=None, DIFFERENT_YEARS=None):
     
     myinput = CreateFolder(creation,checkpoint_name)
     
-    _fields = ln.load_data(dataset_years=8000, year_list=SET_YEARS) # Fix support for different years
-    firstkey = next(iter(_fields))
-    LON = _fields[firstkey].LON
-    LAT = _fields[firstkey].LAT
+    X, Y, yp, LON, LAT = ln.prepare_data(load_data_kwargs = {'fields': ['t2m_filtered','zg500','mrso_filtered'], 'dataset_years': 8000, 'year_list': SET_YEARS},
+                           prepare_XY_kwargs = {'roll_X_kwargs': {'roll_steps': 64}})
+    
     print("LON.shape = ", LON.shape, " ; LAT.shape = ", LAT.shape)
-    X, _Y, _year_permutation = ln.prepare_XY(_fields)
-    np.save(checkpoint_name+'/year_permutation',_year_permutation)
-    np.save(checkpoint_name+'/Y',_Y)
+    np.save(checkpoint_name+'/year_permutation',yp)
+    np.save(checkpoint_name+'/Y',Y)
     #X = X.reshape(-1,*X.shape[2:])
     
     INPUT_DIM = X.shape[1:]  # Image dimension
@@ -246,11 +248,13 @@ def PrepareDataAndVAE(creation=None, DIFFERENT_YEARS=None):
     filter_mask = np.array([filter_mask,np.ones(X[:BATCH_SIZE2,...,0].shape),filter_mask], dtype=bool).transpose(1,2,3,0) # Stack truth mask (for zg500) between two layers that have a mask
     print('filter_mask.shape = ', filter_mask.shape)
     """
-    filter_mask = roll_X(ef.create_mask(Model,'France', X[0,...,0], axes='first 2', return_full_mask=True),1)
+    filter_mask = ln.roll_X(ef.create_mask(Model,'France', X[0,...,0], axes='first 2', return_full_mask=True),1)
     print('filter_mask.shape = ', filter_mask.shape)
     print('np.ones(X[0,...,0].shape).shape = ', np.ones(X[0,...,0].shape).shape)
     print('np.array([filter_mask,np.ones(X[0,...,0].shape),filter_mask], dtype=bool).shape = ', np.array([filter_mask,np.ones(X[0,...,0].shape),filter_mask], dtype=bool).shape)
     filter_mask = np.array([filter_mask,np.ones(X[0,...,0].shape),filter_mask], dtype=bool).transpose(1,2,0) 
+    
+    print("X.dtype = ", X.dtype, " ,filter_mask.dtype = ", filter_mask.dtype)
     
     vae, history, N_EPOCHS, INITIAL_EPOCH, checkpoint, checkpoint_path = ConstructVAE(INPUT_DIM, Z_DIM, checkpoint_name, N_EPOCHS, myinput, K1, K2, from_logits=False, mask_weights=filter_mask)
     

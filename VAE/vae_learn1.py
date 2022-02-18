@@ -532,7 +532,7 @@ def PrepareParameters(creation):
     Z_DIM = 64 #8 #16 #256 # Dimension of the latent vector (z)
     BATCH_SIZE = 128#512
     LEARNING_RATE = 1e-3#5e-4# 1e-3#5e-6
-    N_EPOCHS = 10#600#200
+    N_EPOCHS = 2#600#200
     SET_YEARS =     range(8000) #range(1000)   # the set of years that variational autoencoder sees
     SET_YEARS_LABEL =   'range8000' #'range1000' # 
     K1 = 0.9 # 1#100
@@ -722,6 +722,8 @@ def PrepareDataAndVAE(creation=None, DIFFERENT_YEARS=None):
     print('np.ones(X[0,...,0].shape).shape = ', np.ones(X[0,...,0].shape).shape)
     print('np.array([filter_mask,np.ones(X[0,...,0].shape),filter_mask], dtype=bool).shape = ', np.array([filter_mask,np.ones(X[0,...,0].shape),filter_mask], dtype=bool).shape)
     filter_mask = np.array([filter_mask,np.ones(X[0,...,0].shape),filter_mask], dtype=bool).transpose(1,2,0) 
+    
+    print("X.dtype = ", X.dtype, " ,filter_mask.dtype = ", filter_mask.dtype)
     
     vae, history, N_EPOCHS, INITIAL_EPOCH, checkpoint, checkpoint_path = ConstructVAE(INPUT_DIM, Z_DIM, checkpoint_name, N_EPOCHS, myinput, K1, K2, from_logits=False, mask_weights=filter_mask)
     
