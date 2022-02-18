@@ -1990,10 +1990,11 @@ def PrepareTestTrain(X_train_new, X_test, Y_train_new,Y_test): # Get's our data 
 def ComputeMCC(Y_test, Y_pred, verbose):
     # Compute Matthews Correlation Coefficient
     [[TN, FP],[FN, TP]] = confusion_matrix(Y_test, Y_pred) # note that confusion matrix treats 0 as the first column/row
+    [[TNd, FPd],[FNd, TPd]] = np.array([[TN, FP],[FN, TP]])
     if ((TP+FP)*(TP+FN)*(TN+FP)*(TN+FN) == 0):
         MCC = 0
     else:
-        MCC = ((TP * TN - FP *FN)/ np.sqrt(float((TP+FP)*(TP+FN)*(TN+FP)*(TN+FN))))
+        MCC = ((TPd * TNd - FPd *FNd)/ np.sqrt(((TPd+FPd)*(TPd+FNd)*(TNd+FPd)*(TNd+FNd))))
     if verbose:
         print("MCC = ", MCC, " , TP = ", TP, " , TN = ", TN, " , FP = ", FP, " , FN = ", FN)
     return TP, TN, FP, FN, MCC
