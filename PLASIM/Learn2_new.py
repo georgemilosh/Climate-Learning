@@ -596,7 +596,7 @@ for h in [200,300,500,850]: # geopotential heights
         'label': f'{h} mbar Geopotential',
     }
 
-@ut.execution_time  # prints the time it takes for the function t run
+@ut.execution_time  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function
 # GM: perhaps 'mask' is a better title, rather than filter, but given many functions already carry this name it is too late
 def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', area='France', filter_area='France',
@@ -1604,7 +1604,7 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
     X = roll_X(X, **roll_X_kwargs)
     # roll also lat and lon
     roll_axis = roll_X_kwargs['roll_axis']
-    roll_steps = roll_X_kwargs['steps']
+    roll_steps = roll_X_kwargs['roll_steps']
     if roll_axis == 'lon':
         lon = np.roll(lon, roll_steps)
 
