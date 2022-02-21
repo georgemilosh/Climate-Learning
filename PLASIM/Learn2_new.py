@@ -460,7 +460,7 @@ def group_by_varying(run_args, variable='tau', config_dict_flat=None):
         groups.append({'args': group_args[i], 'runs': group_runs[i], variable:[variable_dict[k] for k in group_runs[i]]})
     return groups
 
-def get_run(load_from, current_run_name=None, additional_relevant_keys=None):
+def get_run(load_from, current_run_name=None, additional_relevant_keys=None, runs_path='./runs.json'):
     '''
     Parameters
     ----------
@@ -491,7 +491,7 @@ def get_run(load_from, current_run_name=None, additional_relevant_keys=None):
     # arguments relevant for model architecture
     relevant_keys = list(get_default_params(create_model).keys()) + list(get_default_params(load_data).keys()) + ['nfolds'] + additional_relevant_keys
     
-    runs = ut.json2dict('runs.json')
+    runs = ut.json2dict(runs_path)
 
     # select only completed runs
     runs = {k: v for k,v in runs.items() if v['status'] == 'COMPLETED'}
@@ -1378,7 +1378,13 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
     folder = folder.rstrip('/')
 
     # get the actual run name from where to load
-    load_from = get_run(load_from, current_run_name=folder.rsplit('/',1)[-1])
+    spl = folder.rsplit('/',1)
+    if len(spl) == 2:
+        root_folder, current_run_name = spl
+    else:
+        root_folder = './'
+        current_run_name = spl[-1]
+    load_from = get_run(load_from, current_run_name=current_run_name, runs_path=f'{root_folder}/runs.json')
     if load_from is None:
         logger.log(41, 'Models will be trained from scratch')
     else:
@@ -1740,30 +1746,39 @@ class Trainer():
     '''
     Class for performing training of neural networks over multiple runs with different paramters in an efficient way
     '''
-    def __init__(self, config=None, skip_existing_run=True):
+    def __init__(self, root_folder='./', config='detect', skip_existing_run=True):
         '''
         Constructor
 
         Parameters
         ----------
-        config : dict or str or None, optional
+        root_folder : str, optional
+            path to the folder where to perform the runs, default corrent directory
+        config : dict or str or None or 'detect', optional
             if dict: config dictionary
             if str: path to config file
             if None: the default values specified in this file will be used
+            if 'detect': if in the current folder there is a config file, that one is used, otherwise the default config file will be used
         skip_existing_run : bool, optional
             Whether to skip runs that have already been performed in the same folder, by default True
             If False the existing run is not overwritten but a new one is performed
         '''
         self.skip_existing_run = skip_existing_run
+        self.root_folder = root_folder.rstrip('/')
+        self.config_file = f'{self.root_folder}/config.json'
+        self.runs_file = f'{self.root_folder}/runs.json'
+        self.allow_run = None
 
         # load config file and parse arguments
         self.config_file = None
+        if config == 'detect':
+            config = self.config_file if os.path.exists(self.config_file) else None
+
         if config is None:
             self.config_dict = CONFIG_DICT
         elif isinstance(config, dict):
             self.config_dict = config
         elif isinstance(config, str):
-            self.config_file = config
             self.config_dict = ut.json2dict(config)
         else:
             raise TypeError(f'Invalid type {type(config)} for config')
@@ -2064,7 +2079,25 @@ class Trainer():
         It checks for transfer learning and if the run has already been performed, in which case, if `self.skip_existing_run` is True, it is skipped
         Basically it is a wrapper of the `self.run` function.
         '''
-        runs = ut.json2dict('runs.json') # get runs dictionary
+        # check if we can run
+        if self.allow_run is None: # compute allow_run
+            if os.path.exists(f'{self.root_folder}/lock.txt'): # check if there is a lock
+                self.allow_run = False
+                logger.error('Lock detected: cannot run')
+            elif os.path.exists(self.config_file):
+                config_in_folder = ut.json2dict(self.config_file)
+                if config_in_folder == self.config_dict:
+                    self.allow_run = True
+                else:
+                    self.allow_run = False
+            else:
+                ut.dict2json(self.config_dict, self.config_file)
+                self.allow_run = True
+
+        if not self.allow_run:
+            raise FileExistsError('You cannot run in this folder with the provided config file. Other runs have already been performed with a different config file')
+
+        runs = ut.json2dict(self.runs_file) if os.path.exists(self.runs_file) else {} # get runs dictionary
 
         # check if the run has already been performed
         for r in runs.values():
@@ -2092,7 +2125,7 @@ class Trainer():
 
         # check for transfer learning
         load_from = ut.extract_nested(run_kwargs, 'load_from')
-        load_from = get_run(load_from,current_run_name=folder)
+        load_from = get_run(load_from,current_run_name=folder, runs_path=self.runs_file)
         tl_from = None
         if load_from is not None: # we actually do transfer learning
             nfolds = ut.extract_nested(run_kwargs, 'nfolds')
@@ -2137,11 +2170,11 @@ class Trainer():
         start_time = time.time()
         
         runs[run_id] = {'name': folder, 'args': kwargs, 'transfer_learning_from': tl_from, 'status': 'RUNNING', 'start_time': ut.now()}
-        ut.dict2json(runs, 'runs.json') # save runs.json
+        ut.dict2json(runs, self.runs_file) # save runs.json
 
         # write kwargs to logfile
         os.mkdir(folder)
-        with open(f'{folder}/log.log', 'a') as logfile:
+        with open(f'{self.root_folder}/{folder}/log.log', 'a') as logfile:
             logfile.write(f'{run_id = }\n\n')
             logfile.write('Non default parameters:\n')
             for k,v in kwargs.items():
@@ -2160,7 +2193,7 @@ class Trainer():
         try:            
             score, info = self.run(folder, **run_kwargs)
             
-            runs = ut.json2dict('runs.json')
+            runs = ut.json2dict(self.runs_file)
             runs[run_id]['status'] = info['status'] # either COMPLETED or PRUNED
             if info['status'] == 'PRUNED':
                 runs[run_id]['name'] = f'P{folder}'
@@ -2170,7 +2203,7 @@ class Trainer():
             logger.log(42, 'run completed!!!\n\n')
 
         except Exception as e: # run failed
-            runs = ut.json2dict('runs.json')
+            runs = ut.json2dict(self.runs_file)
             runs[run_id]['status'] = 'FAILED'
             runs[run_id]['name'] = f'F{folder}'
             shutil.move(folder, f'F{folder}')
@@ -2183,7 +2216,7 @@ class Trainer():
             runs[run_id]['run_time'] = ut.pretty_time(run_time)
             runs[run_id]['rune_time_min'] = run_time_min
 
-            ut.dict2json(runs,'runs.json')
+            ut.dict2json(runs,self.runs_file)
 
         return score
 
