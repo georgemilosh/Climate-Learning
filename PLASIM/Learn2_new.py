@@ -276,7 +276,7 @@ def check_config_dict(config_dict):
 ### OPERATIONS WITH RUN METADATA ###
 ####################################
 
-def parse_run_name(run_name):
+def parse_run_name(run_name, evaluate=False):
     '''
     Parses a string into a dictionary
 
@@ -284,11 +284,13 @@ def parse_run_name(run_name):
     ----------
     run_name: str
         run name formatted as *<param_name>_<param_value>__*
+    evaluate : bool, optional
+        whether to try to evaluate the string expressions (True), or leave them as strings (False).
+        If unable to evalate an expression, it is left as is
     
     Returns
     -------
-    d: dict
-        Values of the dictionary are strings
+    dict
     
     Examples
     --------
@@ -296,6 +298,8 @@ def parse_run_name(run_name):
     {'a': '5', 'b': '7'}
     >>> parse_run_name('test_arg__bla--b__7')
     {'test_arg': 'bla', 'b': '7'}
+    >>> parse_run_name('test_arg__bla--b__7', evaluate=True)
+    {'test_arg': 'bla', 'b': 7}
     '''
     d = {}
     args = run_name.split(arg_sep)
@@ -303,6 +307,11 @@ def parse_run_name(run_name):
         if value_sep not in arg:
             continue
         key, value = arg.rsplit(value_sep,1)
+        if evaluate:
+            try:
+                value = ast.literal_eval(value)
+            except:
+                pass
         d[key] = value
     return d
 
@@ -352,12 +361,14 @@ def select_compatible(run_args, conditions, require_unique=True, config=None):
     Examples   
     --------
     >>> run_args = {'1': {'tau': -5}, '2': {'percent': 1, 'tau': -10}, '3': {'percent': 1, 'tau': -5}}
-    >>> select_compatible(run_args, {'tau': 10})
+    >>> select_compatible(run_args, {'tau': -10})
     '2'
     >>> select_compatible(run_args, {'tau': -10}, require_unique=False)
     ['2']
     >>> select_compatible(run_args, {'percent': 1}, require_unique=False)
     ['2', '3']
+    >>> select_compatible(run_args, {'percent': 10}, require_unique=False)
+    []
     '''
     _run_args = deepcopy(run_args)
     if config is not None:
@@ -379,7 +390,7 @@ def select_compatible(run_args, conditions, require_unique=True, config=None):
         return compatible_keys
 
     if len(compatible_keys) == 0:
-        raise KeyError(f'No previous compatible satisfies {conditions = }')
+        raise KeyError(f'No previous compatible run satisfies {conditions = }')
     elif len(compatible_keys) > 1:
         raise KeyError(f"Multiple runs contain satisfy {conditions = } ({compatible_keys}) and your are requiring just one")
     return compatible_keys[0]
@@ -460,14 +471,26 @@ def group_by_varying(run_args, variable='tau', config_dict_flat=None):
         groups.append({'args': group_args[i], 'runs': group_runs[i], variable:[variable_dict[k] for k in group_runs[i]]})
     return groups
 
-def get_run(load_from, current_run_name=None, additional_relevant_keys=None, runs_path='./runs.json'):
+def get_run(load_from, current_run_name=None, runs_path='./runs.json'):
     '''
     Parameters
     ----------
-    load_from : dict, int, str, 'last' or None
-        If dict it is a dictionary with arguments of the run. If int it is the number of the run.
-        If 'last' it is the last completed run. Otherwise it can be a piece of the run name or the full run name. If None, the function returns None
-        If the choice is ambiguous an error will be raised.
+    load_from : dict, int, str, or None
+        If dict:
+            it is a dictionary with arguments of the run, plus the optional argument 'if_ambiguous_choose'.
+            The latter can have value either 'last' or 'first', and tells the function which run to choose if multiple satisfy the compatibility conditions.
+            If it is not provided, the function will require to have only one compatible run and will raise an error if the choice is ambiguous.
+            The other items in the dictionary can be set to the special value 'same', which will set the them to the value assumed by that argument in the current run.
+        If str:
+            it is parsed into a dictionary using `parse_run_name` function. `if_ambiguous_choose` is inferred from the beginning of `load_from`.
+            For example providing 'last', will look for the most recent run without further conditions than normal compatibility
+            Providing 'first--percent__1' will return the first compatible performed run with `percent` = 1
+            Providing 'last--percent__1--tau__same' will return the last compatible run with `percent` = 1 and `tau` at the same value of the current run
+            To use the 'same' keyword you must provide `current_run_name`
+        If int:
+            it is the number of the run (>0) or if negative is the n-th last run
+        If None: 
+            the function returns None
     current_run_name : str, optional
         used to check for compatibility issues when loading a model
     
@@ -485,8 +508,34 @@ def get_run(load_from, current_run_name=None, additional_relevant_keys=None, run
     if load_from is None:
         return None
 
-    if additional_relevant_keys is None:
-        additional_relevant_keys = []
+    if_ambiguous_choose = None # either None, 'last' or 'first'
+
+    # get if_ambiguous_choose and deal with the string type
+    additional_relevant_keys = []
+    if isinstance(load_from, str):
+        if load_from.startswith('last'):
+            if_ambiguous_choose = 'last'
+        elif load_from.startswith('first'):
+            if_ambiguous_choose = 'first'
+        
+        try:
+            load_from = int(load_from)
+        except ValueError: # cannot convert load_from to int, so it must be a string that doesn't contain only numbers:
+            load_from = parse_run_name(load_from, evaluate=True)
+    elif isinstance(load_from, dict):
+        if_ambiguous_choose = load_from.pop('if_ambiguous_choose', None)
+    
+    # now load_from is either int or dict
+
+    # handle 'same' options
+    if isinstance(load_from, dict):
+        for k,v in load_from.items():
+            if v == 'same':
+                if current_run_name is None:
+                    raise ValueError("Cannot use 'same' special value without providing current_run_name")
+                additional_relevant_keys.append(k)
+        for k in additional_relevant_keys:
+            load_from.pop(k)
 
     # arguments relevant for model architecture
     relevant_keys = list(get_default_params(create_model).keys()) + list(get_default_params(load_data).keys()) + ['nfolds'] + additional_relevant_keys
@@ -508,19 +557,20 @@ def get_run(load_from, current_run_name=None, additional_relevant_keys=None, run
     if isinstance(load_from, int):
         l = load_from
     elif isinstance(load_from, dict):
-        l = int(select_compatible({k:v['args'] for k,v in runs.items()}, load_from, require_unique=True))
-    elif isinstance(load_from, str):
-        try:
-            l = int(load_from) # run number
-        except ValueError: # cannot convert load_from to int, so it must be a string that doesn't contain only numbers
-            if load_from == 'last':
-                l = -1
+        require_unique = if_ambiguous_choose is None
+        l = select_compatible({k:v['args'] for k,v in runs.items()}, load_from, require_unique=require_unique)
+        if require_unique: # l is a string
+            l = int(l)
+        else: # l is a list of str
+            if len(l) == 0:
+                logger.log(35, f'None of the previous runs satisfy the conditions {load_from = }')
+                return None
+            if if_ambiguous_choose == 'first':
+                l = int(l[0])
+            elif if_ambiguous_choose == 'last':
+                l = int(l[-1])
             else:
-                run_names = {k:v['name'] for k,v in runs.items()}
-                if load_from in run_names.values(): # full run name provided
-                    return load_from
-                load_from_dict = parse_run_name(load_from)
-                l = int(select_compatible({k:parse_run_name(v) for k,v in run_names.items()}, load_from_dict, require_unique=True))
+                raise NotImplementedError(f'Unrecognized option {if_ambiguous_choose = }')
     else:
         raise TypeError(f'Unsupported type {type(load_from)} for load_from')
 
@@ -1765,21 +1815,25 @@ class Trainer():
         '''
         self.skip_existing_run = skip_existing_run
         self.root_folder = root_folder.rstrip('/')
+        if not os.path.exists(self.root_folder):
+            rf = Path(self.root_folder).resolve()
+            rf.mkdir(parents=True, exist_ok=True)
         self.config_file = f'{self.root_folder}/config.json'
         self.runs_file = f'{self.root_folder}/runs.json'
         self.allow_run = None
 
         # load config file and parse arguments
-        self.config_file = None
         if config == 'detect':
             config = self.config_file if os.path.exists(self.config_file) else None
 
         if config is None:
             self.config_dict = CONFIG_DICT
+            logger.info('Initializing config dictionary from default values')
         elif isinstance(config, dict):
             self.config_dict = config
         elif isinstance(config, str):
             self.config_dict = ut.json2dict(config)
+            logger.info(f"Loading config file from folder {config.rsplit('/',1)[0]}")
         else:
             raise TypeError(f'Invalid type {type(config)} for config')
         
