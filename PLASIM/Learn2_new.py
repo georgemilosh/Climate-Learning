@@ -1374,7 +1374,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
     train_model_kwargs : dict
         dictionary with the parameters to train a model
         For most common use (command line) you can only specify arguments that have a default value and so appear in the config file.
-        However if run this function from a notebook you can use more advanced features like using another loss rather than the default cross entropy
+        However when runing this function from a notebook you can use more advanced features like using another loss rather than the default cross entropy
         or an optimizer rather than Adam.
         This can be done specifying other parameters rather than the ones that appear in the config file, namely:
             num_epochs : int
@@ -1469,7 +1469,8 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
         n_pos_tr = np.sum(Y_tr)
         n_neg_tr = len(Y_tr) - n_pos_tr
         logger.info(f'number of training data: {len(Y_tr)} of which {n_neg_tr} negative and {n_pos_tr} positive')
-
+        
+        # GM: it is better to have a separate function for undersampling
         # perform undersampling
         if u > 1:
             undersampling_strategy = n_pos_tr/(n_neg_tr/u)
@@ -1484,12 +1485,17 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
             n_pos_tr = np.sum(Y_tr)
             n_neg_tr = len(Y_tr) - n_pos_tr
             logger.info(f'number of training data: {len(Y_tr)} of which {n_neg_tr} negative and {n_pos_tr} positive')
-
+        
+        # GM: It is better to have a separate function for normalization. 
         # renormalize data with pointwise mean and std
         X_mean = np.mean(X_tr, axis=0)
         X_std = np.std(X_tr, axis=0)
         logger.info(f'{np.sum(X_std < 1e-5)/np.product(X_std.shape)*100}\% of the data have std below 1e-5')
         X_std[X_std==0] = 1 # If there is no variance we shouldn't divide by zero ### hmmm: this may create discontinuities
+                            # GM: This is necessary because we will be masking (filtering) certain parts of the map 
+                            #     for certain fields, e.g. mrso, setting them to zero. Also there are some fields that don't
+                            #     vary over the ocean. I've tried normalizing by field, rather than by grid point, in which case
+                            #     the problem X_std==0 does not arise, but then the results came up slightly worse. 
 
         # save X_mean and X_std
         np.save(f'{fold_folder}/X_mean.npy', X_mean)
@@ -1517,7 +1523,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
 
         # number of training epochs
         num_epochs = train_model_kwargs.pop('num_epochs', None) # if num_epochs is not provided in train_model_kwargs, whihc is most of the time,
-                                                                # we assign it according if we have to du transfer learning or not
+                                                                # we assign it according if we have to do transfer learning or not
         if num_epochs is None:
             if load_from is None:
                 num_epochs = training_epochs
@@ -1525,7 +1531,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
                 num_epochs = training_epochs_tl
 
         # metrics
-        tf_sampling = tf.cast([0.5*np.log(u), -0.5*np.log(u)], tf.float32)
+        tf_sampling = tf.cast([0.5*np.log(u), -0.5*np.log(u)], tf.float32) # Debiasor of logits (this translates in debiasing the probabilities)
         metrics = train_model_kwargs.pop('metrics', None)
         if metrics is None:
             if fullmetrics:
@@ -1563,7 +1569,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
         logger.info(f'RAM memory: {my_memory[i][3]:.3e}') # Getting % usage of virtual_memory ( 3rd field)
 
         keras.backend.clear_session()
-        gc.collect() # Garbage collector which removes some extra references to the objects
+        gc.collect() # Garbage collector which removes some extra references to the objects. This is an attempt to micromanage the python handling of RAM
 
         # check for pruning
         if min_folds_before_pruning and prune_threshold is not None:
@@ -1576,7 +1582,8 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
         
     np.save(f'{folder}/RAM_stats.npy', my_memory)
 
-    # TODO: recompute the score if we want to calculate the optimal checkpoint collectively
+    # TODO: recompute the score if we want to calculate the optimal checkpoint collectively 
+    # GM: is it still a TODO?
 
     score_mean = np.mean(scores)
     score_std = np.std(scores)
