@@ -2237,7 +2237,7 @@ class Trainer():
         ut.dict2json(runs, self.runs_file) # save runs.json
 
         # write kwargs to logfile
-        os.mkdir(folder)
+        os.mkdir(f'{self.root_folder}/{folder}')
         with open(f'{self.root_folder}/{folder}/log.log', 'a') as logfile:
             logfile.write(f'{run_id = }\n\n')
             logfile.write('Non default parameters:\n')
@@ -2255,13 +2255,13 @@ class Trainer():
 
         # run
         try:            
-            score, info = self.run(folder, **run_kwargs)
+            score, info = self.run(f'{self.root_folder}/{folder}', **run_kwargs)
             
             runs = ut.json2dict(self.runs_file)
             runs[run_id]['status'] = info['status'] # either COMPLETED or PRUNED
             if info['status'] == 'PRUNED':
                 runs[run_id]['name'] = f'P{folder}'
-                shutil.move(folder, f'P{folder}')
+                shutil.move(f'{self.root_folder}/{folder}', f'{self.root_folder}/P{folder}')
             runs[run_id]['score'] = ast.literal_eval(str(score)) # ensure json serializability
             runs[run_id]['scores'] = info['scores']
             logger.log(42, 'run completed!!!\n\n')
@@ -2270,7 +2270,7 @@ class Trainer():
             runs = ut.json2dict(self.runs_file)
             runs[run_id]['status'] = 'FAILED'
             runs[run_id]['name'] = f'F{folder}'
-            shutil.move(folder, f'F{folder}')
+            shutil.move(f'{self.root_folder}/{folder}', f'{self.root_folder}/F{folder}')
             raise e
 
         finally: # in any case we need to save the end time and save runs to json
