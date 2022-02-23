@@ -206,7 +206,7 @@ class MetricComputer():
         prepare_XY_kwargs = ut.extract_nested(run_config_dict, 'prepare_XY_kwargs')
         if self.prepare_XY_kwargs != prepare_XY_kwargs:
             self.prepare_XY_kwargs = prepare_XY_kwargs
-            self.X, self.Y, _ = ln.prepare_XY(self.fields, **prepare_XY_kwargs)
+            self.X, self.Y = ln.prepare_XY(self.fields, **prepare_XY_kwargs)[:2]
 
         return self.X, self.Y
 
