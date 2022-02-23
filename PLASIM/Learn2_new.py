@@ -2158,7 +2158,10 @@ class Trainer():
         if not self.allow_run:
             raise FileExistsError('You cannot run in this folder with the provided config file. Other runs have already been performed with a different config file')
 
-        runs = ut.json2dict(self.runs_file) if os.path.exists(self.runs_file) else {} # get runs dictionary
+        if not os.path.exists(self.runs_file): # create run dictionary if not found
+            ut.dict2json({},self.runs_file)
+        
+        runs = ut.json2dict(self.runs_file) # get runs dictionary
 
         # check if the run has already been performed
         for r in runs.values():
