@@ -221,9 +221,7 @@ class MetricComputer():
             else:
                 logger.warning(f'Recomputing metrics for {run_name}')
 
-        recompute = True
-        if self.load_Y_if_found and os.path.exists(f'{run_folder}/fold_0/Y_va.npy'):
-            recompute = False
+        recompute = not (self.load_Y_if_found and os.path.exists(f'{run_folder}/fold_0/Y_va.npy'))
 
         run_config_dict = get_run_arguments(run_folder)
 
@@ -276,7 +274,7 @@ class MetricComputer():
 
                 if self.save_Y:
                     np.save(f'{fold_folder}/Y_va.npy', Y_va, allow_pickle=True)
-                    np.save(f'{fold_folder}/Y_pred_unbiased.npy', Y_pred_prob, allow_pickle=True)
+                    np.save(f'{fold_folder}/Y_pred_unbiased.npy', Y_pred_unbiased, allow_pickle=True)
 
             else:
                 Y_va = np.load(f'{fold_folder}/Y_va.npy',allow_pickle=True)
@@ -340,7 +338,7 @@ if __name__ == '__main__':
         runs = ut.json2dict(f'{folder}/runs.json')
         runs = [r for r in runs.values() if r['status'] == 'COMPLETED'] # restrict to successfull runs
 
-        # sort the runs such as to load data efficiently TODO
+        # TODO: sort the runs such as to load data efficiently
 
         for i,r in enumerate(runs):
             logger.log(35,f"\n\n\nComputing metrics for {r['name']} ({i+1}/{len(runs)})\n")
