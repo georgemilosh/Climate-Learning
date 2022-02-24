@@ -2194,7 +2194,7 @@ class Trainer():
         if load_from is not None: # we actually do transfer learning
             nfolds = ut.extract_nested(run_kwargs, 'nfolds')
             optimal_checkpoint_kwargs = ut.extract_nested(run_kwargs, 'optimal_checkpoint_kwargs')
-            opt_checkpoint = optimal_checkpoint(load_from,nfolds, **optimal_checkpoint_kwargs) # get the optimal checkpoint
+            opt_checkpoint = optimal_checkpoint(f'{self.root_folder}/{load_from}',nfolds, **optimal_checkpoint_kwargs) # get the optimal checkpoint
 
             tl_from = {'run': load_from, 'optimal_checkpoint': opt_checkpoint}
 
@@ -2202,7 +2202,7 @@ class Trainer():
             run_kwargs = ut.set_values_recursive(run_kwargs, {'load_from': load_from, 'bypass': opt_checkpoint})
 
             # force the dataset to the same year permutation
-            year_permutation = list(np.load(f'{load_from}/year_permutation.npy', allow_pickle=True))
+            year_permutation = list(np.load(f'{self.root_folder}/{load_from}/year_permutation.npy', allow_pickle=True))
             run_kwargs = ut.set_values_recursive(run_kwargs, {'year_permutation': year_permutation})
 
             # these arguments are ignored due to transfer learning, so warn the user if they had been provided
