@@ -1673,7 +1673,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
             first_epoch = optimal_checkpoint_kwargs['first_epoch']
         except KeyError:
             first_epoch = get_default_params(optimal_checkpoint)['first_epoch']
-        optimal_checkpoint_kwargs['bypass'] = None # remove the bypass
+        optimal_checkpoint_kwargs['bypass'] = None # remove the bypass if there was one
         opt_checkpoint = optimal_checkpoint(folder,nfolds, **optimal_checkpoint_kwargs) - first_epoch
         for i in range(nfolds):
             scores[i] = np.load(f'{folder}/fold_{i}/history.npy', allow_pickle=True).item()[return_metric][opt_checkpoint]
@@ -2368,6 +2368,10 @@ class Trainer():
             raise e
 
         finally: # in any case we need to save the end time and save runs to json
+            if runs[run_id]['status'] == 'RUNNING': # the run has not completed but the above except block has not been executed (e.g. due to KeybordInterruptError)
+                runs[run_id]['status'] = 'FAILED'
+                runs[run_id]['name'] = f'F{folder}'
+                shutil.move(f'{self.root_folder}/{folder}', f'{self.root_folder}/F{folder}')
             runs[run_id]['end_time'] = ut.now()
             run_time = time.time() - start_time
             run_time_min = int(run_time/0.6)/100 # 2 decimal places of run time in minutes
