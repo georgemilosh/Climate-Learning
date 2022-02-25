@@ -9,7 +9,8 @@ import logging
 import sys
 import os
 logging.getLogger().level = logging.INFO
-logging.getLogger().handlers = [logging.StreamHandler(sys.stdout)]
+ln.logger = logging.getLogger()
+# logging.getLogger().handlers = [logging.StreamHandler(sys.stdout)]
 
 # set spacing of the indentation
 ut.indentation_sep = '  '
@@ -40,6 +41,7 @@ d = {
 ut.set_values_recursive(t.config_dict, d, inplace=True)
 print(ut.dict2str(t.config_dict))
 
-t.schedule(percent=[5,1], tau=[0, -5, -10, -15, -20, -25, -30], load_from='last--percent__same')
+# t.schedule(percent=[5,1], tau=[0, -5, -10, -15, -20, -25, -30], load_from='last--percent__same')
+t.schedule(percent=5, tau=5, load_from='last_percent__same--tau__-5')
 
 t.run_multiple()
