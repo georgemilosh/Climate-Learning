@@ -78,16 +78,21 @@ level   name                events
 
 20      logging.INFO
 
+25                          History of training
+
 30      logging.WARNING
 
 35                          Which fold is running
+                            No runs from which to perform transfer learning
+                            Recomputing scores with optimal checkpoint
 
 40      logging.ERROR
 
 41                          From where the models are loaded or created
                             Final score of k_fold_cross_val
+                            Run pruned
 
-42                          Folder name of the run
+42                          Folder name of the run and progressive number among the scheduled runs
                             Single run completes
 
 45                          Added and removed telegram logger
@@ -103,7 +108,6 @@ level   name                events
 
 ## general purpose
 from copy import deepcopy
-from locale import normalize
 import os as os
 from pathlib import Path
 from stat import S_IREAD
@@ -115,6 +119,7 @@ import shutil
 import gc
 import psutil
 import numpy as np
+import pandas as pd
 import inspect
 import ast
 import logging
@@ -1327,14 +1332,19 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     my_history=model.fit(X_tr, Y_tr, batch_size=batch_size, validation_data=(X_va,Y_va), shuffle=True,
                          callbacks=callbacks, epochs=num_epochs, verbose=2, class_weight=None)
 
+    history = my_history.history
     model.save(folder)
-    np.save(f'{folder}/history.npy', my_history.history)
+    np.save(f'{folder}/history.npy', history)
+    # log history
+    df = pd.DataFrame(history)
+    df.index.name = 'epoch-1'
+    logger.log(25, str(df))
 
     # return the best value of the return metric
-    if return_metric not in my_history.history:
+    if return_metric not in history:
         logger.error(f'{return_metric = } is not one of the metrics monitored during training, returning NaN')
         return np.NaN
-    return np.min(my_history.history[return_metric])
+    return np.min(history[return_metric])
 
 @ut.execution_time
 @ut.indent_logger(logger)
