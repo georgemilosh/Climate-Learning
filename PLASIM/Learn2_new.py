@@ -1384,7 +1384,7 @@ def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='m
     ----------
     folder : str
         folder where the model is located that contains sub folders with the n folds named 'fold_%i'
-    nfolds : int, optional
+    nfolds : int
         number of folds,
     metric : str, optional
         metric with respect to which optimize, by default 'val_CustomLoss'
@@ -1658,8 +1658,25 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
         
     np.save(f'{folder}/RAM_stats.npy', my_memory)
 
-    # TODO: recompute the score if we want to calculate the optimal checkpoint collectively 
-    # GM: is it still a TODO?
+    # recompute the scores if collective=True
+    try:
+        collective = optimal_checkpoint_kwargs['collective']
+    except KeyError:
+        collective = get_default_params(optimal_checkpoint)['collective']
+    if collective:
+        logger.log(35, 'recomputing the scores with the collective optimal checkpoint')
+        try:
+            return_metric = train_model_kwargs['return_metric']
+        except KeyError:
+            return_metric = get_default_params(train_model)['return_metric']
+        try:
+            first_epoch = optimal_checkpoint_kwargs['first_epoch']
+        except KeyError:
+            first_epoch = get_default_params(optimal_checkpoint)['first_epoch']
+        optimal_checkpoint_kwargs['bypass'] = None # remove the bypass
+        opt_checkpoint = optimal_checkpoint(folder,nfolds, **optimal_checkpoint_kwargs) - first_epoch
+        for i in range(nfolds):
+            scores[i] = np.load(f'{folder}/fold_{i}/history.npy', allow_pickle=True).item()[return_metric][opt_checkpoint]
 
     score_mean = np.mean(scores)
     score_std = np.std(scores)
@@ -2103,7 +2120,8 @@ class Trainer():
         th = self.telegram(**self.telegram_kwargs)
         logger.log(45, f'Starting {len(self.scheduled_kwargs)} runs')
         try:
-            for kwargs in self.scheduled_kwargs:
+            for i,kwargs in enumerate(self.scheduled_kwargs):
+                logger.log(42, f'Run {i+1}/{len(self.scheduled_kwargs)}')
                 self._run(**kwargs)
             logger.log(49, '\n\n\n\n\n\nALL RUNS COMPLETED\n\n')
         finally:
