@@ -277,6 +277,16 @@ def check_config_dict(config_dict):
 ### OPERATIONS WITH RUN METADATA ###
 ####################################
 
+def make_run_name(run_id, **kwargs):
+    folder = f'{run_id}{arg_sep}'
+    for k in sorted(kwargs):
+        if k == 'load_from': # skip putting load_from in the name as it messes it
+            continue
+        folder += f'{k}{value_sep}{kwargs[k]}{arg_sep}'
+    folder = folder[:-len(arg_sep)] # remove the last arg_sep
+    folder = ut.make_safe(folder)
+    return folder
+
 def parse_run_name(run_name, evaluate=False):
     '''
     Parses a string into a dictionary
@@ -1028,7 +1038,7 @@ def balance_folds(weights, nfolds=10, verbose=False):
 
     if verbose:
         sums = np.array(sums)
-        logger.info(f'Sums of the balanced {nfolds} folds:\n{sums}\nstd/avg = {np.std(sums)/target_sum}\nmax relative deviation = {np.max(np.abs(sums - target_sum))/target_sum*100}\%')
+        logger.info(f'Sums of the balanced {nfolds} folds:\n{sums}\nstd/avg = {np.std(sums)/target_sum :.3f}\nmax relative deviation = {np.max(np.abs(sums - target_sum))/target_sum*100 :.3f}\%')
 
     return permutation
 
@@ -2270,11 +2280,7 @@ class Trainer():
         run_id = str(len(runs))
 
         # create run name from kwargs
-        folder = f'{run_id}{arg_sep}'
-        for k in sorted(kwargs):
-            folder += f'{k}{value_sep}{kwargs[k]}{arg_sep}'
-        folder = folder[:-len(arg_sep)] # remove the last arg_sep
-        folder = ut.make_safe(folder) 
+        folder = make_run_name(run_id, **kwargs)
 
         # correct the default kwargs with the ones provided
         run_kwargs = ut.set_values_recursive(self.default_run_kwargs, kwargs)
@@ -2317,11 +2323,7 @@ class Trainer():
                         logger.log(45, f"Rerunning {r['name']}")
                         
                 # update the folder name
-                folder = f'{run_id}{arg_sep}'
-                for k in sorted(kwargs):
-                    folder += f'{k}{value_sep}{kwargs[k]}{arg_sep}'
-                folder = folder[:-len(arg_sep)] # remove the last arg_sep
-                folder = ut.make_safe(folder)
+                folder = make_run_name(run_id, **kwargs)
 
         logger.log(42, f'{folder = }\n')
 
