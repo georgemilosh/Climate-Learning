@@ -103,6 +103,7 @@ level   name                events
 
 ## general purpose
 from copy import deepcopy
+from locale import normalize
 import os as os
 from pathlib import Path
 from stat import S_IREAD
@@ -882,6 +883,46 @@ def roll_X(X, roll_axis='lon', roll_steps=64):
     # at this point roll_axis is an int
     return np.roll(X,roll_steps,axis=roll_axis)
 
+def normalize_X(X, mode='pointwise'):
+    '''
+    Performs data normalization
+
+    Parameters
+    ----------
+    X : np.ndarray of shape (N, ...)
+        data
+    mode : 'pointwise', optional
+        how to perform the normalization. For now the only possible option is 'pointwise', which means every grid point is treated independently, by default 'pointwise'
+
+    Returns
+    -------
+    X_n : np.ndarray of same shape as X
+        normalized data
+    X_mean : np.ndarray of shape (...)
+        mean of X along the first axis
+    X_std : np.ndarray of shape (...)
+        std of X along the first axis
+
+    Raises
+    ------
+    NotImplementedError
+        if mode != 'pointwise'
+    '''
+    if mode == 'pointwise':
+        # renormalize data with pointwise mean and std
+        X_mean = np.mean(X, axis=0)
+        X_std = np.std(X, axis=0)
+        logger.info(f'{np.sum(X_std < 1e-5)/np.product(X_std.shape)*100 :.4f}\% of the data have std below 1e-5')
+        X_std[X_std==0] = 1 # If there is no variance we shouldn't divide by zero ### hmmm: this may create discontinuities
+                            # GM: This is necessary because we will be masking (filtering) certain parts of the map 
+                            #     for certain fields, e.g. mrso, setting them to zero. Also there are some fields that don't
+                            #     vary over the ocean. I've tried normalizing by field, rather than by grid point, in which case
+                            #     the problem X_std==0 does not arise, but then the results came up slightly worse. 
+
+    else:
+        raise NotImplementedError(f'Unknown normalization {mode = }')
+    return  (X - X_mean)/X_std, X_mean, X_std
+
 ####### MIXING ########    
 
 def shuffle_years(X, permutation=None, seed=0, apply=False):
@@ -986,6 +1027,59 @@ def balance_folds(weights, nfolds=10, verbose=False):
         logger.info(f'Sums of the balanced {nfolds} folds:\n{sums}\nstd/avg = {np.std(sums)/target_sum}\nmax relative deviation = {np.max(np.abs(sums - target_sum))/target_sum*100}\%')
 
     return permutation
+
+def undersample(X, Y, u=1, random_state=42):
+    '''
+    Performs undersampling of the majority class. Warning: modifies the provided X,Y
+
+    Parameters
+    ----------
+    X : np.ndarray of shape (N, ...)
+        data
+    Y : np.ndarray of shape (N,)
+        labels
+        N = n0 + n1 with n0 > n1 corresponds to the majority class
+    u : float >= 1, optional
+        undersampling factor , by default 1
+    random_state : int, optional
+        seed for the undersampler, by default 42
+
+    Returns
+    -------
+    X : np.ndarray of shape (M, ...)
+        undersampled data
+    Y : np.ndarray of shape (M,)
+        undersampled labels
+        M = n0/u + n1
+
+    Raises
+    ------
+    NotImplementedError
+        If u < 1
+    ValueError
+        If u > n0/n1
+    '''
+    if u < 1:
+        raise NotImplementedError(f'{u = } < 1')
+    elif u == 1:
+        return X, Y
+
+    n_pos_tr = np.sum(Y)
+    n_neg_tr = len(Y) - n_pos_tr
+    logger.info(f'number of training data before undersampling: {len(Y)} of which {n_neg_tr} negative and {n_pos_tr} positive')
+    
+    undersampling_strategy = n_pos_tr/(n_neg_tr/u)
+    if undersampling_strategy > 1: # you cannot undersample so much that the majority class becomes the minority one
+        raise ValueError(f'Too high undersmapling factor, maximum for this dataset is u={n_neg_tr/n_pos_tr}')
+    pipeline = Pipeline(steps=[('u', RandomUnderSampler(random_state=random_state, sampling_strategy=undersampling_strategy))])
+    # reshape data to feed it to the pipeline
+    X_shape = X.shape
+    X = X.reshape((X_shape[0], np.product(X_shape[1:])))
+    X, Y = pipeline.fit_resample(X, Y) # apply pipeline
+    X = X.reshape((X.shape[0], *X_shape[1:])) # reshape back
+
+    return X, Y
+    
 
 ################################################
 ########## NEURAL NETWORK DEFINITION ###########
@@ -1356,7 +1450,7 @@ def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='m
 
 @ut.execution_time
 @ut.indent_logger(logger)
-def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=None, optimal_checkpoint_kwargs=None, load_from='last', nfolds=10, val_folds=1, u=1,
+def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=None, optimal_checkpoint_kwargs=None, load_from='last', nfolds=10, val_folds=1, u=1, normalization_mode='pointwise',
                      fullmetrics=True, training_epochs=40, training_epochs_tl=10, loss='sparse_categorical_crossentropy', lr=1e-4, prune_threshold=None, min_folds_before_pruning=None):
     '''
     Performs k fold cross validation on a model architecture.
@@ -1466,43 +1560,21 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
         # split data
         X_tr, Y_tr, X_va, Y_va = k_fold_cross_val_split(i, X, Y, nfolds=nfolds, val_folds=val_folds)
 
+        # perform undersampling
+        X_tr, Y_tr = undersample(X_tr, Y_tr, u=u)
+
         n_pos_tr = np.sum(Y_tr)
         n_neg_tr = len(Y_tr) - n_pos_tr
         logger.info(f'number of training data: {len(Y_tr)} of which {n_neg_tr} negative and {n_pos_tr} positive')
-        
-        # GM: it is better to have a separate function for undersampling
-        # perform undersampling
-        if u > 1:
-            undersampling_strategy = n_pos_tr/(n_neg_tr/u)
-            if undersampling_strategy > 1: # you cannot undersample so much that the majority class becomes the minority one
-                raise ValueError(f'Too high undersmapling factor, maximum for this dataset is u={n_neg_tr/n_pos_tr}')
-            pipeline = Pipeline(steps=[('u', RandomUnderSampler(random_state=42, sampling_strategy=undersampling_strategy))])
-            # reshape data to feed it to the pipeline
-            X_tr_shape = X_tr.shape
-            X_tr = X_tr.reshape((X_tr_shape[0], np.product(X_tr_shape[1:])))
-            X_tr, Y_tr = pipeline.fit_resample(X_tr, Y_tr) # apply pipeline
-            X_tr = X_tr.reshape((X_tr.shape[0], *X_tr_shape[1:])) # reshape back
-            n_pos_tr = np.sum(Y_tr)
-            n_neg_tr = len(Y_tr) - n_pos_tr
-            logger.info(f'number of training data: {len(Y_tr)} of which {n_neg_tr} negative and {n_pos_tr} positive')
-        
-        # GM: It is better to have a separate function for normalization. 
-        # renormalize data with pointwise mean and std
-        X_mean = np.mean(X_tr, axis=0)
-        X_std = np.std(X_tr, axis=0)
-        logger.info(f'{np.sum(X_std < 1e-5)/np.product(X_std.shape)*100}\% of the data have std below 1e-5')
-        X_std[X_std==0] = 1 # If there is no variance we shouldn't divide by zero ### hmmm: this may create discontinuities
-                            # GM: This is necessary because we will be masking (filtering) certain parts of the map 
-                            #     for certain fields, e.g. mrso, setting them to zero. Also there are some fields that don't
-                            #     vary over the ocean. I've tried normalizing by field, rather than by grid point, in which case
-                            #     the problem X_std==0 does not arise, but then the results came up slightly worse. 
 
-        # save X_mean and X_std
-        np.save(f'{fold_folder}/X_mean.npy', X_mean)
-        np.save(f'{fold_folder}/X_std.npy', X_std)
+        if normalization_mode: # normalize X_tr and X_va
+            X_tr, X_mean, X_std = normalize_X(X_tr, mode=normalization_mode)
+            X_va = (X_va - X_mean)/X_std 
 
-        X_tr = (X_tr - X_mean)/X_std
-        X_va = (X_va - X_mean)/X_std
+            # save X_mean and X_std
+            np.save(f'{fold_folder}/X_mean.npy', X_mean)
+            np.save(f'{fold_folder}/X_std.npy', X_std)
+        
 
         logger.info(f'{X_tr.shape = }, {X_va.shape = }')
 
