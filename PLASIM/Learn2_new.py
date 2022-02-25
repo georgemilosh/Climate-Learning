@@ -515,7 +515,7 @@ def get_run(load_from, current_run_name=None, runs_path='./runs.json'):
     # select only completed runs
     runs = {k: v for k,v in runs.items() if v['status'] == 'COMPLETED'}
 
-    if isinstance(load_from, str) and load_from in [r['name'] for r in runs]: # if load_from is precisely the name of one of the runs, we don't need to do anything more
+    if isinstance(load_from, str) and load_from in [r['name'] for r in runs.values()]: # if load_from is precisely the name of one of the runs, we don't need to do anything more
         return load_from
 
     if_ambiguous_choose = None # either None, 'last' or 'first'
