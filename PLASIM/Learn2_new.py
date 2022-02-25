@@ -488,6 +488,7 @@ def get_run(load_from, current_run_name=None, runs_path='./runs.json'):
             Providing 'first--percent__1' will return the first compatible performed run with `percent` = 1
             Providing 'last--percent__1--tau__same' will return the last compatible run with `percent` = 1 and `tau` at the same value of the current run
             To use the 'same' keyword you must provide `current_run_name`
+            `load_from` can also be the full name of a run, in which case compatibility checks are skipped. 
         If int:
             it is the number of the run (>0) or if negative is the n-th last run
         If None: 
@@ -509,10 +510,17 @@ def get_run(load_from, current_run_name=None, runs_path='./runs.json'):
     if load_from is None:
         return None
 
+    runs = ut.json2dict(runs_path)
+
+    # select only completed runs
+    runs = {k: v for k,v in runs.items() if v['status'] == 'COMPLETED'}
+
+    if isinstance(load_from, str) and load_from in [r['name'] for r in runs]: # if load_from is precisely the name of one of the runs, we don't need to do anything more
+        return load_from
+
     if_ambiguous_choose = None # either None, 'last' or 'first'
 
     # get if_ambiguous_choose and deal with the string type
-    additional_relevant_keys = []
     if isinstance(load_from, str):
         if load_from.startswith('last'):
             if_ambiguous_choose = 'last'
@@ -529,6 +537,7 @@ def get_run(load_from, current_run_name=None, runs_path='./runs.json'):
     # now load_from is either int or dict
 
     # handle 'same' options
+    additional_relevant_keys = []
     if isinstance(load_from, dict):
         for k,v in load_from.items():
             if v == 'same':
@@ -540,11 +549,6 @@ def get_run(load_from, current_run_name=None, runs_path='./runs.json'):
 
     # arguments relevant for model architecture
     relevant_keys = list(get_default_params(create_model).keys()) + list(get_default_params(load_data).keys()) + ['nfolds'] + additional_relevant_keys
-    
-    runs = ut.json2dict(runs_path)
-
-    # select only completed runs
-    runs = {k: v for k,v in runs.items() if v['status'] == 'COMPLETED'}
 
     # select only compatible runs
     runs = {k: v for k,v in runs.items() if check_compatibility(v['name'], current_run_name, relevant_keys=relevant_keys)}
@@ -1541,7 +1545,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
     opt_checkpoint = None
     if load_from is not None:
         load_from = load_from.rstrip('/')
-        opt_checkpoint = optimal_checkpoint(load_from, nfolds, **optimal_checkpoint_kwargs)
+        opt_checkpoint = optimal_checkpoint(f'{root_folder}/{load_from}', nfolds, **optimal_checkpoint_kwargs)
         info['tl_from'] = {'run': load_from, 'optimal_checkpoint': opt_checkpoint}
         if isinstance(opt_checkpoint,int):
             # this happens if the optimal checkpoint is computed with `collective` = True, so we simply broadcast the single optimal checkpoint to all the folds
@@ -1586,8 +1590,8 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
         if load_from is None:
             model = create_model(input_shape=X_tr.shape[1:], **create_model_kwargs)
         else:
-            model = keras.models.load_model(f'{load_from}/fold_{i}', compile=False)
-            model.load_weights(f'{load_from}/fold_{i}/cp-{opt_checkpoint[i]:04d}.ckpt')
+            model = keras.models.load_model(f'{root_folder}/{load_from}/fold_{i}', compile=False)
+            model.load_weights(f'{root_folder}/{load_from}/fold_{i}/cp-{opt_checkpoint[i]:04d}.ckpt')
         summary_buffer = ut.Buffer() # workaround necessary to log the structure of the network to the file, since `model.summary` uses `print`
         summary_buffer.append('\n')
         model.summary(print_fn = lambda x: summary_buffer.append(x + '\n'))
