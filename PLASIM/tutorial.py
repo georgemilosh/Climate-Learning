@@ -22,6 +22,8 @@ t = ln.Trainer(work_dir)
 print(ut.dict2str(ut.extract_nested(t.config_dict, 'create_model_kwargs')))
 
 d = {
+    #'dataset_years': 1000, # choose the dataset with less years to avoid 
+    'year_list' : 'range(100)', # choose the first 100 years for training and testing (everything)
     'conv_channels': [64, 24], # set number of convolutional kernels per layer
     'kernel_sizes': [7, 3],
     'strides': [3, 2],
@@ -30,8 +32,10 @@ d = {
     'conv_dropout': False, # disable dropout in the convolutional layer
 
     'dense_units': [128, 64, 16, 2], # number of neurons per fully connected layer
-    'dense_dropouts': [0.5, 0.5, 0.1, 0]
+    'dense_dropouts': [0.5, 0.5, 0.1, 0],
+    'dense_activations': ['relu', 'relu', 'relu', None]
 }
+
 
 ut.set_values_recursive(t.config_dict, d, inplace=True)
 print(ut.dict2str(t.config_dict))
