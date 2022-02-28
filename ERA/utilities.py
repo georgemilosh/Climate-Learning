@@ -485,6 +485,42 @@ def set_values_recursive(d_nested, d_flat, inplace=False):
             d_n[k] = d_flat[k]
     return d_n
 
+def get_run_arguments(run_folder):
+    '''
+    Retrieves the values of the parameters of a run
+
+    Parameters
+    ----------
+    run_folder : str
+        folder where the run is located, with subfolders containing the folds
+
+    Returns
+    -------
+    dict
+        nested dictionary with the arguments of the run
+    '''
+    run_folder = run_folder.rstrip('/')
+    spl = run_folder.rsplit('/',1)
+    if len(spl) == 2:
+        root_folder, run_name = spl
+    else:
+        root_folder = './'
+        run_name = spl[-1]
+    run_id = run_name.split('--',1)[0]
+    runs = json2dict(f'{root_folder}/runs.json')
+    try:
+        run_id = int(run_id)
+        run = runs[str(run_id)]
+    except (ValueError, KeyError):
+        logger.error(f'{run_name} is not a successful run')
+        raise
+
+    config_dict = json2dict(f'{root_folder}/config.json')
+
+    run_config_dict = set_values_recursive(config_dict, run['args'])
+
+    return run_config_dict
+
 #### PERMUTATIONS ####
 
 def invert_permutation(permutation):
