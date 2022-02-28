@@ -6,6 +6,69 @@ np = ln.np
 keras = ln.keras
 pd = ln.pd
 
+def select(*arrays, amount=0.1, p=None):
+    '''
+    selects a given amount of data from a set of arrays according to a probability distribution
+
+    Parameters
+    ----------
+    *arrays : M arrays with first dimension of size N
+        The arrays from which to select from. They are assumed synchronized, i.e. if, for example, the first element of an array is selected, it is selected in every array
+    amount : int or float, optional
+        Amount of data to select. If int: number of elements; if float fraction of elsements, by default 0.1, which means 10% of the elements
+    p : 1D array-like of shape (N,), optional
+        array of probabilities corresponding to each element in `arrays`. By default None, which implies a uniform distribution over the elements af the arrays
+
+    Returns
+    -------
+    [
+        (a_selected, a_remaining)
+        for a in arrays
+    ]
+
+    Raises
+    ------
+    ValueError
+        If `arrays` have different first dimension lenght or it is different from the lenght of `p` or `amount` is float but not in [0,1]
+
+    Examples
+    --------
+    >>> np.random.seed(0)
+    >>> a = np.arange(10)
+    >>> select(a, amount=4)
+    [(array([2, 8, 4, 9]), array([0, 1, 3, 5, 6, 7]))]
+
+    >>> p = [0.1,0.1,0.5,0,0,0,0,0.1,0.1,0.1]
+    >>> select(a, amount=4, p=p)
+    [(array([2, 8, 9, 7]), array([0, 1, 3, 4, 5, 6]))]
+
+    >>> b = 1 - np.arange(10)/10
+    >>> select(a, b, amount=4, p=p)
+    [(array([2, 9, 0, 1]), array([3, 4, 5, 6, 7, 8])), (array([0.8, 0.1, 1. , 0.9]), array([0.7, 0.6, 0.5, 0.4, 0.3, 0.2]))]
+    '''
+    l = len(arrays[0])
+    for a in arrays[1:]:
+        if l != len(a):
+            raise ValueError(f'Arrays with different lengths: {[len(a) for a in arrays]}')
+    if isinstance(amount, float):
+        if amount < 0 or amount > 1:
+            raise ValueError('Amount must be either int or float between 0 and 1')
+        amount = int(l*amount)
+
+    if p is not None:
+        s = np.sum(p)
+        if np.abs(s - 1) > 1e-7:
+            p = np.array(p, dtype=float)/s
+
+    indexes = np.arange(l)
+    selected_indexes = np.random.choice(indexes, size=amount, replace=False, p=p)
+    remaining_indexes = np.delete(indexes, selected_indexes)
+
+    output = []
+    for a in arrays:
+        output.append((a[selected_indexes], a[remaining_indexes]))
+
+    return output
 
 
 
