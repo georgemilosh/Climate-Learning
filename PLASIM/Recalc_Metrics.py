@@ -8,6 +8,7 @@ Usage
 -----
 
 This modules computes the metrics of an already trained network and saves them in a .csv file
+More importantly it evaluates the committor function which at this stage cannot be computed directly during weight search
 
 To run it from terminal
     python Recalc_Metrics.py <folder> <options>
@@ -69,7 +70,7 @@ def compute_metrics(Y_test, Y_pred_prob, percent, u=1, assignment_threshold=None
     Y_test : np.ndarray of shape (n,)
         Has values in {0 (no heatwave), 1 (heatwave)}
     Y_pred_prob : np.ndarray of shape (n, 2)
-        Probability that the event is or not a heatwave
+        Probability that the event is or not a heatwave # GM: >biased</unbiased?
     percent : float between 0 and 100
         Percentage associated to how rare the events are
     u : float >= 1, optional
@@ -104,7 +105,7 @@ def compute_metrics(Y_test, Y_pred_prob, percent, u=1, assignment_threshold=None
         if assignment_threshold == 'auto':
             p_sorted = np.sort(Y_pred_unbiased[:,1]) # sort the predicted probabilities of having a heatwave
             assignment_threshold = p_sorted[-int(perc*len(p_sorted))] # choose the threshold such that `percent` of the events will be considered heatwaves
-
+		# GM: Here I would say you could simply compute the appropriate threshold knowing what unbiasing does to the probabilities, it is 0.5 in terms of old probabilities
         metrics['assignment_threshold'] = assignment_threshold
         label_assignment = np.array(Y_pred_unbiased[:,1] > assignment_threshold, dtype=int)
 
@@ -120,6 +121,7 @@ def compute_metrics(Y_test, Y_pred_prob, percent, u=1, assignment_threshold=None
 
 
 def get_run_arguments(run_folder):
+    # GM: why is this not part of Learn2_new.py or utilities or something?
     '''
     Retrieves the values of the parameters of a run
 
@@ -220,7 +222,7 @@ class MetricComputer():
                 return metrics
             else:
                 logger.warning(f'Recomputing metrics for {run_name}')
-
+	# check if the (re)computing must be performed
         recompute = not (self.load_Y_if_found and os.path.exists(f'{run_folder}/fold_0/Y_va.npy'))
 
         run_config_dict = get_run_arguments(run_folder)
