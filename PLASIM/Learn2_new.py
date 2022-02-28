@@ -224,7 +224,7 @@ def get_default_params(func, recursive=False):
 def build_config_dict(functions):
     '''
     Creates a config file with the default arguments of the functions in the list `functions`. See also function `get_default_params`
-
+    # GM: maybe it would be more accurate to say, it building a config file dictionary?
     Parameters:
     -----------
     functions : list
@@ -497,7 +497,7 @@ def get_run(load_from, current_run_name=None, runs_path='./runs.json'):
             it is a dictionary with arguments of the run, plus the optional argument 'if_ambiguous_choose'.
             The latter can have value either 'last' or 'first', and tells the function which run to choose if multiple satisfy the compatibility conditions.
             If it is not provided, the function will require to have only one compatible run and will raise an error if the choice is ambiguous.
-            The other items in the dictionary can be set to the special value 'same', which will set the them to the value assumed by that argument in the current run.
+            The other items in the dictionary can be set to the special value 'same', which will set them to the value assumed by that argument in the current run.
         If str:
             it is parsed into a dictionary using `parse_run_name` function. `if_ambiguous_choose` is inferred from the beginning of `load_from`.
             For example providing 'last', will look for the most recent run without further conditions than normal compatibility
@@ -522,6 +522,7 @@ def get_run(load_from, current_run_name=None, runs_path='./runs.json'):
     ------
     KeyError
         if run_name is not found or the choice is ambiguous
+    # GM: examples could help to understand this function better.
     '''
     if load_from is None:
         return None
@@ -669,7 +670,6 @@ for h in [200,300,500,850]: # geopotential heights
 
 @ut.execution_time  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function
-# GM: perhaps 'mask' is a better title, rather than filter, but given many functions already carry this name it is too late
 def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', area='France', filter_area='France',
               lon_start=0, lon_end=128, lat_start=0, lat_end=22, mylocal='/local/gmiloshe/PLASIM/',fields=['t2m','zg500','mrso_filtered']):
     '''
