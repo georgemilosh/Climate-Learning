@@ -70,7 +70,7 @@ def compute_metrics(Y_test, Y_pred_prob, percent, u=1, assignment_threshold=None
     Y_test : np.ndarray of shape (n,)
         Has values in {0 (no heatwave), 1 (heatwave)}
     Y_pred_prob : np.ndarray of shape (n, 2)
-        Probability that the event is or not a heatwave # GM: >biased</unbiased?
+        Probability (biased) that the event is or not a heatwave
     percent : float between 0 and 100
         Percentage associated to how rare the events are
     u : float >= 1, optional
@@ -120,39 +120,6 @@ def compute_metrics(Y_test, Y_pred_prob, percent, u=1, assignment_threshold=None
     return metrics
 
 
-def get_run_arguments(run_folder):
-    # GM: why is this not part of Learn2_new.py or utilities or something?
-    '''
-    Retrieves the values of the parameters of a run
-
-    Parameters
-    ----------
-    run_folder : str
-        folder where the run is located, with subfolders containing the folds
-
-    Returns
-    -------
-    dict
-        nested dictionary with the arguments of the run
-    '''
-    run_folder = run_folder.rstrip('/')
-    root_folder, run_name = run_folder.rsplit('/', 1)
-    run_id = run_name.split('--',1)[0]
-    runs = ut.json2dict(f'{root_folder}/runs.json')
-    try:
-        run_id = int(run_id)
-        run = runs[str(run_id)]
-    except (ValueError, KeyError):
-        logger.error(f'{run_name} is not a successful run')
-        raise
-
-    config_dict = ut.json2dict(f'{root_folder}/config.json')
-
-    run_config_dict = ut.set_values_recursive(config_dict, run['args'])
-
-    return run_config_dict
-
-
 class MetricComputer():
     def __init__(self, assignment_threshold='auto', skip_already_computed=True, save_Y=True, load_Y_if_found=True):
         self.assignment_threshold = assignment_threshold
@@ -190,7 +157,7 @@ class MetricComputer():
             labels
         '''
         if run_config_dict is None:
-            run_config_dict = get_run_arguments(run_folder)
+            run_config_dict = ut.get_run_arguments(run_folder)
         run_config_dict = ut.set_values_recursive(run_config_dict, {'flatten_time_axis': True})
 
         if not ignore_year_permutation:
@@ -225,7 +192,7 @@ class MetricComputer():
 	# check if the (re)computing must be performed
         recompute = not (self.load_Y_if_found and os.path.exists(f'{run_folder}/fold_0/Y_va.npy'))
 
-        run_config_dict = get_run_arguments(run_folder)
+        run_config_dict = ut.get_run_arguments(run_folder)
 
         if recompute:
             self.prepare_data(run_folder, run_config_dict=run_config_dict) # computes self.X, self.Y
