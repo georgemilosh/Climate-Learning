@@ -141,7 +141,8 @@ from imblearn.pipeline import Pipeline
 
 import tensorflow as tf
 from tensorflow import keras
-from tensorflow.keras import layers, models
+layers = keras.layers
+models = keras.models
 
 ## user defined modules
 this_module = sys.modules[__name__]
