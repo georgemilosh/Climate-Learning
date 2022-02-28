@@ -86,11 +86,11 @@ def compute_p_func(q, Y):
 
     @np.vectorize
     def p0_func(qs):
-        return -np.log(np.max(epsilon, 1 - qs))
+        return -np.log(np.maximum(epsilon, 1 - qs))
 
     @np.vectorize
     def p1_func(qs):
-        return -np.log(np.max(epsilon, qs))
+        return -np.log(np.maximum(epsilon, qs))
 
     return p0_func, p1_func
 
