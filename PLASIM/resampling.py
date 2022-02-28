@@ -6,6 +6,13 @@ np = ln.np
 keras = ln.keras
 pd = ln.pd
 
+# log to stdout
+import logging
+import sys
+import os
+logging.getLogger().level = logging.INFO
+logging.getLogger().handlers = [logging.StreamHandler(sys.stdout)]
+
 def select(*arrays, amount=0.1, p=None):
     '''
     selects a given amount of data from a set of arrays according to a probability distribution
@@ -297,10 +304,10 @@ if __name__ == '__main__':
     ln.main()
 
     lock = ln.Path(__file__).resolve().parent / 'lock.txt'
-    if ln.os.path.exists(lock): # there is a lock
+    if os.path.exists(lock): # there is a lock
         # check for folder argument
-        if len(ln.sys.argv) == 2:
-            folder = ln.sys.argv[1]
+        if len(sys.argv) == 2:
+            folder = sys.argv[1]
             print(f'moving code to {folder = }')
             # copy this file
             path_to_here = ln.Path(__file__).resolve() # path to this file
