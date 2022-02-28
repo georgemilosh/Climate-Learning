@@ -2409,17 +2409,14 @@ CONFIG_DICT = build_config_dict([Trainer.run, Trainer.telegram]) # module level 
         
 
 
-    
-
-
-if __name__ == '__main__':
+def main():
     # check if there is a lock:
     lock = Path(__file__).resolve().parent / 'lock.txt'
     if os.path.exists(lock): # there is a lock
         # check for folder argument
         if len(sys.argv) < 2: 
             print(usage())
-            sys.exit(0)
+            return
         if len(sys.argv) == 2:
             folder = sys.argv[1]
             print(f'moving code to {folder = }')
@@ -2434,7 +2431,7 @@ if __name__ == '__main__':
             # runs file (which will keep track of various runs performed in newly created folder)
             ut.dict2json({},f'{folder}/runs.json')
 
-            sys.exit(0)
+            return
         else:
             with open(lock) as l:
                 raise ValueError(l.read())
@@ -2474,3 +2471,7 @@ if __name__ == '__main__':
     #     sys.exit(0)
     
     trainer.run_multiple()
+
+
+if __name__ == '__main__':
+    main()

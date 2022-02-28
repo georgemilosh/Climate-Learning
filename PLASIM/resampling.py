@@ -292,3 +292,16 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
 #####################################################
 ln.train_model = train_model
 ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram]) # module level config dictionary
+
+if __name__ == '__main__':
+    ln.main()
+
+    lock = ln.Path(__file__).resolve().parent / 'lock.txt'
+    if ln.os.path.exists(lock): # there is a lock
+        # check for folder argument
+        if len(ln.sys.argv) == 2:
+            folder = ln.sys.argv[1]
+            print(f'moving code to {folder = }')
+            # copy this file
+            path_to_here = ln.Path(__file__).resolve() # path to this file
+            ln.shutil.copy(path_to_here, folder)
