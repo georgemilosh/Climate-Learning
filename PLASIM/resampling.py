@@ -71,12 +71,30 @@ def select(*arrays, amount=0.1, p=None):
     return output
 
 
+def compute_p_func(q, Y):
+    # q0 = q[Y==0]
+    # q1 = q[Y==1]
+
+    epsilon = 1e-7
+
+    @np.vectorize
+    def p0_func(qs):
+        return -np.log(np.max(epsilon, 1 - qs))
+
+    @np.vectorize
+    def p1_func(qs):
+        return -np.log(np.max(epsilon, qs))
+
+    return p0_func, p1_func
+
+
+
 
 # we redefine the train model function
 @ut.execution_time
 @ut.indent_logger(logger)
 def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics, early_stopping_kwargs=None, # We always use early stopping
-                batch_size=1024, checkpoint_every=1, additional_callbacks=['csv_logger'], return_metric='val_CustomLoss', num_eons=10, data_percent=10):
+                batch_size=1024, checkpoint_every=1, additional_callbacks=['csv_logger'], return_metric='val_CustomLoss', num_eons=10, data_amount_per_eon=0.1):
     '''
     Trains a given model checkpointing its weights
 
@@ -181,24 +199,87 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
 
     model.save_weights(ckpt_name.format(epoch=0)) # save model before training
 
+    np.save(f'{folder}/Y_va.npy', Y_va) # save validation labels
+
 
     ############################################
     # Up to here is the same as ln.train_model #
     ############################################
 
-    # perform training for `num_epochs`
-    my_history=model.fit(X_tr, Y_tr, batch_size=batch_size, validation_data=(X_va,Y_va), shuffle=True,
-                         callbacks=callbacks, epochs=num_epochs, verbose=2, class_weight=None)
+    X0_remaining = X_tr[Y_tr == 0]
+    Y0_remaining = Y_tr[Y_tr == 0]
+    X1_remaining = X_tr[Y_tr == 1]
+    Y1_remaining = Y_tr[Y_tr == 1]
+    p0 = None
+    p1 = None
+    X_tr = X_tr[0:0] # this way we get the shape we need: (0, *X_tr.shape[1:])
+    Y_tr = Y_tr[0:0]
+    for eon in range(num_eons):
+        eon_folder = f'{folder}/eon_{eon}'
+        # augment training data
+        (X0_selected, X0_remaining), (Y0_selected, Y0_remaining) = select(X0_remaining, Y0_remaining, amount=data_amount_per_eon, p=p0)
+        (X1_selected, X1_remaining), (Y1_selected, Y1_remaining) = select(X1_remaining, Y1_remaining, amount=data_amount_per_eon, p=p1)
+
+        X_tr = np.concatenate([X_tr, X0_selected, X1_selected], axis=0)
+        Y_tr = np.concatenate([Y_tr, Y0_selected, Y1_selected], axis=0)
+
+        shuffle_permutation = np.random.permutation(Y_tr.shape[0]) # shuffle data
+        X_tr = X_tr[shuffle_permutation]
+        Y_tr = Y_tr[shuffle_permutation]
+
+        # perform training for `num_epochs`
+        my_history=model.fit(X_tr, Y_tr, batch_size=batch_size, validation_data=(X_va,Y_va), shuffle=True,
+                            callbacks=callbacks, epochs=num_epochs, verbose=2, class_weight=None)
 
 
-    ## deal with history
-    history = my_history.history
-    model.save(folder)
-    np.save(f'{folder}/history.npy', history)
-    # log history
-    df = pd.DataFrame(history)
-    df.index.name = 'epoch-1'
-    logger.log(25, str(df))
+        ## deal with history
+        history = my_history.history
+        model.save(eon_folder)
+        np.save(f'{eon_folder}/history.npy', history)
+        # log history
+        df = pd.DataFrame(history)
+        df.index.name = 'epoch-1'
+        logger.log(25, str(df))
+
+        # thanks to early stopping the model is reverted back to the best checkpoint
+
+        # compute q on the training dataset
+        q_tr = []
+        for b in range(Y_tr.shape[0]//batch_size + 1):
+            q_tr.append(keras.layers.Softmax()(model(X_tr[b*batch_size:(b+1)*batch_size])).numpy()[:,1])
+        q_tr = np.concatenate(q_tr)
+
+        # compute Y_pred on the validation set
+        q_va = []
+        for b in range(Y_tr.shape[0]//batch_size + 1):
+            q_va.append(keras.layers.Softmax()(model(X_va[b*batch_size:(b+1)*batch_size])).numpy())
+        q_va = np.concatenate(q_va)
+
+        # save predictions
+        np.save(f'{eon_folder}/q_tr.npy', q_tr)
+        np.save(f'{eon_folder}/Y_tr.npy', Y_tr)
+        np.save(f'{eon_folder}/q_va.npy', q_va)
+
+        # compute probability distribution for the next eon that would decide which data to add
+        p0_func, p1_func = compute_p_func(q_tr, Y_tr)
+
+        # compute q on the remaining dataset
+        q0_remaining = []
+        for b in range(Y0_remaining.shape[0]//batch_size + 1):
+            q0_remaining.append(keras.layers.Softmax()(model(X0_remaining[b*batch_size:(b+1)*batch_size])).numpy()[:,1])
+        q0_remaining = np.concatenate(q0_remaining)
+
+        q1_remaining = []
+        for b in range(Y1_remaining.shape[0]//batch_size + 1):
+            q1_remaining.append(keras.layers.Softmax()(model(X1_remaining[b*batch_size:(b+1)*batch_size])).numpy()[:,1])
+        q1_remaining = np.concatenate(q1_remaining)
+
+        # np.save(f'{eon_folder}/q0_remaining.npy', q0_remaining)
+        # np.save(f'{eon_folder}/q1_remaining.npy', q1_remaining)
+
+        # attribute the probabilities based on the value of the predicted committor
+        p0 = p0_func(q0_remaining)
+        p1 = p1_func(q1_remaining)
 
     # return the best value of the return metric
     if return_metric not in history:
