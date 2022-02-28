@@ -1268,6 +1268,8 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     float
         minimum value of `return_metric` during training
     '''
+    ### preliminary operations
+    ##########################
     if early_stopping_kwargs is None:
         early_stopping_kwargs = {}
     folder = folder.rstrip('/')
@@ -1325,6 +1327,8 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
         else:
             callbacks.append(early_stopping(**early_stopping_kwargs))
 
+    ### training the model
+    ######################
     model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
     model.save_weights(ckpt_name.format(epoch=0)) # save model before training
@@ -1333,6 +1337,8 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     my_history=model.fit(X_tr, Y_tr, batch_size=batch_size, validation_data=(X_va,Y_va), shuffle=True,
                          callbacks=callbacks, epochs=num_epochs, verbose=2, class_weight=None)
 
+
+    ## deal with history
     history = my_history.history
     model.save(folder)
     np.save(f'{folder}/history.npy', history)
