@@ -1909,7 +1909,8 @@ def run(folder, prepare_data_kwargs=None, k_fold_cross_val_kwargs=None, log_leve
     load_data_kwargs = prepare_data_kwargs['load_data_kwargs']
     prepare_XY_kwargs = prepare_data_kwargs['prepare_XY_kwargs']
     label_field = ut.extract_nested(prepare_data_kwargs, 'label_field')
-    # GM: I suppose here you check that we are not asking to label the events with a field that was not loaded 
+
+    # check that we are not asking to label the events with a field that was not loaded 
     for field_name in load_data_kwargs['fields']:
         if field_name.startswith(label_field):
             found = True
@@ -1979,8 +1980,8 @@ class Trainer():
         self.lon = None
         self.lat = None
 
-        self._old_lat_lon = None # GM: describe what this stand for
-        self._LONLAT = None
+        self._old_lat_lon = None # cache of self.lat, self.lon. See the workings of self.LAT or self.LON
+        self._LONLAT = None # meshgrid of self.lat, self.lon
 
         # extract default arguments for each function
         self.default_run_kwargs = ut.extract_nested(self.config_dict, 'run_kwargs')
@@ -2162,8 +2163,7 @@ class Trainer():
                 logger.handlers.remove(th)
                 logger.log(45, 'Removed telegram logger')
 
-	# GM: I guess below you mean transfering from the function load_data outside the class to the function load_data inside the class?
-    @wraps(load_data) # it transfers the docstring, signature and default values
+    @wraps(load_data) # it transfers the docstring, signature and default values from the module level function `load_data`
     def load_data(self, **load_data_kwargs):
         # load the fields only if the arguments have changed, otherwise self.fields is already at the correct value
         if self._load_data_kwargs != load_data_kwargs:
