@@ -1907,6 +1907,7 @@ def run(folder, prepare_data_kwargs=None, k_fold_cross_val_kwargs=None, log_leve
         k_fold_cross_val_kwargs = get_default_params(k_fold_cross_val, recursive=True)
      
     load_data_kwargs = prepare_data_kwargs['load_data_kwargs']
+    # GM: here it seems that you get load_data_kwargs from prepare_data_kwargs, as well as prepare_XY_kwargs. Since load_data and prepare_XY are called by prepare_data it would seem intuitive for this relationship to also hold in the config file
     prepare_XY_kwargs = prepare_data_kwargs['prepare_XY_kwargs']
     label_field = ut.extract_nested(prepare_data_kwargs, 'label_field')
 
@@ -2191,6 +2192,7 @@ class Trainer():
         return self.prepare_XY(self.fields, **prepare_XY_kwargs)
 
     def run(self, folder, load_data_kwargs=None, prepare_XY_kwargs=None, k_fold_cross_val_kwargs=None, log_level=logging.INFO):
+        # GM: why is there a need for a separate from _run function. Can't we just schedule a single run? Seems complex
         '''
         Performs a single full run
 
