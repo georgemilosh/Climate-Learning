@@ -223,8 +223,7 @@ def get_default_params(func, recursive=False):
 
 def build_config_dict(functions):
     '''
-    Creates a config file with the default arguments of the functions in the list `functions`. See also function `get_default_params`
-    # GM: maybe it would be more accurate to say, it building a config file dictionary?
+    Creates a config dictionary with the default arguments of the functions in the list `functions`. See also function `get_default_params`
     Parameters:
     -----------
     functions : list
