@@ -981,7 +981,7 @@ def shuffle_years(X, permutation=None, seed=0, apply=False):
 def balance_folds(weights, nfolds=10, verbose=False):
     '''
     Returns a permutation that, once applied to `weights` would make the consecutive `nfolds` pieces of equal length have their sum the most similar to each other.
-
+	# GM: a bit complicated language. Say something like shuffle the years between folds so that the distribution of heat waves per fold is as equal as possible
     Parameters
     ----------
     weights : 1D array-like
@@ -1114,6 +1114,7 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
     ----------
     input_shape : tuple
         shape of input data excluding the data_ID axis
+    # GM: What is data_ID? Maybe put a reference
     conv_channels : list of int, optional
         number of channels corresponding to the convolutional layers
     kernel_sizes : int, 2-tuple or list of ints or 2-tuples, optional
