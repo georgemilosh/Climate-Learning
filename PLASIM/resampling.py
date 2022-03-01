@@ -299,6 +299,7 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
 #####################################################
 ln.train_model = train_model
 ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram]) # module level config dictionary
+ut.set_values_recursive(ln.CONFIG_DICT, {'collective': False})
 
 if __name__ == '__main__':
     ln.main()
