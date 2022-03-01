@@ -1260,6 +1260,7 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
         'best custom_loss': every time 'custom_loss' reaches a new minimum. 'custom_loss' must be in the list of metrics
     additional_callbacks : list of keras.callbacks.Callback objects or list of str, optional
         string items are interpreted, for example 'csv_logger' creates a CSVLogger callback
+    	#GM: csv_logger is indendent for storing the history of the training
     return_metric : str, optional
         name of the metric of which the minimum value will be returned at the end of training
 
@@ -1442,7 +1443,7 @@ def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='m
     '''
     if bypass is not None:
         return bypass
-    
+ 
     run_folder = run_folder.rstrip('/')
     # Here we insert analysis of the previous training with the assessment of the ideal checkpoint
     history0 = np.load(f'{run_folder}/fold_0/history.npy', allow_pickle=True).item()
@@ -1536,6 +1537,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
 
     prune_threshold : float, optional
         if the average score in the first `min_folds_before_pruning` is above `prune_threshold`, the run is pruned.
+    # GM: explain pruning
     min_folds_before_pruning : int, optional
         minimum number of folds to train before checking whether to prune the run
 
@@ -1554,11 +1556,12 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
 
     # get the actual run name from where to load
     spl = folder.rsplit('/',1)
-    if len(spl) == 2:
+    if len(spl) == 2: # GM: explain
         root_folder, current_run_name = spl
     else:
         root_folder = './'
         current_run_name = spl[-1]
+    # Find the model which has the weights we can use for transfer learning, if it is possible
     load_from = get_run(load_from, current_run_name=current_run_name, runs_path=f'{root_folder}/runs.json')
     if load_from is None:
         logger.log(41, 'Models will be trained from scratch')
@@ -1625,7 +1628,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
         logger.info(summary_buffer.msg)
 
         # number of training epochs
-        num_epochs = train_model_kwargs.pop('num_epochs', None) # if num_epochs is not provided in train_model_kwargs, whihc is most of the time,
+        num_epochs = train_model_kwargs.pop('num_epochs', None) # if num_epochs is not provided in train_model_kwargs, which is most of the time,
                                                                 # we assign it according if we have to do transfer learning or not
         if num_epochs is None:
             if load_from is None:
@@ -1634,7 +1637,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
                 num_epochs = training_epochs_tl
 
         # metrics
-        tf_sampling = tf.cast([0.5*np.log(u), -0.5*np.log(u)], tf.float32) # Debiasor of logits (this translates in debiasing the probabilities)
+        tf_sampling = tf.cast([0.5*np.log(u), -0.5*np.log(u)], tf.float32) # Debiasor of logits (this translates into debiasing the probabilities)
         metrics = train_model_kwargs.pop('metrics', None)
         if metrics is None:
             if fullmetrics:
@@ -1642,7 +1645,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
                     'accuracy',
                     tff.MCCMetric(undersampling_factor=1),  # GM: Freddy says 1, try both but if it is too slow not worth it
                     tff.MCCMetric(undersampling_factor=u, name='UnbiasedMCC'),
-                    tff.ConfusionMatrixMetric(2, undersampling_factor=u), # GM: Freddy says 1
+                    tff.ConfusionMatrixMetric(2, undersampling_factor=u),
                     tff.BrierScoreMetric(undersampling_factor=u),
                     tff.CustomLoss(tf_sampling)
                 ]# the last two make the code run longer but give precise discrete prediction benchmarks
@@ -1674,7 +1677,8 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
         keras.backend.clear_session()
         gc.collect() # Garbage collector which removes some extra references to the objects. This is an attempt to micromanage the python handling of RAM
 
-        # check for pruning
+        # check for pruning. 
+	# GM: againt, not obvious what this does
         if min_folds_before_pruning and prune_threshold is not None:
             if i >= min_folds_before_pruning - 1 and i < nfolds - 1:
                 score_mean = np.mean(scores)
@@ -1700,7 +1704,8 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
             first_epoch = optimal_checkpoint_kwargs['first_epoch']
         except KeyError:
             first_epoch = get_default_params(optimal_checkpoint)['first_epoch']
-        optimal_checkpoint_kwargs['bypass'] = None # remove the bypass if there was one
+        # GM: it is a bit cryptic what is happening here. Why does it need to be there 
+	optimal_checkpoint_kwargs['bypass'] = None # remove the bypass if there was one
         opt_checkpoint = optimal_checkpoint(folder,nfolds, **optimal_checkpoint_kwargs) - first_epoch
         for i in range(nfolds):
             scores[i] = np.load(f'{folder}/fold_{i}/history.npy', allow_pickle=True).item()[return_metric][opt_checkpoint]
@@ -1849,7 +1854,6 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
 @ut.execution_time
 @ut.indent_logger(logger)
 def prepare_data(load_data_kwargs=None, prepare_XY_kwargs=None):
-    # GM: It would be convenient if load data also provided LON, LAT, which are stored in fields[0].LON etc. Also possibly rolled version. Make sure that this rolled version works properly when plotted with Greenwich meridian.
     '''
     Combines all the steps from loading the data to the creation of X and Y
 
@@ -1901,7 +1905,7 @@ def run(folder, prepare_data_kwargs=None, k_fold_cross_val_kwargs=None, log_leve
         prepare_data_kwargs = get_default_params(prepare_data, recursive=True)
     if k_fold_cross_val_kwargs is None:
         k_fold_cross_val_kwargs = get_default_params(k_fold_cross_val, recursive=True)
-    
+     
     load_data_kwargs = prepare_data_kwargs['load_data_kwargs']
     prepare_XY_kwargs = prepare_data_kwargs['prepare_XY_kwargs']
     label_field = ut.extract_nested(prepare_data_kwargs, 'label_field')
