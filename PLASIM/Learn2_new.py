@@ -981,7 +981,8 @@ def shuffle_years(X, permutation=None, seed=0, apply=False):
 def balance_folds(weights, nfolds=10, verbose=False):
     '''
     Returns a permutation that, once applied to `weights` would make the consecutive `nfolds` pieces of equal length have their sum the most similar to each other.
-	# GM: a bit complicated language. Say something like shuffle the years between folds so that the distribution of heat waves per fold is as equal as possible
+    When applied in this context it shuffles the years in such a way that the `nfolds` folds have a number of heatwave events which is as equal as possible
+
     Parameters
     ----------
     weights : 1D array-like
@@ -1259,8 +1260,7 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
         '100 batches' or '100 b': every 100 batches
         'best custom_loss': every time 'custom_loss' reaches a new minimum. 'custom_loss' must be in the list of metrics
     additional_callbacks : list of keras.callbacks.Callback objects or list of str, optional
-        string items are interpreted, for example 'csv_logger' creates a CSVLogger callback
-    	#GM: csv_logger is indendent for storing the history of the training
+        string items are interpreted, for example 'csv_logger' creates a CSVLogger callback that saves the history to a csv file
     return_metric : str, optional
         name of the metric of which the minimum value will be returned at the end of training
 
@@ -1555,8 +1555,8 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
     folder = folder.rstrip('/')
 
     # get the actual run name from where to load
-    spl = folder.rsplit('/',1)
-    if len(spl) == 2: # GM: explain
+    spl = folder.rsplit('/',1) # it is either [root_folder, run_name] or [run_name]. The latter if there was no '/' in `folder`
+    if len(spl) == 2:
         root_folder, current_run_name = spl
     else:
         root_folder = './'
@@ -1677,12 +1677,11 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
         keras.backend.clear_session()
         gc.collect() # Garbage collector which removes some extra references to the objects. This is an attempt to micromanage the python handling of RAM
 
-        # check for pruning. 
-	# GM: againt, not obvious what this does
-        if min_folds_before_pruning and prune_threshold is not None:
+        # check for pruning, i.e. if the run is not promising we don't compute all the folds to save time
+        if min_folds_before_pruning is not None and prune_threshold is not None:
             if i >= min_folds_before_pruning - 1 and i < nfolds - 1:
-                score_mean = np.mean(scores)
-                if score_mean > prune_threshold:
+                score_mean = np.mean(scores) # we compute the average score of the already computed folds
+                if score_mean > prune_threshold: # score too high, we prune the run
                     info['status'] = 'PRUNED'
                     logger.log(41,f'Pruning after {i+1}/{nfolds} folds')
                     break
@@ -1690,6 +1689,8 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
     np.save(f'{folder}/RAM_stats.npy', my_memory)
 
     # recompute the scores if collective=True
+    # Here we want to use the `optimal_checkpoint` function to compute the best checkpoint for this network. 
+    # Mind that before we used it to determine the optimal checkpoint from the network from which to perform transfer learning, so we need to change the parameters
     try:
         collective = optimal_checkpoint_kwargs['collective']
     except KeyError:
@@ -1704,8 +1705,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
             first_epoch = optimal_checkpoint_kwargs['first_epoch']
         except KeyError:
             first_epoch = get_default_params(optimal_checkpoint)['first_epoch']
-        # GM: it is a bit cryptic what is happening here. Why does it need to be there 
-	optimal_checkpoint_kwargs['bypass'] = None # remove the bypass if there was one
+        optimal_checkpoint_kwargs['bypass'] = None # remove the bypass if there was one (that could have been set up by the function Trainer._run)
         opt_checkpoint = optimal_checkpoint(folder,nfolds, **optimal_checkpoint_kwargs) - first_epoch
         for i in range(nfolds):
             scores[i] = np.load(f'{folder}/fold_{i}/history.npy', allow_pickle=True).item()[return_metric][opt_checkpoint]
