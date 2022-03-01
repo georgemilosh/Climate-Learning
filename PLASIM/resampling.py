@@ -258,8 +258,8 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
 
         # compute Y_pred on the validation set
         q_va = []
-        for b in range(Y_tr.shape[0]//batch_size + 1):
-            q_va.append(keras.layers.Softmax()(model(X_va[b*batch_size:(b+1)*batch_size])).numpy())
+        for b in range(Y_va.shape[0]//batch_size + 1):
+            q_va.append(keras.layers.Softmax()(model(X_va[b*batch_size:(b+1)*batch_size])).numpy()[:,1])
         q_va = np.concatenate(q_va)
 
         # save predictions
