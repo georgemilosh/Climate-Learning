@@ -19,8 +19,9 @@ def select(*arrays, amount=0.1, p=None):
 
     Parameters
     ----------
-    *arrays : M arrays with first dimension of size N
-        The arrays from which to select from. They are assumed synchronized, i.e. if, for example, the first element of an array is selected, it is selected in every array
+    *arrays : M arrays with first dimension of size N  
+    # GM: the sentence below is a bit complicated
+        The arrays from which to select from. They are assumed to be synchronized, i.e. if, for example, the first element of an array is selected, it is selected in every array
     amount : int or float, optional
         Amount of data to select. If int: number of elements; if float fraction of elsements, by default 0.1, which means 10% of the elements
     p : 1D array-like of shape (N,), optional
