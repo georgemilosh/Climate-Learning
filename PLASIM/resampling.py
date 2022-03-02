@@ -80,7 +80,9 @@ def select(*arrays, amount=0.1, p=None):
 def compute_p_func(q, Y):
     # q0 = q[Y==0]
     # q1 = q[Y==1]
-    # GM: It is not quite clear why it needs to be called with q and Y, especially since even q is not used below 
+    # GM: It is not quite clear why it needs to be called with q and Y, especially since even q is not used below
+    # AL: this is for future use where I compute the histogram of q and choose how to deal with it
+
     epsilon = 1e-7 # GM: I guess you are assuming float32 precision. Maybe 1e-15 could still work?
 
     @np.vectorize
@@ -217,7 +219,8 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     Y1_remaining = Y_tr[Y_tr == 1]
     p0 = None
     p1 = None
-    #GM: We want an empty array of shape (0, *X_tr.shape[1:])?
+    # GM: We want an empty array of shape (0, *X_tr.shape[1:])?
+    # AL: Yes for performing the concatenation
     X_tr = X_tr[0:0] # this way we get the shape we need: (0, *X_tr.shape[1:])
     Y_tr = Y_tr[0:0]
     for eon in range(num_eons):
@@ -248,8 +251,8 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
         logger.log(25, str(df))
 
         # thanks to early stopping the model is reverted back to the best checkpoint
-        # GM: why is the committor computed in batches of training?
-        # compute q on the training dataset
+        
+        # compute q on the training dataset (using batches so I am sure the data fits in memory)
         q_tr = []
         for b in range(Y_tr.shape[0]//batch_size + 1):
             q_tr.append(keras.layers.Softmax()(model(X_tr[b*batch_size:(b+1)*batch_size])).numpy()[:,1])
