@@ -16,12 +16,10 @@ logging.getLogger().handlers = [logging.StreamHandler(sys.stdout)]
 def select(*arrays, amount=0.1, p=None):
     '''
     selects a given amount of data from a set of arrays according to a probability distribution
-
     Parameters
     ----------
     *arrays : M arrays with first dimension of size N  
-    # GM: the sentence below is a bit complicated
-        The arrays from which to select from. They are assumed to be synchronized, i.e. if, for example, the first element of an array is selected, it is selected in every array
+        The arrays from which to select from. They are assumed to be synchronized, i.e. if, for example, the first element of an array is selected, it is selected in every array (same indices are selected)
     amount : int or float, optional
         Amount of data to select. If int: number of elements; if float fraction of elsements, by default 0.1, which means 10% of the elements
     p : 1D array-like of shape (N,), optional
@@ -82,8 +80,8 @@ def select(*arrays, amount=0.1, p=None):
 def compute_p_func(q, Y):
     # q0 = q[Y==0]
     # q1 = q[Y==1]
-
-    epsilon = 1e-7
+    # GM: It is not quite clear why it needs to be called with q and Y, especially since even q is not used below 
+    epsilon = 1e-7 # GM: I guess you are assuming float32 precision. Maybe 1e-15 could still work?
 
     @np.vectorize
     def p0_func(qs):
@@ -208,18 +206,18 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     model.save_weights(ckpt_name.format(epoch=0)) # save model before training
 
     np.save(f'{folder}/Y_va.npy', Y_va) # save validation labels
-
-
+    # GM: It would be nice to shield the user from this bookkeeping by assigning some function to do the operations above...
     ############################################
     # Up to here is the same as ln.train_model #
     ############################################
-
+    # The data is split into positive and negative labels so that the same percentage enters
     X0_remaining = X_tr[Y_tr == 0]
     Y0_remaining = Y_tr[Y_tr == 0]
     X1_remaining = X_tr[Y_tr == 1]
     Y1_remaining = Y_tr[Y_tr == 1]
     p0 = None
     p1 = None
+    #GM: We want an empty array of shape (0, *X_tr.shape[1:])?
     X_tr = X_tr[0:0] # this way we get the shape we need: (0, *X_tr.shape[1:])
     Y_tr = Y_tr[0:0]
     for eon in range(num_eons):
@@ -250,7 +248,7 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
         logger.log(25, str(df))
 
         # thanks to early stopping the model is reverted back to the best checkpoint
-
+        # GM: why is the committor computed in batches of training?
         # compute q on the training dataset
         q_tr = []
         for b in range(Y_tr.shape[0]//batch_size + 1):
