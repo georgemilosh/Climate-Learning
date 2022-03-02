@@ -933,7 +933,7 @@ def normalize_X(X, mode='pointwise'):
         X_std = np.std(X, axis=0)
         logger.info(f'{np.sum(X_std < 1e-5)/np.product(X_std.shape)*100 :.4f}\% of the data have std below 1e-5')
         X_std[X_std==0] = 1 # If there is no variance we shouldn't divide by zero ### hmmm: this may create discontinuities
-                            # GM: This is necessary because we will be masking (filtering) certain parts of the map 
+                            # This is necessary because we will be masking (filtering) certain parts of the map 
                             #     for certain fields, e.g. mrso, setting them to zero. Also there are some fields that don't
                             #     vary over the ocean. I've tried normalizing by field, rather than by grid point, in which case
                             #     the problem X_std==0 does not arise, but then the results came up slightly worse. 
@@ -1114,8 +1114,7 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
     Parameters
     ----------
     input_shape : tuple
-        shape of input data excluding the data_ID axis
-    # GM: What is data_ID? Maybe put a reference
+        shape of a single input datapoint, i.e. not counting the axis corresponding to iteration through the datapoints (batch axis)
     conv_channels : list of int, optional
         number of channels corresponding to the convolutional layers
     kernel_sizes : int, 2-tuple or list of ints or 2-tuples, optional
@@ -1537,9 +1536,12 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
 
     prune_threshold : float, optional
         if the average score in the first `min_folds_before_pruning` is above `prune_threshold`, the run is pruned.
-    # GM: explain pruning
+        This means that the run is considered not promising and hence we avoid losing time in computing the remaining folds.
+        This is particularly useful when performing a hyperparameter optimization procedure.
+        By default is None, which means that pruning is disabled
     min_folds_before_pruning : int, optional
         minimum number of folds to train before checking whether to prune the run
+        By default None, which means that pruning is disabled
 
     Returns
     -------
@@ -1643,7 +1645,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
             if fullmetrics:
                 metrics=[
                     'accuracy',
-                    tff.MCCMetric(undersampling_factor=1),  # GM: Freddy says 1, try both but if it is too slow not worth it
+                    tff.MCCMetric(undersampling_factor=1),
                     tff.MCCMetric(undersampling_factor=u, name='UnbiasedMCC'),
                     tff.ConfusionMatrixMetric(2, undersampling_factor=u),
                     tff.BrierScoreMetric(undersampling_factor=u),
@@ -1883,7 +1885,7 @@ def prepare_data(load_data_kwargs=None, prepare_XY_kwargs=None):
     return prepare_XY(fields, **prepare_XY_kwargs)  
 
 @ut.execution_time
-def run(folder, prepare_data_kwargs=None, k_fold_cross_val_kwargs=None, log_level=logging.INFO):
+def run(folder, load_data_kwargs=None, prepare_XY_kwargs=None, k_fold_cross_val_kwargs=None, log_level=logging.INFO):
     '''
     Perfroms a single full run
 
@@ -1901,22 +1903,16 @@ def run(folder, prepare_data_kwargs=None, k_fold_cross_val_kwargs=None, log_leve
     float
         average score of the run
     '''
-    if prepare_data_kwargs is None:
-        prepare_data_kwargs = get_default_params(prepare_data, recursive=True)
+    if load_data_kwargs is None:
+        load_data_kwargs = get_default_params(load_data, recursive=True)
+    if prepare_XY_kwargs is None:
+        prepare_XY_kwargs = get_default_params(prepare_XY, recursive=True)
     if k_fold_cross_val_kwargs is None:
         k_fold_cross_val_kwargs = get_default_params(k_fold_cross_val, recursive=True)
-     
-    load_data_kwargs = prepare_data_kwargs['load_data_kwargs']
-    # GM: here it seems that you get load_data_kwargs from prepare_data_kwargs, as well as prepare_XY_kwargs. Since load_data and prepare_XY are called by prepare_data it would seem intuitive for this relationship to also hold in the config file
-    prepare_XY_kwargs = prepare_data_kwargs['prepare_XY_kwargs']
-    label_field = ut.extract_nested(prepare_data_kwargs, 'label_field')
 
-    # check that we are not asking to label the events with a field that was not loaded 
-    for field_name in load_data_kwargs['fields']:
-        if field_name.startswith(label_field):
-            found = True
-            break
-    if not found:
+    # check that we are not asking to label the events with a field that was not loaded
+    label_field = ut.extract_nested(prepare_XY_kwargs, 'label_field')
+    if not any([field_name.startswith(label_field) for field_name in load_data_kwargs['fields']]):
         raise KeyError(f"field {label_field} is not a loaded field")
 
     trainer = Trainer()
@@ -2192,7 +2188,6 @@ class Trainer():
         return self.prepare_XY(self.fields, **prepare_XY_kwargs)
 
     def run(self, folder, load_data_kwargs=None, prepare_XY_kwargs=None, k_fold_cross_val_kwargs=None, log_level=logging.INFO):
-        # GM: why is there a need for a separate from _run function. Can't we just schedule a single run? Seems complex
         '''
         Performs a single full run
 
@@ -2266,8 +2261,9 @@ class Trainer():
     def _run(self, **kwargs):
         '''
         Parses kwargs and performs a single run, kwargs are not interpreted as iterables.
-        It checks for transfer learning and if the run has already been performed, in which case, if `self.skip_existing_run` is True, it is skipped
-        Basically it is a wrapper of the `self.run` function.
+        It checks for transfer learning and if the run has already been performed, in which case, if `self.skip_existing_run` is True, it is skipped.
+        It also deals with the runs.json file.
+        Basically it is a wrapper of the `self.run` function that performs all the extra steps besides a simply training the network.
         '''
         # check if we can run
         if self.allow_run is None: # compute allow_run
@@ -2412,11 +2408,10 @@ class Trainer():
 
 
 CONFIG_DICT = build_config_dict([Trainer.run, Trainer.telegram]) # module level config dictionary
+# config file will be built from the default parameters of the functions given here and of the functions they call in a recursive manner
         
 
         
-
-
 def main():
     # check if there is a lock:
     lock = Path(__file__).resolve().parent / 'lock.txt'
@@ -2430,10 +2425,6 @@ def main():
             print(f'moving code to {folder = }')
             move_to_folder(folder)
             
-            # config file will be built from the default parameters of the functions given here
-            # GM: build_config_dict will recursively find the keyword parameters of function run 
-            # (including the functions it calls) and build a corresponding dictionary tree in config file
-            # GM: Can some of these functions be moved to ../ERA/utilities.py later at some point?
             ut.dict2json(CONFIG_DICT,f'{folder}/config.json')
 
             # runs file (which will keep track of various runs performed in newly created folder)
