@@ -1221,6 +1221,58 @@ def early_stopping(monitor='val_CustomLoss', min_delta=0, patience=0, mode='auto
                 break
     return keras.callbacks.EarlyStopping(monitor=monitor, min_delta=min_delta, patience=patience, mode=mode, restore_best_weights=True)
 
+def make_checkpoint_callback(file_path, checkpoint_every=1):
+    '''
+    Creates a ModelCheckpoint callback
+
+    Parameters
+    ----------
+    file_path : str
+        path to the folder where the checkpoints will be stored. Can also have a format, for example <folder>/cp-{epoch:04d}.ckpt
+    checkpoint_every : int or str, optional
+        Examples:
+        0: disabled
+        5 or '5 epochs' or '5 e': every 5 epochs
+        '100 batches' or '100 b': every 100 batches
+        'best custom_loss': every time 'custom_loss' reaches a new minimum. 'custom_loss' must be in the list of metrics
+
+    Returns
+    -------
+    keras.callbacks.ModelCheckpoint
+
+    Raises
+    ------
+    ValueError
+        If the system doesn't manage to interpret `checkpoint_every`
+    '''
+    ckpt_callback = None
+    if checkpoint_every == 0: # no checkpointing
+        pass
+    elif checkpoint_every == 1: # save every epoch
+        ckpt_callback = keras.callbacks.ModelCheckpoint(filepath=file_path, save_weights_only=True, verbose=1)
+    elif isinstance(checkpoint_every, int): # save every `checkpoint_every` epochs 
+        ckpt_callback = keras.callbacks.ModelCheckpoint(filepath=file_path, save_weights_only=True, verbose=1, period=checkpoint_every)
+    elif isinstance(checkpoint_every, str): # parse string options
+        if checkpoint_every[0].isnumeric():
+            every, what = checkpoint_every.split(' ',1)
+            every = int(every)
+            if what.startswith('b'): # every batch
+                ckpt_callback = keras.callbacks.ModelCheckpoint(filepath=file_path, save_weights_only=True, verbose=1, save_freq=every)
+            elif what.startswith('e'): # every epoch
+                ckpt_callback = keras.callbacks.ModelCheckpoint(filepath=file_path, save_weights_only=True, verbose=1, period=every)
+            else:
+                raise ValueError(f'Unrecognized value for {checkpoint_every = }')
+
+        elif checkpoint_every.startswith('best'): # every best of something
+            monitor = checkpoint_every.split(' ',1)[1]
+            ckpt_callback = keras.callbacks.ModelCheckpoint(filepath=file_path, monitor=monitor, save_best_only=True, save_weights_only=True, verbose=1)
+        else:
+            raise ValueError(f'Unrecognized value for {checkpoint_every = }')
+    else:
+        raise ValueError(f'Unrecognized value for {checkpoint_every = }')
+
+    return ckpt_callback
+
 @ut.execution_time
 @ut.indent_logger(logger)
 def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics, early_stopping_kwargs=None, enable_early_stopping=False,
@@ -1290,31 +1342,7 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
                 callbacks.append(cb)
 
     # checkpointing callback
-    ckpt_callback = None
-    if checkpoint_every == 0: # no checkpointing
-        pass
-    elif checkpoint_every == 1: # save every epoch
-        ckpt_callback = keras.callbacks.ModelCheckpoint(filepath=ckpt_name, save_weights_only=True, verbose=1)
-    elif isinstance(checkpoint_every, int): # save every `checkpoint_every` epochs 
-        ckpt_callback = keras.callbacks.ModelCheckpoint(filepath=ckpt_name, save_weights_only=True, verbose=1, period=checkpoint_every)
-    elif isinstance(checkpoint_every, str): # parse string options
-        if checkpoint_every[0].isnumeric():
-            every, what = checkpoint_every.split(' ',1)
-            every = int(every)
-            if what.startswith('b'): # every batch
-                ckpt_callback = keras.callbacks.ModelCheckpoint(filepath=ckpt_name, save_weights_only=True, verbose=1, save_freq=every)
-            elif what.startswith('e'): # every epoch
-                ckpt_callback = keras.callbacks.ModelCheckpoint(filepath=ckpt_name, save_weights_only=True, verbose=1, period=every)
-            else:
-                raise ValueError(f'Unrecognized value for {checkpoint_every = }')
-
-        elif checkpoint_every.startswith('best'): # every best of something
-            monitor = checkpoint_every.split(' ',1)[1]
-            ckpt_callback = keras.callbacks.ModelCheckpoint(filepath=ckpt_name, monitor=monitor, save_best_only=True, save_weights_only=True, verbose=1)
-        else:
-            raise ValueError(f'Unrecognized value for {checkpoint_every = }')
-    else:
-        raise ValueError(f'Unrecognized value for {checkpoint_every = }')
+    ckpt_callback = make_checkpoint_callback(ckpt_name, checkpoint_every=checkpoint_every)
 
     if ckpt_callback is not None:
         callbacks.append(ckpt_callback)

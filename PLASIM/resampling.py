@@ -149,96 +149,79 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     if early_stopping_kwargs is None:
         early_stopping_kwargs = {}
     folder = folder.rstrip('/')
-    ckpt_name = folder + '/cp-{epoch:04d}.ckpt'
 
     ## deal with callbacks
-    callbacks = []
+    callbacks = {}
 
     # additional callbacks
     if additional_callbacks is not None:
         for cb in additional_callbacks:
             if isinstance(cb, str):
                 if cb.lower().startswith('csv'):
-                    callbacks.append(keras.callbacks.CSVLogger(f'{folder}/history.csv', append=True))
+                    callbacks['csv_logger'] = keras.callbacks.CSVLogger(f'{folder}/history.csv', append=True)
                 else:
                     raise ValueError(f'Unable to understand callback {cb}')
             else:
-                callbacks.append(cb)
-
-    # checkpointing callback
-    ckpt_callback = None
-    if checkpoint_every == 0: # no checkpointing
-        pass
-    elif checkpoint_every == 1: # save every epoch
-        ckpt_callback = keras.callbacks.ModelCheckpoint(filepath=ckpt_name, save_weights_only=True, verbose=1)
-    elif isinstance(checkpoint_every, int): # save every `checkpoint_every` epochs 
-        ckpt_callback = keras.callbacks.ModelCheckpoint(filepath=ckpt_name, save_weights_only=True, verbose=1, period=checkpoint_every)
-    elif isinstance(checkpoint_every, str): # parse string options
-        if checkpoint_every[0].isnumeric():
-            every, what = checkpoint_every.split(' ',1)
-            every = int(every)
-            if what.startswith('b'): # every batch
-                ckpt_callback = keras.callbacks.ModelCheckpoint(filepath=ckpt_name, save_weights_only=True, verbose=1, save_freq=every)
-            elif what.startswith('e'): # every epoch
-                ckpt_callback = keras.callbacks.ModelCheckpoint(filepath=ckpt_name, save_weights_only=True, verbose=1, period=every)
-            else:
-                raise ValueError(f'Unrecognized value for {checkpoint_every = }')
-
-        elif checkpoint_every.startswith('best'): # every best of something
-            monitor = checkpoint_every.split(' ',1)[1]
-            ckpt_callback = keras.callbacks.ModelCheckpoint(filepath=ckpt_name, monitor=monitor, save_best_only=True, save_weights_only=True, verbose=1)
-        else:
-            raise ValueError(f'Unrecognized value for {checkpoint_every = }')
-    else:
-        raise ValueError(f'Unrecognized value for {checkpoint_every = }')
-
-    if ckpt_callback is not None:
-        callbacks.append(ckpt_callback)
+                callbacks[str(cb)] = cb
 
     # early stopping callback
     if 'patience' not in early_stopping_kwargs or early_stopping_kwargs['patience'] == 0:
         logger.warning('Skipping early stopping with patience = 0')
     else:
-        callbacks.append(early_stopping(**early_stopping_kwargs))
+        callbacks['early_stopping'] = early_stopping(**early_stopping_kwargs)
 
     ### training the model
     ######################
     model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
-    model.save_weights(ckpt_name.format(epoch=0)) # save model before training
-
     np.save(f'{folder}/Y_va.npy', Y_va) # save validation labels
-    # GM: It would be nice to shield the user from this bookkeeping by assigning some function to do the operations above...
-    ############################################
-    # Up to here is the same as ln.train_model #
-    ############################################
+    
     # The data is split into positive and negative labels so that the same percentage enters
+    i_tr = np.arange(Y_tr.shape[0])
     X0_remaining = X_tr[Y_tr == 0]
     Y0_remaining = Y_tr[Y_tr == 0]
+    i0_remaining = i_tr[Y_tr == 0]
     X1_remaining = X_tr[Y_tr == 1]
     Y1_remaining = Y_tr[Y_tr == 1]
+    i1_remaining = i_tr[Y_tr == 1]
     p0 = None
     p1 = None
-    # GM: We want an empty array of shape (0, *X_tr.shape[1:])?
-    # AL: Yes for performing the concatenation
-    X_tr = X_tr[0:0] # this way we get the shape we need: (0, *X_tr.shape[1:])
+    X_tr = X_tr[0:0] # this way we get the shape we need: (0, *X_tr.shape[1:]) that is the one we need for the first concatenation
     Y_tr = Y_tr[0:0]
+    i_tr = i_tr[0:0]
     for eon in range(num_eons):
         eon_folder = f'{folder}/eon_{eon}'
+        ckpt_name = eon_folder + '/cp-{epoch:04d}.ckpt'
+
+        model.save_weights(ckpt_name.format(epoch=0)) # save model before training
+
+        # checkpointing callback
+        ckpt_callback = ln.make_checkpoint_callback(ckpt_name, checkpoint_every=checkpoint_every)
+        if ckpt_callback is not None:
+            callbacks['model_checkpoint'] = ckpt_callback
+
+
         # augment training data
-        (X0_selected, X0_remaining), (Y0_selected, Y0_remaining) = select(X0_remaining, Y0_remaining, amount=data_amount_per_eon, p=p0)
-        (X1_selected, X1_remaining), (Y1_selected, Y1_remaining) = select(X1_remaining, Y1_remaining, amount=data_amount_per_eon, p=p1)
+        (X0_selected, X0_remaining), (Y0_selected, Y0_remaining), (i0_selected, i0_remaining) = select(X0_remaining, Y0_remaining, i0_remaining, amount=data_amount_per_eon, p=p0)
+        (X1_selected, X1_remaining), (Y1_selected, Y1_remaining), (i1_selected, i1_remaining) = select(X1_remaining, Y1_remaining, i1_remaining, amount=data_amount_per_eon, p=p1)
 
         X_tr = np.concatenate([X_tr, X0_selected, X1_selected], axis=0)
         Y_tr = np.concatenate([Y_tr, Y0_selected, Y1_selected], axis=0)
+        i_tr =  np.concatenate([i_tr, i0_selected, i1_selected], axis=0)
 
         shuffle_permutation = np.random.permutation(Y_tr.shape[0]) # shuffle data
         X_tr = X_tr[shuffle_permutation]
         Y_tr = Y_tr[shuffle_permutation]
+        i_tr = i_tr[shuffle_permutation]
+
+        # save i_tr
+        np.save(f'{eon_folder}/i_tr.npy', i_tr)
+
+        
 
         # perform training for `num_epochs`
         my_history=model.fit(X_tr, Y_tr, batch_size=batch_size, validation_data=(X_va,Y_va), shuffle=True,
-                            callbacks=callbacks, epochs=num_epochs, verbose=2, class_weight=None)
+                            callbacks=list(callbacks.values()), epochs=num_epochs, verbose=2, class_weight=None)
 
 
         ## deal with history
