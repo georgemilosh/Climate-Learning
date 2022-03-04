@@ -1361,6 +1361,9 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
 
     model.save_weights(ckpt_name.format(epoch=0)) # save model before training
 
+    # log the amount af data that is entering the network
+    logger.info(f'Training the network on {len(Y_tr)} datapoint and validating on {len(Y_va)}')
+
     # perform training for `num_epochs`
     my_history=model.fit(X_tr, Y_tr, batch_size=batch_size, validation_data=(X_va,Y_va), shuffle=True,
                          callbacks=callbacks, epochs=num_epochs, verbose=2, class_weight=None)

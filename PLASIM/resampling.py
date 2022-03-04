@@ -177,7 +177,7 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     np.save(f'{folder}/Y_va.npy', Y_va) # save validation labels
     
     # The data is split into positive and negative labels so that the same percentage enters
-    i_tr = np.arange(Y_tr.shape[0])
+    i_tr = np.arange(Y_tr.shape[0]) # the subset of the data that will be used
     X0_remaining = X_tr[Y_tr == 0]
     Y0_remaining = Y_tr[Y_tr == 0]
     i0_remaining = i_tr[Y_tr == 0]
@@ -190,6 +190,7 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     Y_tr = Y_tr[0:0]
     i_tr = i_tr[0:0]
     for eon in range(num_eons):
+        logger.info(f'{eon = } ({eon+1}/{num_eons})')
         eon_folder = f'{folder}/eon_{eon}'
         ckpt_name = eon_folder + '/cp-{epoch:04d}.ckpt'
 
@@ -217,7 +218,8 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
         # save i_tr
         np.save(f'{eon_folder}/i_tr.npy', i_tr)
 
-        
+        # log the amount af data that is entering the network
+        logger.info(f'Training the network on {len(Y_tr)} datapoint and validating on {len(Y_va)}')
 
         # perform training for `num_epochs`
         my_history=model.fit(X_tr, Y_tr, batch_size=batch_size, validation_data=(X_va,Y_va), shuffle=True,
@@ -284,7 +286,7 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
 #####################################################
 ln.train_model = train_model
 ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram]) # module level config dictionary
-ut.set_values_recursive(ln.CONFIG_DICT, {'collective': False})
+ut.set_values_recursive(ln.CONFIG_DICT, {'collective': False}, inplace=True)
 
 if __name__ == '__main__':
     ln.main()
