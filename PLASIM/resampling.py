@@ -178,17 +178,21 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     
     # The data is split into positive and negative labels so that the same percentage enters
     i_tr = np.arange(Y_tr.shape[0]) # the subset of the data that will be used
+
     X0_remaining = X_tr[Y_tr == 0]
     Y0_remaining = Y_tr[Y_tr == 0]
     i0_remaining = i_tr[Y_tr == 0]
     X1_remaining = X_tr[Y_tr == 1]
     Y1_remaining = Y_tr[Y_tr == 1]
     i1_remaining = i_tr[Y_tr == 1]
+
     p0 = None
     p1 = None
     X_tr = X_tr[0:0] # this way we get the shape we need: (0, *X_tr.shape[1:]) that is the one we need for the first concatenation
     Y_tr = Y_tr[0:0]
     i_tr = i_tr[0:0]
+
+    last_score = np.inf
     for eon in range(num_eons):
         logger.info(f'{eon = } ({eon+1}/{num_eons})')
         eon_folder = f'{folder}/eon_{eon}'
@@ -234,6 +238,8 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
         df = pd.DataFrame(history)
         df.index.name = 'epoch-1'
         logger.log(25, str(df))
+
+        # compute best score of the eon
 
         # thanks to early stopping the model is reverted back to the best checkpoint
         
