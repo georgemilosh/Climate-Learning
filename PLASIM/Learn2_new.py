@@ -1434,7 +1434,7 @@ def k_fold_cross_val_split(i, X, Y, nfolds=10, val_folds=1):
     return X_tr, Y_tr, X_va, Y_va
 
 
-def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='minimize', first_epoch=1, collective=True, bypass=None):
+def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='minimize', first_epoch=1, collective=True, fold_subfolder=None):
     '''
     Computes the epoch that had the best score
 
@@ -1452,17 +1452,18 @@ def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='m
         The number of the first epoch, by default 1
     collective : bool, optional
         Whether the optimal checkpoint should be the same for all folds (True) or the best for each fold
-    bypass : np.ndarray, optional
-        If provided the function immediately returns `bypass`
-        (See Trainer._run for practical use)
+    fold_subfolder : str, optional
+        Name of the subfolder inside the fold folder in which to look for history and model checkpoints,
+        useful for more advanced usage. By default None
     Returns
     -------
-    if collective:
-        int
+    opt_checkpoint
+        if collective : int
             epoch number corresponding to the best checkpoint
-    else:
-        list
+        else : list
             of best epoch number for each fold
+    fold_subfolder: str or list of str
+        the fold subfolder where history and checkpoints are located
 
     Raises
     ------
@@ -1471,15 +1472,15 @@ def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='m
     ValueError
         If `direction` not in ['maximize', 'minimize']
     '''
-    if bypass is not None:
-        return bypass
- 
     run_folder = run_folder.rstrip('/')
+    
+    fold_subfolder = (fold_subfolder.rstrip('/') + '/') if fold_subfolder else ''
+
     # Here we insert analysis of the previous training with the assessment of the ideal checkpoint
-    history0 = np.load(f'{run_folder}/fold_0/history.npy', allow_pickle=True).item()
+    history0 = np.load(f'{run_folder}/fold_0/{fold_subfolder}history.npy', allow_pickle=True).item()
     if metric not in history0.keys():
         raise KeyError(f'{metric} not in history: cannot compute optimal checkpoint')
-    historyCustom = [np.load(f'{run_folder}/fold_{i}/history.npy', allow_pickle=True).item()[metric] for i in range(nfolds)]
+    historyCustom = [np.load(f'{run_folder}/fold_{i}/{fold_subfolder}history.npy', allow_pickle=True).item()[metric] for i in range(nfolds)]
 
     if direction == 'minimize':
         opt_f = np.argmin
@@ -1508,18 +1509,77 @@ def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='m
         opt_checkpoint = int(opt_checkpoint)
     else:
         opt_checkpoint = [int(oc) for oc in opt_checkpoint]
-    return opt_checkpoint
 
-def load_model(folder, checkpoint=None, compile=False):
+    return opt_checkpoint, fold_subfolder
+
+
+def get_transfer_learning_folders(load_from, current_run_folder, nfolds, optimal_checkpoint_kwargs=None):
+    '''
+    Creates the names of the checkpoints from which to load for every fold
+
+    Parameters
+    ----------
+    load_from : list, dict, int, str, or None
+        From where to load. If list `load_from` is returned, skipping other computations, otherwise see function `get_run`
+    current_run_folder : str
+        folder where the current run is happening
+    nfolds : int
+        number of folds
+    optimal_checkpoint_kwargs : dict, optional
+        arguments for the function `optimal_checkpoint`, by default None
+
+    Returns
+    -------
+    load_from : None or list of str
+        list of the checkpoint names
+    info : dict
+    '''
+    if optimal_checkpoint_kwargs is None:
+        optimal_checkpoint_kwargs = {}
+    info = {}
+
+    if isinstance(load_from, list):
+        return load_from, info
+
+    # get the actual run name from where to load
+    spl = current_run_folder.rsplit('/',1) # it is either [root_folder, run_name] or [run_name]. The latter if there was no '/' in `folder`
+    if len(spl) == 2:
+        root_folder, current_run_name = spl
+    else:
+        root_folder = './'
+        current_run_name = spl[-1]
+    
+    # Find the model which has the weights we can use for transfer learning, if it is possible
+    load_from = get_run(load_from, current_run_name=current_run_name, runs_path=f'{root_folder}/runs.json')
+    if load_from is None:
+        logger.log(41, 'Models will be trained from scratch')
+    else:
+        logger.log(41, f'Models will be loaded from {load_from}')
+
+    # find the optimal checkpoint
+    if load_from is not None:
+        load_from = load_from.rstrip('/')
+        opt_checkpoint, fold_subfolder = optimal_checkpoint(f'{root_folder}/{load_from}', nfolds, **optimal_checkpoint_kwargs)
+        info['tl_from'] = {'run': load_from, 'optimal_checkpoint': opt_checkpoint}
+        if isinstance(opt_checkpoint,int):
+            # this happens if the optimal checkpoint is computed with `collective` = True, so we simply broadcast the single optimal checkpoint to all the folds
+            opt_checkpoint = [opt_checkpoint]*nfolds
+        if isinstance(fold_subfolder, str):
+            fold_subfolder = [fold_subfolder]*nfolds
+
+        # make the folders name of the checkpoint
+        load_from = [f'{root_folder}/{load_from}/fold_{i}/{fold_subfolder[i]}cp-{opt_checkpoint[i]:04d}.ckpt' for i in range(nfolds)]
+
+    return load_from, info
+
+def load_model(checkpoint, compile=False):
     '''
     Loads a neural network and its weights. Checkpoints with the weights are supposed to be in the same folder as where the model structure is
 
     Parameters
     ----------
-    folder : str or Path
-        location where the model is stored
-    checkpoint : int, optional
-        epoch from which to load the weights. If not provided weights are not loaded. By default None
+    checkpoint : str
+        path to the checkpoint is is. For example with structure <folder>/cp-<epoch>.ckpt
     compile : bool, optional
         whether to compile the model, by default False
 
@@ -1527,10 +1587,9 @@ def load_model(folder, checkpoint=None, compile=False):
     -------
     keras.models.Model
     '''
-    folder = folder.rstrip('/')
-    model = keras.models.load_model(folder, compile=compile)
-    if checkpoint is not None:
-        model.load_weights(f'{folder}/cp-{checkpoint:04d}.ckpt')
+    model_folder = Path(checkpoint).parent
+    model = keras.models.load_model(model_folder, compile=compile)
+    model.load_weights(checkpoint)
     return model
 
 
@@ -1611,32 +1670,12 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
         optimal_checkpoint_kwargs = {}
     folder = folder.rstrip('/')
 
-    # get the actual run name from where to load
-    spl = folder.rsplit('/',1) # it is either [root_folder, run_name] or [run_name]. The latter if there was no '/' in `folder`
-    if len(spl) == 2:
-        root_folder, current_run_name = spl
-    else:
-        root_folder = './'
-        current_run_name = spl[-1]
-    # Find the model which has the weights we can use for transfer learning, if it is possible
-    load_from = get_run(load_from, current_run_name=current_run_name, runs_path=f'{root_folder}/runs.json')
-    if load_from is None:
-        logger.log(41, 'Models will be trained from scratch')
-    else:
-        logger.log(41, f'Models will be loaded from {load_from}')
+    # get the folders from which to load the models
+    load_from, info = get_transfer_learning_folders(load_from, folder, nfolds, optimal_checkpoint_kwargs=optimal_checkpoint_kwargs)
+    # here load_from is either None (no transfer learning) or a list of strings
 
     my_memory = []
-    info = {'status': 'RUNNING'}
-
-    # find the optimal checkpoint
-    opt_checkpoint = None
-    if load_from is not None:
-        load_from = load_from.rstrip('/')
-        opt_checkpoint = optimal_checkpoint(f'{root_folder}/{load_from}', nfolds, **optimal_checkpoint_kwargs)
-        info['tl_from'] = {'run': load_from, 'optimal_checkpoint': opt_checkpoint}
-        if isinstance(opt_checkpoint,int):
-            # this happens if the optimal checkpoint is computed with `collective` = True, so we simply broadcast the single optimal checkpoint to all the folds
-            opt_checkpoint = [opt_checkpoint]*nfolds
+    info['status'] = 'RUNNING'
 
     # k fold cross validation
     scores = []
@@ -1677,7 +1716,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
         if load_from is None:
             model = create_model(input_shape=X_tr.shape[1:], **create_model_kwargs)
         else:
-            model = load_model(f'{root_folder}/{load_from}/fold_{i}', checkpoint=opt_checkpoint[i], compile=False)
+            model = load_model(load_from[i], compile=False)
         summary_buffer = ut.Buffer() # workaround necessary to log the structure of the network to the file, since `model.summary` uses `print`
         summary_buffer.append('\n')
         model.summary(print_fn = lambda x: summary_buffer.append(x + '\n'))
@@ -1761,10 +1800,10 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
             first_epoch = optimal_checkpoint_kwargs['first_epoch']
         except KeyError:
             first_epoch = get_default_params(optimal_checkpoint)['first_epoch']
-        optimal_checkpoint_kwargs['bypass'] = None # remove the bypass if there was one (that could have been set up by the function Trainer._run)
-        opt_checkpoint = optimal_checkpoint(folder,nfolds, **optimal_checkpoint_kwargs) - first_epoch
+            
+        opt_checkpoint, fold_subfolder = optimal_checkpoint(folder,nfolds, **optimal_checkpoint_kwargs) - first_epoch
         for i in range(nfolds):
-            scores[i] = np.load(f'{folder}/fold_{i}/history.npy', allow_pickle=True).item()[return_metric][opt_checkpoint]
+            scores[i] = np.load(f'{folder}/fold_{i}/{fold_subfolder}history.npy', allow_pickle=True).item()[return_metric][opt_checkpoint]
 
     score_mean = np.mean(scores)
     score_std = np.std(scores)
@@ -2364,17 +2403,14 @@ class Trainer():
 
         # check for transfer learning
         load_from = ut.extract_nested(run_kwargs, 'load_from')
-        load_from = get_run(load_from, current_run_name=folder, runs_path=self.runs_file)
-        tl_from = None
+        nfolds = ut.extract_nested(run_kwargs, 'nfolds')
+        optimal_checkpoint_kwargs = ut.extract_nested(run_kwargs, 'optimal_checkpoint_kwargs')
+        load_from, tl_info = get_transfer_learning_folders(load_from, f'{self.root_folder}/{folder}', nfolds,
+                                                           optimal_checkpoint_kwargs=optimal_checkpoint_kwargs)
+
         if load_from is not None: # we actually do transfer learning
-            nfolds = ut.extract_nested(run_kwargs, 'nfolds')
-            optimal_checkpoint_kwargs = ut.extract_nested(run_kwargs, 'optimal_checkpoint_kwargs')
-            opt_checkpoint = optimal_checkpoint(f'{self.root_folder}/{load_from}',nfolds, **optimal_checkpoint_kwargs) # get the optimal checkpoint
-
-            tl_from = {'run': load_from, 'optimal_checkpoint': opt_checkpoint}
-
-            # avoid computing the optimal checkpoint again inside k_fold_cross_val by setting up a bypass for when `optimal_checkpoint` is called inside k_fold_cross_val
-            run_kwargs = ut.set_values_recursive(run_kwargs, {'load_from': load_from, 'bypass': opt_checkpoint})
+            # avoid computing the transfer learning folders by setting up a bypass for when `get_transfer_learning_folders` is called inside `k_fold_cross_val`
+            run_kwargs = ut.set_values_recursive(run_kwargs, {'load_from': load_from})
 
             # force the dataset to the same year permutation
             year_permutation = list(np.load(f'{self.root_folder}/{load_from}/year_permutation.npy', allow_pickle=True))
@@ -2404,7 +2440,13 @@ class Trainer():
 
         start_time = time.time()
         
-        runs[run_id] = {'name': folder, 'args': kwargs, 'transfer_learning_from': tl_from, 'status': 'RUNNING', 'start_time': ut.now()}
+        runs[run_id] = {
+            'name': folder, 
+            'args': kwargs, 
+            'transfer_learning_from': tl_info if tl_info else None,
+            'status': 'RUNNING',
+            'start_time': ut.now()
+        }
         ut.dict2json(runs, self.runs_file) # save runs.json
 
         # write kwargs to logfile
@@ -2415,9 +2457,9 @@ class Trainer():
             for k,v in kwargs.items():
                 logfile.write(f'\t{k} = {v}\n')
             logfile.write('\n')
-            if tl_from is not None:
+            if tl_info:
                 logfile.write('Transfer learning from:\n')
-                for k,v in tl_from.items():
+                for k,v in tl_info.items():
                         logfile.write(f'\t{k} = {v}\n')
                 logfile.write('\n')
             else:
