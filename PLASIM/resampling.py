@@ -96,6 +96,100 @@ def compute_p_func(q, Y):
     return p0_func, p1_func
 
 
+# we redefine optimal_checkpoint fonction to account for eons
+def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='minimize', first_epoch=1, collective=True, fold_subfolder='eon_last'):
+    '''
+    Computes the epoch that had the best score
+
+    Parameters
+    ----------
+    folder : str
+        folder where the model is located that contains sub folders with the n folds named 'fold_%i'
+    nfolds : int
+        number of folds,
+    metric : str, optional
+        metric with respect to which optimize, by default 'val_CustomLoss'
+    direction : str, optional
+        'maximize' or 'minimize', by default 'minimize'
+    first_epoch : int, optional
+        The number of the first epoch, by default 1
+    collective : bool, optional
+        Whether the optimal checkpoint should be the same for all folds (True) or the best for each fold
+    fold_subfolder : str or 'eon_last', optional
+        Name of the subfolder inside the fold folder in which to look for history and model checkpoints,
+        By default 'eon_last', which means the subfolder will be the one of the last eon
+
+    Returns
+    -------
+    opt_checkpoint
+        if collective : int
+            epoch number corresponding to the best checkpoint
+        else : list
+            of best epoch number for each fold
+    fold_subfolder: str (collective = True) or list of str (collective = False)
+        the fold subfolder where history and checkpoints are located
+
+    Raises
+    ------
+    KeyError
+        If `metric` is not present in the history
+    ValueError
+        If `direction` not in ['maximize', 'minimize']
+    '''
+    run_folder = run_folder.rstrip('/')
+    
+    if fold_subfolder == 'eon_last':
+        fold_subfolder = []
+        for i in range(nfolds):
+            fold_folder = f'{run_folder}/fold_{i}'
+            eon_dirs = [name for name in os.listdir(fold_folder) if (os.path.isdir(os.path.join(fold_folder, name)) and name.startswith('eon'))]
+            if not len(eon_dirs):
+                raise ValueError('No eon folder found')
+            eons = [int(name.split('_',1)[-1]) for name in eon_dirs]
+            fold_subfolder.append(f'eon_{max(eons)}/')
+    else:
+        fold_subfolder = (fold_subfolder.rstrip('/') + '/') if fold_subfolder else ''
+
+    if isinstance(fold_subfolder, str):
+        fold_subfolder = [fold_subfolder]*nfolds
+
+    # Here we insert analysis of the previous training with the assessment of the ideal checkpoint
+    history0 = np.load(f'{run_folder}/fold_0/{fold_subfolder[0]}history.npy', allow_pickle=True).item()
+    if metric not in history0.keys():
+        raise KeyError(f'{metric} not in history: cannot compute optimal checkpoint')
+    historyCustom = [np.load(f'{run_folder}/fold_{i}/{fold_subfolder[i]}history.npy', allow_pickle=True).item()[metric] for i in range(nfolds)]
+
+    if direction == 'minimize':
+        opt_f = np.argmin
+    elif direction == 'maximize':
+        opt_f = np.argmax
+    else:
+        raise ValueError(f'Unrecognized {direction = }')
+
+    if collective: # the optimal checkpoint is the same for all folds and it is based on the average performance over the folds
+        if len(set(fold_subfolder)) > 1: # the set has more than one element if not all elements are the same
+            logger.error('Cannot compute a collective checkpoint as folds have a different number of eons. Computing independent checkpoints instead')
+            collective = False
+        # check that the nfolds histories have the same length
+        elif len(set([len(historyCustom[i] for i in range(nfolds))])) > 1:
+            logger.error('Cannot compute a collective checkpoint from folds trained a different number of epochs. Computing independent checkpoints instead')
+            collective = False
+    
+    if collective:
+        fold_subfolder = fold_subfolder[0] # fold_subfolder is a list of elements that are all the same, so we take just the first
+        historyCustom = np.mean(np.array(historyCustom),axis=0)
+        opt_checkpoint = opt_f(historyCustom)
+    else:
+        opt_checkpoint = np.array([opt_f(h) for h in historyCustom]) # each fold independently
+    
+    opt_checkpoint += first_epoch
+
+    if collective:
+        opt_checkpoint = int(opt_checkpoint)
+    else:
+        opt_checkpoint = [int(oc) for oc in opt_checkpoint]
+
+    return opt_checkpoint, fold_subfolder
 
 
 # we redefine the train model function
