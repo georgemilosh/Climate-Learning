@@ -1510,6 +1510,30 @@ def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='m
         opt_checkpoint = [int(oc) for oc in opt_checkpoint]
     return opt_checkpoint
 
+def load_model(folder, checkpoint=None, compile=False):
+    '''
+    Loads a neural network and its weights. Checkpoints with the weights are supposed to be in the same folder as where the model structure is
+
+    Parameters
+    ----------
+    folder : str or Path
+        location where the model is stored
+    checkpoint : int, optional
+        epoch from which to load the weights. If not provided weights are not loaded. By default None
+    compile : bool, optional
+        whether to compile the model, by default False
+
+    Returns
+    -------
+    keras.models.Model
+    '''
+    folder = folder.rstrip('/')
+    model = keras.models.load_model(folder, compile=compile)
+    if checkpoint is not None:
+        model.load_weights(f'{folder}/cp-{checkpoint:04d}.ckpt')
+    return model
+
+
 @ut.execution_time
 @ut.indent_logger(logger)
 def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=None, optimal_checkpoint_kwargs=None, load_from='last', nfolds=10, val_folds=1, u=1, normalization_mode='pointwise',
@@ -1653,8 +1677,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
         if load_from is None:
             model = create_model(input_shape=X_tr.shape[1:], **create_model_kwargs)
         else:
-            model = keras.models.load_model(f'{root_folder}/{load_from}/fold_{i}', compile=False)
-            model.load_weights(f'{root_folder}/{load_from}/fold_{i}/cp-{opt_checkpoint[i]:04d}.ckpt')
+            model = load_model(f'{root_folder}/{load_from}/fold_{i}', checkpoint=opt_checkpoint[i], compile=False)
         summary_buffer = ut.Buffer() # workaround necessary to log the structure of the network to the file, since `model.summary` uses `print`
         summary_buffer.append('\n')
         model.summary(print_fn = lambda x: summary_buffer.append(x + '\n'))
@@ -2341,7 +2364,7 @@ class Trainer():
 
         # check for transfer learning
         load_from = ut.extract_nested(run_kwargs, 'load_from')
-        load_from = get_run(load_from,current_run_name=folder, runs_path=self.runs_file)
+        load_from = get_run(load_from, current_run_name=folder, runs_path=self.runs_file)
         tl_from = None
         if load_from is not None: # we actually do transfer learning
             nfolds = ut.extract_nested(run_kwargs, 'nfolds')
