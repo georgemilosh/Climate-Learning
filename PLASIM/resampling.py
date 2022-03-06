@@ -196,7 +196,8 @@ def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='m
 @ut.execution_time
 @ut.indent_logger(logger)
 def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics, early_stopping_kwargs=None, # We always use early stopping
-                batch_size=1024, checkpoint_every=1, additional_callbacks=['csv_logger'], return_metric='val_CustomLoss', num_eons=10, data_amount_per_eon=0.1):
+                batch_size=1024, checkpoint_every=1, additional_callbacks=['csv_logger'], return_metric='val_CustomLoss',
+                num_eons=10, data_amount_per_eon=0.1):
     '''
     Trains a given model checkpointing its weights
 
@@ -286,7 +287,6 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     Y_tr = Y_tr[0:0]
     i_tr = i_tr[0:0]
 
-    last_score = np.inf
     for eon in range(num_eons):
         logger.info(f'{eon = } ({eon+1}/{num_eons})')
         eon_folder = f'{folder}/eon_{eon}'
@@ -385,8 +385,8 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
 # set the modified function to override the old one #
 #####################################################
 ln.train_model = train_model
+ln.optimal_checkpoint = optimal_checkpoint
 ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram]) # module level config dictionary
-ut.set_values_recursive(ln.CONFIG_DICT, {'collective': False}, inplace=True)
 
 if __name__ == '__main__':
     ln.main()
