@@ -66,8 +66,8 @@ def PrepareParameters(creation):
     BATCH_SIZE = 128#512
     LEARNING_RATE = 1e-3#5e-4# 1e-3#5e-6
     N_EPOCHS = 2 #10#600#200
-    SET_YEARS =     range(8000) #range(1000)   # the set of years that variational autoencoder sees
-    SET_YEARS_LABEL =   'range8000' #'range1000' # 
+    SET_YEARS =   range(100)  #range(8000) #range(1000)   # the set of years that variational autoencoder sees
+    SET_YEARS_LABEL =   'range100' #'range8000' #'range1000' # 
     K1 = 0.9 # 1#100
     K2 = 0.1 #1
     
@@ -81,7 +81,7 @@ def PrepareParameters(creation):
     lat_end = 24
     Months1 = [0, 0, 0, 0, 0, 0, 30, 30, 30, 30, 30, 0, 0, 0] 
     Tot_Mon1 = list(itertools.accumulate(Months1))
-    checkpoint_name = WEIGHTS_FOLDER+Model+'_weight212custlosswithfilter_t2mzg500mrso_resdeep_filt5_yrs-'+SET_YEARS_LABEL+'_last9folds_'+RESCALE_TYPE+'_k1_'+str(K1)+'_k2_'+str(K2)+'_LR_'+str(LEARNING_RATE)+'_ZDIM_'+str(Z_DIM)
+    checkpoint_name = WEIGHTS_FOLDER+Model+'vae_learn2_weight212custlosswithfilter_t2mzg500mrso_resdeep_filt5_yrs-'+SET_YEARS_LABEL+'_last9folds_'+RESCALE_TYPE+'_k1_'+str(K1)+'_k2_'+str(K2)+'_LR_'+str(LEARNING_RATE)+'_ZDIM_'+str(Z_DIM)
     return WEIGHTS_FOLDER, RESCALE_TYPE, Z_DIM, BATCH_SIZE, LEARNING_RATE, N_EPOCHS, SET_YEARS, K1, K2, checkpoint_name, data_path, Model, lon_start, lon_end, lat_start, lat_end, Tot_Mon1
     
 def CreateFolder(creation,checkpoint_name):
@@ -223,7 +223,7 @@ def PrepareDataAndVAE(creation=None, DIFFERENT_YEARS=None):
     
     myinput = CreateFolder(creation,checkpoint_name)
     
-    X, Y, yp, LON, LAT = ln.prepare_data(load_data_kwargs = {'fields': ['t2m_filtered','zg500','mrso_filtered'], 'dataset_years': 8000, 'year_list': SET_YEARS},
+    X, Y, yp, LON, LAT = ln.prepare_data(load_data_kwargs = {'fields': ['t2m_filtered','zg500','mrso_filtered'],'lat_end': 24, 'dataset_years': 8000, 'year_list': SET_YEARS},
                            prepare_XY_kwargs = {'roll_X_kwargs': {'roll_steps': 64}})
     
     print("LON.shape = ", LON.shape, " ; LAT.shape = ", LAT.shape)
