@@ -199,3 +199,31 @@ def categorical_committor_histogram(q: np.ndarray, Y: np.ndarray, nbins: int = 5
         y /= len(q0) + len(q1)
 
     return x, y0, y1, y
+
+def consistency_check(q: np.ndarray, Y: np.ndarray, nbins: int = 50) -> Tuple[np.ndarray, np.ndarray]:
+    '''
+    For every bin, computes the fraction of positive events when the committor is inside a bin
+
+    Parameters
+    ----------
+    q : np.ndarray
+        committor
+    Y : np.ndarray
+        labels
+    nbins : int, optional
+        number of bins, by default 50
+
+    Returns
+    -------
+    x : np.ndarray
+        bin centers
+    y : np.ndarray
+        fraction of positive events per bin
+    '''
+    bin_edges = np.linspace(0,1,nbins+1)
+    acc = np.zeros(nbins)
+    for i in range(nbins):
+        acc[i] = (np.mean(Y[(q >= bin_edges[i])*(q < bin_edges[i+1])])) # fraction of positive events when q is inside bin i
+
+    return 0.5*(bin_edges[1:] + bin_edges[:-1]), acc
+    
