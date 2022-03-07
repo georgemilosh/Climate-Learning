@@ -10,7 +10,8 @@ import pandas as pd
 
 import Learn2_new as ln
 ut = ln.ut
-
+tf = ln.tf
+keras = ln.keras
 
 def make_groups(runs: dict, variable: str = 'tau', config_dict_flat: dict = None) -> list[dict]:
     '''
@@ -122,6 +123,48 @@ def get_Y(root_folder: str, run: dict, nfolds: int = 10, fold_subfolder=None, fl
         Y_va = np.vstack(Y_vas)
     return Y_va
 
+################
+# Saliency map #
+################
+
+def get_saliency_map(model, image, class_idx):
+    '''
+    Returns the saliency map of a `model` when evaluated over an `image` and assuming it is classified in `class_idx`
+
+    Parameters
+    ----------
+    model : keras.Model
+        Neural network
+    image : tf.Tensor
+        input for the model
+    class_idx : int
+        index of the desired class
+
+    Returns
+    -------
+    np.ndarray
+        of the same shape of `image`
+    '''
+    with tf.GradientTape() as tape:
+        tape.watch(image)
+        predictions = model(image)
+        
+        loss = predictions[:, class_idx]
+    
+    # Get the gradients of the loss w.r.t to the input image.
+    gradient = tape.gradient(loss, image)
+    
+    # take maximum across channels
+    gradient = tf.reduce_max(gradient, axis=-1)
+    
+    # convert to numpy
+    gradient = gradient.numpy()
+    
+    # normaliz between 0 and 1
+    min_val, max_val = np.min(gradient), np.max(gradient)
+    smap = (gradient - min_val) / (max_val - min_val + keras.backend.epsilon())
+    
+    return smap
 
 ############
 # Plotting #
@@ -194,9 +237,9 @@ def categorical_committor_histogram(q: np.ndarray, Y: np.ndarray, nbins: int = 5
     y = y0 + y1
     
     if normalize:
-        y0 /= len(q0)
-        y1 /= len(q1)
-        y /= len(q0) + len(q1)
+        y0 = y0/len(q0) # cannot use /= if y ha dtype=int
+        y1 = y1/len(q1)
+        y = y/(len(q0) + len(q1))
 
     return x, y0, y1, y
 
@@ -223,7 +266,7 @@ def consistency_check(q: np.ndarray, Y: np.ndarray, nbins: int = 50) -> Tuple[np
     bin_edges = np.linspace(0,1,nbins+1)
     acc = np.zeros(nbins)
     for i in range(nbins):
-        acc[i] = (np.mean(Y[(q >= bin_edges[i])*(q < bin_edges[i+1])])) # fraction of positive events when q is inside bin i
+        acc[i] = np.mean(Y[(q >= bin_edges[i])*(q < bin_edges[i+1])]) # fraction of positive events when q is inside bin i
 
     return 0.5*(bin_edges[1:] + bin_edges[:-1]), acc
     

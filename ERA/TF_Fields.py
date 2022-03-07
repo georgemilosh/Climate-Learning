@@ -860,48 +860,4 @@ def ModelToProb(X,X_test,model): # compute probabilities based on the model and 
     Y_pred = model.predict(X_test)
     Y_pred_prob = my_probability_model.predict(X_test)
     return Y_pred, Y_pred_prob
-
-
-####################################
-######### NETWORK ANALYSIS #########
-####################################
-
-def get_saliency_map(model, image, class_idx):
-    '''
-    Returns the saliency map of a `model` when evaluated over an `image` and assuming it is classified in `class_idx`
-
-    Parameters
-    ----------
-    model : keras.Model
-        Neural network
-    image : tf.Tensor
-        input for the model
-    class_idx : int
-        index of the desired class
-
-    Returns
-    -------
-    np.ndarray
-        of the same shape of `image`
-    '''
-    with tf.GradientTape() as tape:
-        tape.watch(image)
-        predictions = model(image)
-        
-        loss = predictions[:, class_idx]
     
-    # Get the gradients of the loss w.r.t to the input image.
-    gradient = tape.gradient(loss, image)
-    
-    # take maximum across channels
-    gradient = tf.reduce_max(gradient, axis=-1)
-    
-    # convert to numpy
-    gradient = gradient.numpy()
-    
-    # normaliz between 0 and 1
-    min_val, max_val = np.min(gradient), np.max(gradient)
-    smap = (gradient - min_val) / (max_val - min_val + keras.backend.epsilon())
-    
-    return smap
-
