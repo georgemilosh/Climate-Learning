@@ -3,7 +3,6 @@
 
 # @author: Alessandro Lovo
 # '''
-from dataclasses import replace
 import Learn2_new as ln
 logger = ln.logger
 early_stopping = ln.early_stopping
@@ -253,7 +252,7 @@ def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='m
 @ut.execution_time
 @ut.indent_logger(logger)
 def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics, early_stopping_kwargs=None, compute_p_func_kwargs=None, # We always use early stopping
-                batch_size=1024, checkpoint_every=1, additional_callbacks=['csv_logger'], return_metric='val_CustomLoss',
+                u=1, batch_size=1024, checkpoint_every=1, additional_callbacks=['csv_logger'], return_metric='val_CustomLoss',
                 num_eons=10, data_amount_per_eon=0.1, keep_proportions=True, if_not_enough_data='raise'):
     '''
     Trains a given model checkpointing its weights
@@ -278,6 +277,8 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     metrics : list of keras.metrics.Metric or str
     early_stopping_kwargs : dict
         arguments to create the early stopping callback. Ignored if `enable_early_stopping` = False
+    u : float, optional
+        undersampling factor (>=1). Used for unbiasing and saving the committor
     batch_size : int, optional
         by default 1024
     checkpoint_every : int or str, optional
@@ -412,10 +413,12 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
         q_tr = np.concatenate(q_tr)
 
         # compute Y_pred on the validation set
-        q_va = []
+        Y_pred = []
         for b in range(Y_va.shape[0]//batch_size + 1):
-            q_va.append(keras.layers.Softmax()(model(X_va[b*batch_size:(b+1)*batch_size])).numpy()[:,1])
-        q_va = np.concatenate(q_va)
+            Y_pred.append(keras.layers.Softmax()(model(X_va[b*batch_size:(b+1)*batch_size])).numpy())
+        Y_pred = np.concatenate(Y_pred)
+        Y_pred_unbiased = ut.unbias_probabilities(Y_pred, u=u)# unbias on the validation set
+        q_va = Y_pred_unbiased[:,1]
 
         # save predictions
         np.save(f'{eon_folder}/q_tr.npy', q_tr)
@@ -445,6 +448,9 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
         p0 = p0_func(q0_remaining)
         if keep_proportions:
             p1 = p1_func(q1_remaining)
+
+    # save Y_pred_unbiased of the last eon
+    np.save(f'{folder}/Y_pred_unbiased.npy', Y_pred_unbiased)
 
     # return the best value of the return metric
     if return_metric not in history:

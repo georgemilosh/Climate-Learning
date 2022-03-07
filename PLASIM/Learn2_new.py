@@ -1276,7 +1276,7 @@ def make_checkpoint_callback(file_path, checkpoint_every=1):
 @ut.execution_time
 @ut.indent_logger(logger)
 def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics, early_stopping_kwargs=None, enable_early_stopping=False,
-                batch_size=1024, checkpoint_every=1, additional_callbacks=['csv_logger'], return_metric='val_CustomLoss'):
+                u=1, batch_size=1024, checkpoint_every=1, additional_callbacks=['csv_logger'], return_metric='val_CustomLoss'):
     '''
     Trains a given model checkpointing its weights
 
@@ -1302,6 +1302,8 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
         arguments to create the early stopping callback. Ignored if `enable_early_stopping` = False
     enable_early_stopping : bool, optional
         whether to perform early stopping or not, by default False
+    u : float, optional
+        undersampling factor (>=1). Used for unbiasing and saving the committor
     batch_size : int, optional
         by default 1024
     checkpoint_every : int or str, optional
@@ -1368,6 +1370,14 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     my_history=model.fit(X_tr, Y_tr, batch_size=batch_size, validation_data=(X_va,Y_va), shuffle=True,
                          callbacks=callbacks, epochs=num_epochs, verbose=2, class_weight=None)
 
+    ## save Y_va and Y_pred_unbiased
+    np.save(f'{folder}/Y_va.npy', Y_va)
+    Y_pred = []
+    for b in range(Y_va.shape[0]//batch_size + 1):
+        Y_pred.append(keras.layers.Softmax()(model(X_va[b*batch_size:(b+1)*batch_size])).numpy())
+    Y_pred = np.concatenate(Y_pred)
+    Y_pred_unbiased = ut.unbias_probabilities(Y_pred, u=u)
+    np.save(f'{folder}/Y_pred_unbiased.npy', Y_pred_unbiased)
 
     ## deal with history
     history = my_history.history
@@ -1791,7 +1801,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
     except KeyError:
         collective = get_default_params(optimal_checkpoint)['collective']
     if collective:
-        logger.log(35, 'recomputing the scores with the collective optimal checkpoint')
+        logger.log(35, 'recomputing scores and network predictions with the collective optimal checkpoint')
         try:
             return_metric = train_model_kwargs['return_metric']
         except KeyError:
@@ -1802,8 +1812,25 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
             first_epoch = get_default_params(optimal_checkpoint)['first_epoch']
             
         opt_checkpoint, fold_subfolder = optimal_checkpoint(folder,nfolds, **optimal_checkpoint_kwargs) - first_epoch
+
+        # recompute the scores
         for i in range(nfolds):
             scores[i] = np.load(f'{folder}/fold_{i}/{fold_subfolder}history.npy', allow_pickle=True).item()[return_metric][opt_checkpoint]
+
+        # reload the models at their proper checkpoint and recompute Y_pred_unbiased
+        batch_size = train_model_kwargs['batch_size']
+        for i in range(nfolds):
+            _, _, X_va, Y_va = k_fold_cross_val_split(i, X, Y, nfolds=nfolds, val_folds=val_folds)
+            fold_folder = f'{folder}/fold_{i}'
+            model = load_model(f'{fold_folder}/{fold_subfolder}cp-{opt_checkpoint:04d}.ckpt')
+
+            Y_pred = []
+            for b in range(Y_va.shape[0]//batch_size + 1):
+                Y_pred.append(keras.layers.Softmax()(model(X_va[b*batch_size:(b+1)*batch_size])).numpy())
+            Y_pred = np.concatenate(Y_pred)
+            Y_pred_unbiased = ut.unbias_probabilities(Y_pred, u=u)
+            np.save(f'{folder}/Y_pred_unbiased.npy', Y_pred_unbiased)
+        
 
     score_mean = np.mean(scores)
     score_std = np.std(scores)
