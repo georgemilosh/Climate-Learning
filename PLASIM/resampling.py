@@ -1,3 +1,8 @@
+# '''
+# Created in February 2022
+
+# @author: Alessandro Lovo
+# '''
 import Learn2_new as ln
 logger = ln.logger
 early_stopping = ln.early_stopping
