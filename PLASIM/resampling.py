@@ -3,6 +3,7 @@
 
 # @author: Alessandro Lovo
 # '''
+from dataclasses import replace
 import Learn2_new as ln
 logger = ln.logger
 early_stopping = ln.early_stopping
@@ -18,7 +19,7 @@ import os
 logging.getLogger().level = logging.INFO
 logging.getLogger().handlers = [logging.StreamHandler(sys.stdout)]
 
-def select(*arrays, amount=0.1, p=None):
+def select(*arrays, amount=0.1, p=None, if_not_enough_data='raise'):
     '''
     selects a given amount of data from a set of arrays according to a probability distribution
     Parameters
@@ -29,6 +30,11 @@ def select(*arrays, amount=0.1, p=None):
         Amount of data to select. If int: number of elements; if float fraction of elsements, by default 0.1, which means 10% of the elements
     p : 1D array-like of shape (N,), optional
         array of probabilities corresponding to each element in `arrays`. By default None, which implies a uniform distribution over the elements af the arrays
+    if_not_enough_data : 'raise' or 'warn and duplicate' or 'warn and extend', optinal
+        What to do if the amount of data asked is higher than the number of non-zero entries in p
+        if 'raise' an error is raised
+        if 'warn and duplicate' a warning is raised and we allow to select multiple times the same datapoint
+        if 'warn and extend' a warning is raised and a we add a small mumber to the values of p that are 0
 
     Returns
     -------
@@ -66,13 +72,29 @@ def select(*arrays, amount=0.1, p=None):
             raise ValueError('Amount must be either int or float between 0 and 1')
         amount = int(l*amount)
 
+    replace = False
     if p is not None:
+        p = np.array(p, dtype=float)
         s = np.sum(p)
+        selectable_data = np.sum(p > 0)
+        if selectable_data < amount:
+            if if_not_enough_data == 'warn and duplicate':
+                logger.warning(f'You are asking to select {amount} datapoints from a population of {selectable_data}. Allowing duplicates')
+                replace = True
+            elif if_not_enough_data == 'warn and extend':
+                if amount > len(p):
+                    raise ValueError(f'You are asking to select {amount} datapoints but only {len(p)} are left in the reservoir.')
+                logger.warning(f'You are asking to select {amount} datapoints from a population of {selectable_data}. Including also data that had 0 probability of being selected')
+                p[p == 0] += s/(100*(len(p) - selectable_data)) # we add to the population at p=0 1% of the probability mass of the population at p > 0
+                s = np.sum(p)
+            else:
+                raise ValueError(f'You are asking to select {amount} datapoints but only {selectable_data} are selectable in the reservoir.')
+        
         if np.abs(s - 1) > 1e-7:
-            p = np.array(p, dtype=float)/s
+            p /= s
 
     indexes = np.arange(l)
-    selected_indexes = np.random.choice(indexes, size=amount, replace=False, p=p)
+    selected_indexes = np.random.choice(indexes, size=amount, replace=replace, p=p)
     remaining_indexes = np.delete(indexes, selected_indexes)
 
     output = []
@@ -82,21 +104,51 @@ def select(*arrays, amount=0.1, p=None):
     return output
 
 
-def compute_p_func(q, Y):
+def compute_p_func(q, Y, assume_label_knowledge, p_mode='future_loss', p_arg=None):
     # q0 = q[Y==0]
     # q1 = q[Y==1]
     # GM: It is not quite clear why it needs to be called with q and Y, especially since even q is not used below
     # AL: this is for future use where I compute the histogram of q and choose how to deal with it
+    if assume_label_knowledge: # options where we assume we know if the data we are about to add is a heatwave or not
+        if p_mode == 'uniform':
+            p0_func = lambda qs: None
+            p1_func = lambda qs: None
+            
+        elif p_mode == 'future_loss':
+            # We give higher probability of being picked to events that would produce a high crossentropy loss if added, namely events that are now misclassified have a higher probability of being picked
+            epsilon = 1e-7 # GM: I guess you are assuming float32 precision. Maybe 1e-15 could still work?
 
-    epsilon = 1e-7 # GM: I guess you are assuming float32 precision. Maybe 1e-15 could still work?
+            @np.vectorize
+            def p0_func(qs):
+                return -np.log(np.maximum(epsilon, 1 - qs))
 
-    @np.vectorize
-    def p0_func(qs):
-        return -np.log(np.maximum(epsilon, 1 - qs))
+            @np.vectorize
+            def p1_func(qs):
+                return -np.log(np.maximum(epsilon, qs))
+        else:
+            raise ValueError(f'{p_mode = } not supported when assuming label knowledge')
+    
+    else: # options where we assume we don't have knowledge of the labels
+        p1_func = lambda qs: None
+        if p_mode == 'uniform':
+            p0_func = lambda qs: None
 
-    @np.vectorize
-    def p1_func(qs):
-        return -np.log(np.maximum(epsilon, qs))
+        elif p_mode == 'q_window':
+            # we give probability 1 to the data whose predicted committor is inside the window and 0 otherwise
+            q_min, q_max = p_arg
+
+            def p0_func(qs):
+                return np.array((qs >= q_min)*(qs < q_max), dtype=float)
+
+        elif p_mode == 'q_hole':
+            # we give probability 1 to the data whose predicted committor is outside the window and 0 otherwise
+            q_min, q_max = p_arg
+
+            def p0_func(qs):
+                return np.array((qs < q_min)*(qs >= q_max), dtype=float)
+
+        else:
+            raise ValueError(f'{p_mode = } not supported when not assuming label knowledge')
 
     return p0_func, p1_func
 
@@ -200,9 +252,9 @@ def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='m
 # we redefine the train model function
 @ut.execution_time
 @ut.indent_logger(logger)
-def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics, early_stopping_kwargs=None, # We always use early stopping
+def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics, early_stopping_kwargs=None, compute_p_func_kwargs=None, # We always use early stopping
                 batch_size=1024, checkpoint_every=1, additional_callbacks=['csv_logger'], return_metric='val_CustomLoss',
-                num_eons=10, data_amount_per_eon=0.1):
+                num_eons=10, data_amount_per_eon=0.1, keep_proportions=True, if_not_enough_data='raise'):
     '''
     Trains a given model checkpointing its weights
 
@@ -248,6 +300,8 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     ##########################
     if early_stopping_kwargs is None:
         early_stopping_kwargs = {}
+    if compute_p_func_kwargs is None:
+        compute_p_func_kwargs = {}
     folder = folder.rstrip('/')
 
     ## deal with callbacks
@@ -279,12 +333,20 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     # The data is split into positive and negative labels so that the same percentage enters
     i_tr = np.arange(Y_tr.shape[0]) # the subset of the data that will be used
 
-    X0_remaining = X_tr[Y_tr == 0]
-    Y0_remaining = Y_tr[Y_tr == 0]
-    i0_remaining = i_tr[Y_tr == 0]
-    X1_remaining = X_tr[Y_tr == 1]
-    Y1_remaining = Y_tr[Y_tr == 1]
-    i1_remaining = i_tr[Y_tr == 1]
+    if keep_proportions:
+        X0_remaining = X_tr[Y_tr == 0]
+        Y0_remaining = Y_tr[Y_tr == 0]
+        i0_remaining = i_tr[Y_tr == 0]
+        X1_remaining = X_tr[Y_tr == 1]
+        Y1_remaining = Y_tr[Y_tr == 1]
+        i1_remaining = i_tr[Y_tr == 1]
+    else: # X0 will keep all the data and X1 none
+        X0_remaining = X_tr
+        Y0_remaining = Y_tr
+        i0_remaining = i_tr
+        X1_remaining = X_tr[0:0]
+        Y1_remaining = Y_tr[0:0]
+        i1_remaining = i_tr[0:0]
 
     p0 = None
     p1 = None
@@ -306,8 +368,9 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
 
 
         # augment training data
-        (X0_selected, X0_remaining), (Y0_selected, Y0_remaining), (i0_selected, i0_remaining) = select(X0_remaining, Y0_remaining, i0_remaining, amount=data_amount_per_eon, p=p0)
-        (X1_selected, X1_remaining), (Y1_selected, Y1_remaining), (i1_selected, i1_remaining) = select(X1_remaining, Y1_remaining, i1_remaining, amount=data_amount_per_eon, p=p1)
+        (X0_selected, X0_remaining), (Y0_selected, Y0_remaining), (i0_selected, i0_remaining) = select(X0_remaining, Y0_remaining, i0_remaining, amount=data_amount_per_eon, p=p0, if_not_enough_data=if_not_enough_data)
+        if keep_proportions:
+            (X1_selected, X1_remaining), (Y1_selected, Y1_remaining), (i1_selected, i1_remaining) = select(X1_remaining, Y1_remaining, i1_remaining, amount=data_amount_per_eon, p=p1, if_not_enough_data=if_not_enough_data)
 
         X_tr = np.concatenate([X_tr, X0_selected, X1_selected], axis=0)
         Y_tr = np.concatenate([Y_tr, Y0_selected, Y1_selected], axis=0)
@@ -360,7 +423,7 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
         np.save(f'{eon_folder}/q_va.npy', q_va)
 
         # compute probability distribution for the next eon that would decide which data to add
-        p0_func, p1_func = compute_p_func(q_tr, Y_tr)
+        p0_func, p1_func = compute_p_func(q_tr, Y_tr, assume_label_knowledge=keep_proportions, **compute_p_func_kwargs)
 
         # compute q on the remaining dataset
         q0_remaining = []
@@ -368,17 +431,20 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
             q0_remaining.append(keras.layers.Softmax()(model(X0_remaining[b*batch_size:(b+1)*batch_size])).numpy()[:,1])
         q0_remaining = np.concatenate(q0_remaining)
 
-        q1_remaining = []
-        for b in range(Y1_remaining.shape[0]//batch_size + 1):
-            q1_remaining.append(keras.layers.Softmax()(model(X1_remaining[b*batch_size:(b+1)*batch_size])).numpy()[:,1])
-        q1_remaining = np.concatenate(q1_remaining)
+        if keep_proportions:
+            q1_remaining = []
+            for b in range(Y1_remaining.shape[0]//batch_size + 1):
+                q1_remaining.append(keras.layers.Softmax()(model(X1_remaining[b*batch_size:(b+1)*batch_size])).numpy()[:,1])
+            q1_remaining = np.concatenate(q1_remaining)
 
         # np.save(f'{eon_folder}/q0_remaining.npy', q0_remaining)
-        # np.save(f'{eon_folder}/q1_remaining.npy', q1_remaining)
+        # if keep_proportions:
+        #     np.save(f'{eon_folder}/q1_remaining.npy', q1_remaining)
 
         # attribute the probabilities based on the value of the predicted committor
         p0 = p0_func(q0_remaining)
-        p1 = p1_func(q1_remaining)
+        if keep_proportions:
+            p1 = p1_func(q1_remaining)
 
     # return the best value of the return metric
     if return_metric not in history:
@@ -391,6 +457,7 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
 #####################################################
 ln.train_model = train_model
 ln.optimal_checkpoint = optimal_checkpoint
+ln.compute_p_func = compute_p_func
 ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram]) # module level config dictionary
 
 if __name__ == '__main__':
