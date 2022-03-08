@@ -253,7 +253,7 @@ def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='m
 @ut.indent_logger(logger)
 def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics, early_stopping_kwargs=None, compute_p_func_kwargs=None, # We always use early stopping
                 u=1, batch_size=1024, checkpoint_every=1, additional_callbacks=['csv_logger'], return_metric='val_CustomLoss',
-                num_eons=10, data_amount_per_eon=0.1, keep_proportions=True, if_not_enough_data='raise'):
+                num_eons=2, data_amount_per_eon=0.1, keep_proportions=True, if_not_enough_data='raise'):
     '''
     Trains a given model checkpointing its weights
 
@@ -297,6 +297,9 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     float
         minimum value of `return_metric` during training
     '''
+    if num_eons != 2:
+        raise NotImplementedError('Cannot do sensitivity experiment with more or less than 2 eons')
+
     ### preliminary operations
     ##########################
     if early_stopping_kwargs is None:
@@ -365,9 +368,115 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     else:
         data_amount_per_eon = [data_amount_per_eon]*num_eons
 
-    for eon in range(num_eons):
-        logger.info(f'{eon = } ({eon+1}/{num_eons})')
-        eon_folder = f'{folder}/eon_{eon}'
+    p_arg = compute_p_func_kwargs['p_arg'] if 'p_arg' in compute_p_func_kwargs else None
+    if isinstance(p_arg, tuple):
+        p_args = [p_arg[i:i+2] for i in range(len(p_arg) - 1)]
+        # (0.1, 0.2, 0.3, 0.4) -> [(0.1, 0.2), (0.2, 0.3), (0.3, 0.4)]
+    else:
+        p_args = [p_arg]
+        
+
+
+    ## first eon
+    eon = 0
+
+    logger.info(f'{eon = } ({eon+1}/{num_eons})')
+    eon_folder = f'{folder}/eon_{eon}'
+    ckpt_name = eon_folder + '/cp-{epoch:04d}.ckpt'
+
+    model.save_weights(ckpt_name.format(epoch=0)) # save model before training
+
+    # checkpointing callback
+    ckpt_callback = ln.make_checkpoint_callback(ckpt_name, checkpoint_every=checkpoint_every)
+    if ckpt_callback is not None:
+        callbacks['model_checkpoint'] = ckpt_callback
+
+
+    # augment training data
+    (X0_selected, X0_remaining), (Y0_selected, Y0_remaining), (i0_selected, i0_remaining) = select(X0_remaining, Y0_remaining, i0_remaining, amount=data_amount_per_eon[eon], p=p0, if_not_enough_data=if_not_enough_data)
+    if keep_proportions:
+        (X1_selected, X1_remaining), (Y1_selected, Y1_remaining), (i1_selected, i1_remaining) = select(X1_remaining, Y1_remaining, i1_remaining, amount=data_amount_per_eon[eon], p=p1, if_not_enough_data=if_not_enough_data)
+
+    X_tr = np.concatenate([X_tr, X0_selected, X1_selected], axis=0)
+    Y_tr = np.concatenate([Y_tr, Y0_selected, Y1_selected], axis=0)
+    i_tr =  np.concatenate([i_tr, i0_selected, i1_selected], axis=0)
+
+    shuffle_permutation = np.random.permutation(Y_tr.shape[0]) # shuffle data
+    X_tr = X_tr[shuffle_permutation]
+    Y_tr = Y_tr[shuffle_permutation]
+    i_tr = i_tr[shuffle_permutation]
+
+    # save i_tr
+    np.save(f'{eon_folder}/i_tr.npy', i_tr)
+
+    # log the amount af data that is entering the network
+    logger.info(f'Training the network on {len(Y_tr)} datapoint and validating on {len(Y_va)}')
+
+    # perform training for `num_epochs`
+    my_history=model.fit(X_tr, Y_tr, batch_size=batch_size, validation_data=(X_va,Y_va), shuffle=True,
+                        callbacks=list(callbacks.values()), epochs=num_epochs, verbose=2, class_weight=None)
+
+
+    ## deal with history
+    history = my_history.history
+    model.save(eon_folder)
+    np.save(f'{eon_folder}/history.npy', history)
+    # log history
+    df = pd.DataFrame(history)
+    df.index.name = 'epoch-1'
+    logger.log(25, str(df))
+
+    # compute best score of the eon # TODO
+
+    # thanks to early stopping the model is reverted back to the best checkpoint
+    
+    # compute q on the training dataset (using batches so I am sure the data fits in memory)
+    q_tr = []
+    for b in range(Y_tr.shape[0]//batch_size + 1):
+        q_tr.append(keras.layers.Softmax()(model(X_tr[b*batch_size:(b+1)*batch_size])).numpy()[:,1])
+    q_tr = np.concatenate(q_tr)
+
+    # compute Y_pred on the validation set
+    Y_pred = []
+    for b in range(Y_va.shape[0]//batch_size + 1):
+        Y_pred.append(keras.layers.Softmax()(model(X_va[b*batch_size:(b+1)*batch_size])).numpy())
+    Y_pred = np.concatenate(Y_pred)
+    Y_pred_unbiased = ut.unbias_probabilities(Y_pred, u=u)# unbias on the validation set
+    q_va = Y_pred_unbiased[:,1]
+
+    # save predictions
+    np.save(f'{eon_folder}/q_tr.npy', q_tr)
+    np.save(f'{eon_folder}/Y_tr.npy', Y_tr)
+    np.save(f'{eon_folder}/q_va.npy', q_va)
+
+    # compute q on the remaining dataset
+    q0_remaining = []
+    for b in range(Y0_remaining.shape[0]//batch_size + 1):
+        q0_remaining.append(keras.layers.Softmax()(model(X0_remaining[b*batch_size:(b+1)*batch_size])).numpy()[:,1])
+    q0_remaining = np.concatenate(q0_remaining)
+
+    if keep_proportions:
+        q1_remaining = []
+        for b in range(Y1_remaining.shape[0]//batch_size + 1):
+            q1_remaining.append(keras.layers.Softmax()(model(X1_remaining[b*batch_size:(b+1)*batch_size])).numpy()[:,1])
+        q1_remaining = np.concatenate(q1_remaining)
+
+    # np.save(f'{eon_folder}/q0_remaining.npy', q0_remaining)
+    # if keep_proportions:
+    #     np.save(f'{eon_folder}/q1_remaining.npy', q1_remaining)
+
+    # save Y_pred_unbiased of the last eon
+    np.save(f'{folder}/Y_pred_unbiased.npy', Y_pred_unbiased)
+
+
+    ## second eon
+    eon = 1
+    logger.info(f'{eon = } ({eon+1}/{num_eons}): sensitivity test')
+    # attribute the probabilities based on the value of the predicted committor
+    for p_arg in p_args:
+        compute_p_func_kwargs['p_arg'] = p_arg
+
+        eon_folder = f'{folder}/eon_{eon}/p_arg__{p_arg}'
         ckpt_name = eon_folder + '/cp-{epoch:04d}.ckpt'
 
         model.save_weights(ckpt_name.format(epoch=0)) # save model before training
@@ -377,29 +486,34 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
         if ckpt_callback is not None:
             callbacks['model_checkpoint'] = ckpt_callback
 
+        # compute probability distribution for the next eon that would decide which data to add
+        p0_func, p1_func = compute_p_func(q_tr, Y_tr, assume_label_knowledge=keep_proportions, **compute_p_func_kwargs)
+        p0 = p0_func(q0_remaining)
+        if keep_proportions:
+            p1 = p1_func(q1_remaining)
 
         # augment training data
-        (X0_selected, X0_remaining), (Y0_selected, Y0_remaining), (i0_selected, i0_remaining) = select(X0_remaining, Y0_remaining, i0_remaining, amount=data_amount_per_eon[eon], p=p0, if_not_enough_data=if_not_enough_data)
+        (X0_selected, _), (Y0_selected, _), (i0_selected, _) = select(X0_remaining, Y0_remaining, i0_remaining, amount=data_amount_per_eon[eon], p=p0, if_not_enough_data=if_not_enough_data)
         if keep_proportions:
-            (X1_selected, X1_remaining), (Y1_selected, Y1_remaining), (i1_selected, i1_remaining) = select(X1_remaining, Y1_remaining, i1_remaining, amount=data_amount_per_eon[eon], p=p1, if_not_enough_data=if_not_enough_data)
+            (X1_selected, _), (Y1_selected, _), (i1_selected, _) = select(X1_remaining, Y1_remaining, i1_remaining, amount=data_amount_per_eon[eon], p=p1, if_not_enough_data=if_not_enough_data)
 
-        X_tr = np.concatenate([X_tr, X0_selected, X1_selected], axis=0)
-        Y_tr = np.concatenate([Y_tr, Y0_selected, Y1_selected], axis=0)
-        i_tr =  np.concatenate([i_tr, i0_selected, i1_selected], axis=0)
+        _X_tr = np.concatenate([X_tr, X0_selected, X1_selected], axis=0)
+        _Y_tr = np.concatenate([Y_tr, Y0_selected, Y1_selected], axis=0)
+        _i_tr =  np.concatenate([i_tr, i0_selected, i1_selected], axis=0)
 
         shuffle_permutation = np.random.permutation(Y_tr.shape[0]) # shuffle data
-        X_tr = X_tr[shuffle_permutation]
-        Y_tr = Y_tr[shuffle_permutation]
-        i_tr = i_tr[shuffle_permutation]
+        _X_tr = _X_tr[shuffle_permutation]
+        _Y_tr = _Y_tr[shuffle_permutation]
+        _i_tr = _i_tr[shuffle_permutation]
 
         # save i_tr
-        np.save(f'{eon_folder}/i_tr.npy', i_tr)
+        np.save(f'{eon_folder}/i_tr.npy', _i_tr)
 
         # log the amount af data that is entering the network
-        logger.info(f'Training the network on {len(Y_tr)} datapoint and validating on {len(Y_va)}')
+        logger.info(f'Training the network on {len(_Y_tr)} datapoint and validating on {len(Y_va)}')
 
         # perform training for `num_epochs`
-        my_history=model.fit(X_tr, Y_tr, batch_size=batch_size, validation_data=(X_va,Y_va), shuffle=True,
+        my_history=model.fit(_X_tr, _Y_tr, batch_size=batch_size, validation_data=(X_va,Y_va), shuffle=True,
                             callbacks=list(callbacks.values()), epochs=num_epochs, verbose=2, class_weight=None)
 
 
@@ -412,14 +526,10 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
         df.index.name = 'epoch-1'
         logger.log(25, str(df))
 
-        # compute best score of the eon # TODO
-
-        # thanks to early stopping the model is reverted back to the best checkpoint
-        
         # compute q on the training dataset (using batches so I am sure the data fits in memory)
         q_tr = []
-        for b in range(Y_tr.shape[0]//batch_size + 1):
-            q_tr.append(keras.layers.Softmax()(model(X_tr[b*batch_size:(b+1)*batch_size])).numpy()[:,1])
+        for b in range(_Y_tr.shape[0]//batch_size + 1):
+            q_tr.append(keras.layers.Softmax()(model(_X_tr[b*batch_size:(b+1)*batch_size])).numpy()[:,1])
         q_tr = np.concatenate(q_tr)
 
         # compute Y_pred on the validation set
@@ -434,33 +544,6 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
         np.save(f'{eon_folder}/q_tr.npy', q_tr)
         np.save(f'{eon_folder}/Y_tr.npy', Y_tr)
         np.save(f'{eon_folder}/q_va.npy', q_va)
-
-        # compute probability distribution for the next eon that would decide which data to add
-        p0_func, p1_func = compute_p_func(q_tr, Y_tr, assume_label_knowledge=keep_proportions, **compute_p_func_kwargs)
-
-        # compute q on the remaining dataset
-        q0_remaining = []
-        for b in range(Y0_remaining.shape[0]//batch_size + 1):
-            q0_remaining.append(keras.layers.Softmax()(model(X0_remaining[b*batch_size:(b+1)*batch_size])).numpy()[:,1])
-        q0_remaining = np.concatenate(q0_remaining)
-
-        if keep_proportions:
-            q1_remaining = []
-            for b in range(Y1_remaining.shape[0]//batch_size + 1):
-                q1_remaining.append(keras.layers.Softmax()(model(X1_remaining[b*batch_size:(b+1)*batch_size])).numpy()[:,1])
-            q1_remaining = np.concatenate(q1_remaining)
-
-        # np.save(f'{eon_folder}/q0_remaining.npy', q0_remaining)
-        # if keep_proportions:
-        #     np.save(f'{eon_folder}/q1_remaining.npy', q1_remaining)
-
-        # attribute the probabilities based on the value of the predicted committor
-        p0 = p0_func(q0_remaining)
-        if keep_proportions:
-            p1 = p1_func(q1_remaining)
-
-    # save Y_pred_unbiased of the last eon
-    np.save(f'{folder}/Y_pred_unbiased.npy', Y_pred_unbiased)
 
     # return the best value of the return metric
     if return_metric not in history:
