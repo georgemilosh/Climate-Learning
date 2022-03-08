@@ -477,6 +477,7 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     logger.info(f'{eon = } ({eon+1}/{num_eons}): sensitivity test')
     # attribute the probabilities based on the value of the predicted committor
     for p_arg in p_args:
+        logger.info(f'{p_arg = }')
         compute_p_func_kwargs['p_arg'] = p_arg
 
         eon_folder = f'{folder}/eon_{eon}/p_arg__{p_arg}'
@@ -496,9 +497,13 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
             p1 = p1_func(q1_remaining)
 
         # augment training data
-        (X0_selected, _), (Y0_selected, _), (i0_selected, _) = select(X0_remaining, Y0_remaining, i0_remaining, amount=data_amount_per_eon[eon], p=p0, if_not_enough_data=if_not_enough_data)
-        if keep_proportions:
-            (X1_selected, _), (Y1_selected, _), (i1_selected, _) = select(X1_remaining, Y1_remaining, i1_remaining, amount=data_amount_per_eon[eon], p=p1, if_not_enough_data=if_not_enough_data)
+        try:
+            (X0_selected, _), (Y0_selected, _), (i0_selected, _) = select(X0_remaining, Y0_remaining, i0_remaining, amount=data_amount_per_eon[eon], p=p0, if_not_enough_data=if_not_enough_data)
+            if keep_proportions:
+                (X1_selected, _), (Y1_selected, _), (i1_selected, _) = select(X1_remaining, Y1_remaining, i1_remaining, amount=data_amount_per_eon[eon], p=p1, if_not_enough_data=if_not_enough_data)
+        except ValueError:
+            logger.error('Could not select enough data: skipping')
+            continue
 
         _X_tr = np.concatenate([X_tr, X0_selected, X1_selected], axis=0)
         _Y_tr = np.concatenate([Y_tr, Y0_selected, Y1_selected], axis=0)
