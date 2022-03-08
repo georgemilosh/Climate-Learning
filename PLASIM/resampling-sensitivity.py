@@ -351,6 +351,9 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
         X1_remaining = X_tr[0:0]
         Y1_remaining = Y_tr[0:0]
         i1_remaining = i_tr[0:0]
+        X1_selected = X_tr[0:0]
+        Y1_selected = Y_tr[0:0]
+        i1_selected = i_tr[0:0]
 
     p0 = None
     p1 = None
