@@ -253,7 +253,7 @@ def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='m
 @ut.indent_logger(logger)
 def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics, early_stopping_kwargs=None, compute_p_func_kwargs=None, # We always use early stopping
                 u=1, batch_size=1024, checkpoint_every=1, additional_callbacks=['csv_logger'], return_metric='val_CustomLoss',
-                num_eons=10, data_amount_per_eon=0.1, keep_proportions=True, if_not_enough_data='raise'):
+                num_eons=10, data_amount_per_eon=0.1, keep_proportions=True, if_not_enough_data='raise', recycle_data=False, old_data_keep_fraction=1):
     '''
     Trains a given model checkpointing its weights
 
@@ -354,9 +354,12 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
 
     p0 = None
     p1 = None
-    X_tr = X_tr[0:0] # this way we get the shape we need: (0, *X_tr.shape[1:]) that is the one we need for the first concatenation
-    Y_tr = Y_tr[0:0]
-    i_tr = i_tr[0:0]
+    X0_tr = X_tr[0:0] # this way we get the shape we need: (0, *X_tr.shape[1:]) that is the one we need for the first concatenation
+    X1_tr = X_tr[0:0]
+    Y0_tr = Y_tr[0:0]
+    Y1_tr = Y_tr[0:0]
+    i0_tr = i_tr[0:0]
+    i1_tr = i_tr[0:0]
 
     # brodcast `data_aomunt_per_eon` to the eons
     if isinstance(data_amount_per_eon, tuple):
@@ -380,15 +383,39 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
         if ckpt_callback is not None:
             callbacks['model_checkpoint'] = ckpt_callback
 
+        if old_data_keep_fraction < 1 and len(i0_tr) > 0: # discard a 
+            (X0_thrown, X0_tr), (Y0_thrown, Y0_tr), (i0_thrown, i0_tr) = select(X0_tr, Y0_tr, i0_tr, amount=1 - old_data_keep_fraction, p=None, if_not_enough_data='raise')
+            if keep_proportions:
+                (X1_thrown, X1_tr), (Y1_thrown, Y1_tr), (i1_thrown, i1_tr) = select(X1_tr, Y1_tr, i1_tr, amount=1 - old_data_keep_fraction, p=None, if_not_enough_data='raise')
+
+            if recycle_data: # put the thrown data into the remaining dataset
+                X0_remaining = np.concatenate([X0_remaining, X0_thrown])
+                Y0_remaining = np.concatenate([Y0_remaining, Y0_thrown])
+                i0_remaining = np.concatenate([i0_remaining, i0_thrown])
+                if keep_proportions:
+                    X1_remaining = np.concatenate([X1_remaining, X1_thrown])
+                    Y1_remaining = np.concatenate([Y1_remaining, Y1_thrown])
+                    i1_remaining = np.concatenate([i1_remaining, i1_thrown])
+
+            
+
 
         # augment training data
         (X0_selected, X0_remaining), (Y0_selected, Y0_remaining), (i0_selected, i0_remaining) = select(X0_remaining, Y0_remaining, i0_remaining, amount=data_amount_per_eon[eon], p=p0, if_not_enough_data=if_not_enough_data)
         if keep_proportions:
             (X1_selected, X1_remaining), (Y1_selected, Y1_remaining), (i1_selected, i1_remaining) = select(X1_remaining, Y1_remaining, i1_remaining, amount=data_amount_per_eon[eon], p=p1, if_not_enough_data=if_not_enough_data)
 
-        X_tr = np.concatenate([X_tr, X0_selected, X1_selected], axis=0)
-        Y_tr = np.concatenate([Y_tr, Y0_selected, Y1_selected], axis=0)
-        i_tr =  np.concatenate([i_tr, i0_selected, i1_selected], axis=0)
+        X0_tr = np.concatenate([X0_tr, X0_selected])
+        X1_tr = np.concatenate([X1_tr, X1_selected])
+        X_tr = np.concatenate([X0_tr, X1_tr])
+
+        Y0_tr = np.concatenate([Y0_tr, Y0_selected])
+        Y1_tr = np.concatenate([Y1_tr, Y1_selected])
+        Y_tr = np.concatenate([Y0_tr, Y1_tr])
+
+        i0_tr = np.concatenate([i0_tr, i0_selected])
+        i1_tr = np.concatenate([i1_tr, i1_selected])
+        i_tr =  np.concatenate([i0_tr, i1_tr])
 
         shuffle_permutation = np.random.permutation(Y_tr.shape[0]) # shuffle data
         X_tr = X_tr[shuffle_permutation]
