@@ -371,12 +371,12 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     else:
         data_amount_per_eon = [data_amount_per_eon]*num_eons
 
-    p_arg = compute_p_func_kwargs['p_arg'] if 'p_arg' in compute_p_func_kwargs else None
-    if isinstance(p_arg, tuple):
-        p_args = [p_arg[i:i+2] for i in range(len(p_arg) - 1)]
+    p_arg_orig = compute_p_func_kwargs.pop('p_arg', None)
+    if isinstance(p_arg_orig, tuple):
+        p_args = [p_arg_orig[i:i+2] for i in range(len(p_arg_orig) - 1)]
         # (0.1, 0.2, 0.3, 0.4) -> [(0.1, 0.2), (0.2, 0.3), (0.3, 0.4)]
     else:
-        p_args = [p_arg]
+        p_args = [p_arg_orig]
         
 
 
@@ -552,6 +552,8 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
         np.save(f'{eon_folder}/q_tr.npy', q_tr)
         np.save(f'{eon_folder}/Y_tr.npy', Y_tr)
         np.save(f'{eon_folder}/q_va.npy', q_va)
+
+    compute_p_func_kwargs['p_arg'] = p_arg_orig
 
     # return the best value of the return metric
     if return_metric not in history:
