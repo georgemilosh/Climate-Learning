@@ -355,6 +355,16 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     Y_tr = Y_tr[0:0]
     i_tr = i_tr[0:0]
 
+    # brodcast `data_aomunt_per_eon` to the eons
+    if isinstance(data_amount_per_eon, tuple):
+        if len(data_amount_per_eon) >= num_eons:
+            data_amount_per_eon = list(data_amount_per_eon)[:num_eons] # take only the first `num_eons` elements
+        else:
+            data_amount_per_eon = list(data_amount_per_eon) + [data_amount_per_eon[-1]]*(num_eons - len(data_amount_per_eon))
+            # (0.1, 0.2) -> [0.1, 0.2, 0.2, 0.2, 0.2]  assuming `num_eons` = 5
+    else:
+        data_amount_per_eon = [data_amount_per_eon]*num_eons
+
     for eon in range(num_eons):
         logger.info(f'{eon = } ({eon+1}/{num_eons})')
         eon_folder = f'{folder}/eon_{eon}'
@@ -369,9 +379,9 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
 
 
         # augment training data
-        (X0_selected, X0_remaining), (Y0_selected, Y0_remaining), (i0_selected, i0_remaining) = select(X0_remaining, Y0_remaining, i0_remaining, amount=data_amount_per_eon, p=p0, if_not_enough_data=if_not_enough_data)
+        (X0_selected, X0_remaining), (Y0_selected, Y0_remaining), (i0_selected, i0_remaining) = select(X0_remaining, Y0_remaining, i0_remaining, amount=data_amount_per_eon[eon], p=p0, if_not_enough_data=if_not_enough_data)
         if keep_proportions:
-            (X1_selected, X1_remaining), (Y1_selected, Y1_remaining), (i1_selected, i1_remaining) = select(X1_remaining, Y1_remaining, i1_remaining, amount=data_amount_per_eon, p=p1, if_not_enough_data=if_not_enough_data)
+            (X1_selected, X1_remaining), (Y1_selected, Y1_remaining), (i1_selected, i1_remaining) = select(X1_remaining, Y1_remaining, i1_remaining, amount=data_amount_per_eon[eon], p=p1, if_not_enough_data=if_not_enough_data)
 
         X_tr = np.concatenate([X_tr, X0_selected, X1_selected], axis=0)
         Y_tr = np.concatenate([Y_tr, Y0_selected, Y1_selected], axis=0)
