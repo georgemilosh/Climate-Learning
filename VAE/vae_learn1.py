@@ -64,8 +64,8 @@ def PrepareParameters(creation):
     BATCH_SIZE = 128#512
     LEARNING_RATE = 1e-3#5e-4# 1e-3#5e-6
     N_EPOCHS = 2#600#200
-    SET_YEARS =   range(100)  #range(8000) #range(1000)   # the set of years that variational autoencoder sees
-    SET_YEARS_LABEL =  'range100' #'range8000' #'range1000' # 
+    SET_YEARS =   range(8000)  #range(100) #range(1000)   # the set of years that variational autoencoder sees
+    SET_YEARS_LABEL =  'range8000' #'range100' #'range1000' # 
     K1 = 0.9 # 1#100
     K2 = 0.1 #1
     
