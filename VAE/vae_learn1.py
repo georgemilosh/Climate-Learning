@@ -24,25 +24,14 @@ else:
 logger.level = logging.INFO
 
 
-## user defined modules
-this_module = sys.modules[__name__]
-path_to_here = Path(__file__).resolve().parent
-path_to_PLASIM = path_to_here / 'PLASIM' # when absolute path, so you can run the script from another folder (outside VAE)
-if not os.path.exists(path_to_PLASIM):
-    path_to_PLASIM = path_to_here.parent / 'PLASIM'
-    if not os.path.exists(path_to_PLASIM):
-        raise FileNotFoundError('Could not find PLASIM folder')
 
-# go to the parent so vscode is happy with code completion :)
-path_to_PLASIM = path_to_PLASIM.parent
-path_to_PLASIM = str(path_to_PLASIM)
-logger.info(f'{path_to_PLASIM = }/PLASIM/')
-if not path_to_PLASIM in sys.path:
-    sys.path.insert(1, path_to_PLASIM)        
+## user defined modules
+# I go back to absolute paths becuase otherwise I have trouble using reconstruction.py on this file later when it will be called from the folder it creates
+sys.path.insert(1, '/ClimateDynamics/MediumSpace/ClimateLearningFR/gmiloshe/')       
         
 import PLASIM.Learn2_new as ln
 ut = ln.ut # utilities
-efn = ln.ef # ERA_Fields_New
+ef = ln.ef # ERA_Fields_New
 tff = ln.tff # TF_Fields
 
 # set spacing of the indentation
@@ -99,12 +88,14 @@ def CreateFolder(creation,checkpoint_name):
             print('folder '+checkpoint_name+' created')
             os.mkdir(checkpoint_name)
 
-        sys.stdout = efn.Logger(checkpoint_name)  # Keep a copy of print outputs there
+        sys.stdout = ef.Logger(checkpoint_name)  # Keep a copy of print outputs there
         shutil.copy(__file__, checkpoint_name+'/Funs.py') # Copy this file to the directory of the training
         shutil.copy('history.py', checkpoint_name)  # Also copy a version of the files we work with to analyze the results of the training
         shutil.copy('reconstruction.py', checkpoint_name)
         shutil.copy('../ERA/ERA_Fields.py', checkpoint_name)
         shutil.copy('../ERA/TF_Fields.py', checkpoint_name)
+    else:
+        print("folders not created")
     return myinput
 
 def RescaleNormalize(X,RESCALE_TYPE, creation,checkpoint_name):
@@ -120,7 +111,7 @@ def RescaleNormalize(X,RESCALE_TYPE, creation,checkpoint_name):
             X_mean = np.load(checkpoint_name+'/X_mean.npy')
             X_std = np.load(checkpoint_name+'/X_std.npy')
 
-        return   1./(1.+np.exp(-(X-X_mean)/X_std)) # (X-X_mean)/X_std # # we have apply sigmoid because variational autoencoder reconstructs with this activation
+        return   1./(1.+np.exp(-(X-X_mean)/X_std)) # (X-X_mean)/X_std # # we have applied sigmoid because variational autoencoder reconstructs with this activation
     else:
         print("===Rescaling X===")
         if creation == None:
@@ -231,11 +222,11 @@ def PrepareDataAndVAE(creation=None, DIFFERENT_YEARS=None):
     """
     
 
-    X, _Y, _year_permutation, LON, LAT = ln.prepare_data(load_data_kwargs = {'fields': ['t2m_filtered','zg500','mrso_filtered'], 'lat_end': 24, 'dataset_years': 8000, 'year_list': SET_YEARS},
+    X, _Y, _year_permutation, lat, lon = ln.prepare_data(load_data_kwargs = {'fields': ['t2m_filtered','zg500','mrso_filtered'], 'lat_end': 24, 'dataset_years': 8000, 'year_list': SET_YEARS},
                            prepare_XY_kwargs = {'roll_X_kwargs': {'roll_steps': 64}}) # That's the version that fails
     #print(" >>>>>> np.mean(X-X1) = ", np.mean(X-X1),  ", np.min(X-X1) = ", np.min(X-X1),
     #      ", np.max(X-X1) = ", np.max(X-X1))
-    
+    print("lon.shape = ", lon.shape, " ; lat.shape = ", lat.shape)
     
     np.save(checkpoint_name+'/year_permutation',_year_permutation)
     np.save(checkpoint_name+'/Y',_Y)
@@ -251,14 +242,14 @@ def PrepareDataAndVAE(creation=None, DIFFERENT_YEARS=None):
     """
     BATCH_SIZE2 = 128 #testing an idea to put a mask dependent weight on the reconstruction loss. This idea caused errors so i am giving up
     # The idea is to create the mask in accordance to what we believe are relevant fields for the proper classification of the heat waves
-    filter_mask = roll_X(efn.create_mask(Model,'France', X[:BATCH_SIZE2,...,0], axes='first 2', return_full_mask=True),1)  # this mask can be used in filtering the weights of reconstruction loss in VAE
+    filter_mask = roll_X(ef.create_mask(Model,'France', X[:BATCH_SIZE2,...,0], axes='first 2', return_full_mask=True),1)  # this mask can be used in filtering the weights of reconstruction loss in VAE
     print('filter_mask.shape = ', filter_mask.shape)
     print('np.ones(X[:BATCH_SIZE2,...,0].shape).shape = ', np.ones(X[:BATCH_SIZE2,...,0].shape).shape)
     print('np.array([filter_mask,np.ones(X[:BATCH_SIZE2,...,0].shape),filter_mask], dtype=bool).shape = ', np.array([filter_mask,np.ones(X[:BATCH_SIZE2,...,0].shape),filter_mask], dtype=bool).shape)
     filter_mask = np.array([filter_mask,np.ones(X[:BATCH_SIZE2,...,0].shape),filter_mask], dtype=bool).transpose(1,2,3,0) # Stack truth mask (for zg500) between two layers that have a mask
     print('filter_mask.shape = ', filter_mask.shape)
     """
-    filter_mask = ln.roll_X(efn.create_mask(Model,'France', X[0,...,0], axes='first 2', return_full_mask=True),1)
+    filter_mask = ln.roll_X(ef.create_mask(Model,'France', X[0,...,0], axes='first 2', return_full_mask=True),1)
     print('filter_mask.shape = ', filter_mask.shape)
     print('np.ones(X[0,...,0].shape).shape = ', np.ones(X[0,...,0].shape).shape)
     print('np.array([filter_mask,np.ones(X[0,...,0].shape),filter_mask], dtype=bool).shape = ', np.array([filter_mask,np.ones(X[0,...,0].shape),filter_mask], dtype=bool).shape)
@@ -268,7 +259,7 @@ def PrepareDataAndVAE(creation=None, DIFFERENT_YEARS=None):
     
     vae, history, N_EPOCHS, INITIAL_EPOCH, checkpoint, checkpoint_path = ConstructVAE(INPUT_DIM, Z_DIM, checkpoint_name, N_EPOCHS, myinput, K1, K2, from_logits=False, mask_weights=filter_mask)
     
-    return X, LON, LAT, vae, Z_DIM, N_EPOCHS, INITIAL_EPOCH, BATCH_SIZE, LEARNING_RATE, checkpoint_path, checkpoint_name, myinput, history
+    return X, lat, lon, vae, Z_DIM, N_EPOCHS, INITIAL_EPOCH, BATCH_SIZE, LEARNING_RATE, checkpoint_path, checkpoint_name, myinput, history
 
 if __name__ == '__main__': # we do this so that we can then load this file as a module in reconstruction.py
     print("==Checking GPU==")
@@ -281,7 +272,7 @@ if __name__ == '__main__': # we do this so that we can then load this file as a 
     tf.test.is_built_with_cuda()
 
     start = time.time()
-    X, LON, LAT, vae, Z_DIM, N_EPOCHS, INITIAL_EPOCH, BATCH_SIZE, LEARNING_RATE, checkpoint_path, checkpoint_name, myinput, history = PrepareDataAndVAE()
+    X, lon, lat, vae, Z_DIM, N_EPOCHS, INITIAL_EPOCH, BATCH_SIZE, LEARNING_RATE, checkpoint_path, checkpoint_name, myinput, history = PrepareDataAndVAE()
     print("np.max(X) = ", np.max(X),"np.min(X) = ", np.min(X))
     
     cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_path,save_weights_only=True,verbose=1)
