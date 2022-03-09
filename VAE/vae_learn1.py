@@ -52,35 +52,10 @@ os.environ['TF_XLA_FLAGS'] = '--tf_xla_enable_xla_devices'  # https://stackoverf
 # separators to create the run name from the run arguments
 
 
-
-def PrepareParameters(creation):
-    print("==Preparing Parameters==")
-    WEIGHTS_FOLDER = './models/'
-    
-    RESCALE_TYPE =    'normalize' #    'rescale'  
-    Z_DIM = 64 #8 #16 #256 # Dimension of the latent vector (z)
-    BATCH_SIZE = 128#512
-    LEARNING_RATE = 1e-3#5e-4# 1e-3#5e-6
-    N_EPOCHS = 2#600#200
-    SET_YEARS =   range(8000)  #range(100) #range(1000)   # the set of years that variational autoencoder sees
-    SET_YEARS_LABEL =  'range8000' #'range100' #'range1000' # 
-    K1 = 0.9 # 1#100
-    K2 = 0.1 #1
-    
-    data_path='../../gmiloshe/PLASIM/'
-    
-    Model = 'Plasim'
-    
-    lon_start = 0
-    lon_end = 128
-    lat_start = 0 # latitudes start from 90 degrees North Pole
-    lat_end = 24
-    Months1 = [0, 0, 0, 0, 0, 0, 30, 30, 30, 30, 30, 0, 0, 0] 
-    Tot_Mon1 = list(itertools.accumulate(Months1))
-    checkpoint_name = WEIGHTS_FOLDER+Model+'vae_learn1_weight212custlosswithfilter_t2mzg500mrso_resdeep_filt5_yrs-'+SET_YEARS_LABEL+'_last9folds_'+RESCALE_TYPE+'_k1_'+str(K1)+'_k2_'+str(K2)+'_LR_'+str(LEARNING_RATE)+'_ZDIM_'+str(Z_DIM)
-    return WEIGHTS_FOLDER, RESCALE_TYPE, Z_DIM, BATCH_SIZE, LEARNING_RATE, N_EPOCHS, SET_YEARS, K1, K2, checkpoint_name, data_path, Model, lon_start, lon_end, lat_start, lat_end, Tot_Mon1
-
 def CreateFolder(creation,checkpoint_name):
+    '''
+    Copies this file and its dependencies to a given folder.
+    '''
     myinput = "Y" # default input
     print("==Creating folders if they didn't exist==")
     print("parameter creation = ", creation)
@@ -107,8 +82,36 @@ def CreateFolder(creation,checkpoint_name):
         print("folders not created")
     return myinput
 
-def RescaleNormalize(X,RESCALE_TYPE, creation,checkpoint_name):
-    if RESCALE_TYPE == 'normalize':
+# we redefine optimal_checkpoint fonction to account for eons
+def normalize_X(X,checkpoint_name, creation=None,mode='pointwise'):
+    '''
+    Performs data normalization
+
+    Parameters
+    ----------
+    X : np.ndarray of shape (N, ...)
+        data
+    mode : 'pointwise', optional
+        how to perform the normalization.
+
+    Returns
+    -------
+    X_n : np.ndarray of same shape as X
+        normalized/rescaled data passed through a sigmoid
+    
+    Saves
+    -----
+    if mode == 'pointwise':
+        X_mean : np.ndarray of shape (...)
+            mean of X along the first axis
+        X_std : np.ndarray of shape (...)
+            std of X along the first axis
+    else:
+        
+        maxX : field-wise maximum of X 
+        minX : field-wise minimum of X 
+    '''
+    if mode == 'pointwise':
         print("===Normalizing X===")
         if creation == None: # mean and std have to be computed
             X_mean = np.mean(X,0)
@@ -116,14 +119,14 @@ def RescaleNormalize(X,RESCALE_TYPE, creation,checkpoint_name):
             X_std[X_std==0] = 1 # If there is no variance we shouldn't divide by zero
             np.save(checkpoint_name+'/X_mean', X_mean)
             np.save(checkpoint_name+'/X_std', X_std)
-        else:
+        else: # mean and std are expected to be already computed
             X_mean = np.load(checkpoint_name+'/X_mean.npy')
             X_std = np.load(checkpoint_name+'/X_std.npy')
 
         return   1./(1.+np.exp(-(X-X_mean)/X_std)) # (X-X_mean)/X_std # # we have applied sigmoid because variational autoencoder reconstructs with this activation
     else:
         print("===Rescaling X===")
-        if creation == None:
+        if creation is None:
             maxX = np.max(X,tuple(list(range(len(X.shape)-1)))) # Equivalent to np.max(X,(0,1,...,last-1))
             minX = np.min(X,tuple(list(range(len(X.shape)-1))))
             np.save(checkpoint_name+'/maxX', maxX)
@@ -133,55 +136,81 @@ def RescaleNormalize(X,RESCALE_TYPE, creation,checkpoint_name):
             minX = np.load(checkpoint_name+'/minX.npy')
     return (X - minX) / (maxX - minX) # 2*(X - minX)/(maxX - minX)-1  #
 
-def ConstructVAE(INPUT_DIM, Z_DIM, checkpoint_name, N_EPOCHS, myinput, K1, K2, from_logits=False, mask_weights=None):
+################################################
+########## NEURAL NETWORK DEFINITION ###########
+################################################
+
+def ConstructVAE(checkpoint_name, mask_weights, INPUT_DIM, myinput, Z_DIM=64, N_EPOCHS=2, K1=0.9, K2=0.1, from_logits=False, field_weights=[2.0, 1.0, 2.0],
+                encoder_conv_filters       =[16, 16, 16, 32, 32,  32,   64, 64],
+                encoder_conv_kernel_size   =[5,  5,  5,  5,   5,   5,   5,  3],
+                encoder_conv_strides       =[2,  1,  1,  2,   1,   1,   2,  1],
+                encoder_conv_padding       =["same","same","same","same","same","same","same","valid"],
+                encoder_conv_activation    =["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"],
+                encoder_conv_skip          =dict({(0,2),(3,5)}), encoder_use_batch_norm=True, encoder_use_dropout=True,
+                decoder_conv_filters =     [64,32,32,32,16,16,16,3],
+                decoder_conv_kernel_size = [3, 5, 5, 5, 5, 5, 5, 5],
+                decoder_conv_strides =     [1, 2, 1, 1, 2, 1, 1, 2],
+                decoder_conv_padding =     ["valid","same","same","same","same","same","same","same"], 
+                decoder_conv_activation =  ["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","sigmoid"], 
+                decoder_conv_skip = dict({(1,3),(4,6)}), decoder_use_batch_norm=True, decoder_use_dropout=True, usemask=True):
+    '''
+    Creates a Variational AutoEncoder Model or load the existing one from the weights given in the model
+
+    Parameters
+    ----------
+    checkpoint_name
+        the name of the file where we store the model
+    INPUT_DIM : tuple
+        shape of a single input datapoint, i.e. not counting the axis corresponding to iteration through the datapoints (batch axis)
+    Z_DIM: int
+        dimension of the latent space
+    conv_channels : list of int, optional
+        number of channels corresponding to the convolutional layers
+    kernel_sizes : int, 2-tuple or list of ints or 2-tuples, optional
+        If list must be of the same size of `conv_channels`
+    strides : int, 2-tuple or list of ints or 2-tuples, optional
+        same as kernel_sizes
+    batch_normalizations : bool or list of bools, optional
+        whether to add a BatchNormalization layer after each Conv2D layer
+    conv_activations : str or list of str, optional
+        activation functions after each convolutional layer
+    conv_dropouts : float in [0,1] or list of floats in [0,1], optional
+        dropout to be applied after the BatchNormalization layer. If 0 no dropout is applied
+    max_pool_sizes : int or list of int, optional
+        size of max pooling layer to be applied after dropout. If 0 no max pool is applied
+
+    
+
+    Returns
+    -------
+    model : keras.models.Model
+    '''
     print("==Building encoder==")
-    """
-    encoder_inputs, encoder_outputs, shape_before_flattening, encoder  = tff.build_encoder2(input_dim = INPUT_DIM, 
-                                                output_dim = Z_DIM, 
-                                                conv_filters = [32,64,64,64],
-                                                conv_kernel_size = [3,3,3,3],
-                                                conv_strides = [2,2,2,1],
-                                                conv_padding = ["same","same","same","valid"], 
-                                                conv_activation = ["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"],use_batch_norm=True, use_dropout=True)
-    """
     encoder_inputs, encoder_outputs, shape_before_flattening, encoder  = tff.build_encoder_skip(input_dim = INPUT_DIM, 
                                                 output_dim = Z_DIM, 
-                                                conv_filters =     [16, 16, 16, 32, 32,  32,   64, 64],
-                                                conv_kernel_size = [5,  5,  5,  5,   5,   5,   5,  3],
-                                                conv_strides =     [2,  1,  1,  2,   1,   1,   2,  1],
-                                                conv_padding =     ["same","same","same","same","same","same","same","valid"], 
-                                                conv_activation =  ["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"],
-                                                #conv_skip = dict({}),use_batch_norm=True, use_dropout=True)
-                                                conv_skip = dict({(0,2),(3,5)}),use_batch_norm=True, use_dropout=True)
+                                                conv_filters = encoder_conv_filters,
+                                                conv_kernel_size = encoder_conv_kernel_size,
+                                                conv_strides =     encoder_conv_strides,
+                                                conv_padding =     encoder_conv_padding, 
+                                                conv_activation =  encoder_conv_activation,
+                                                conv_skip = encoder_conv_skip, use_batch_norm=encoder_use_batch_norm, use_dropout=encoder_use_dropout)
     encoder.summary()
-    print("==Building decoder==")      
-    """
-    decoder_input, decoder_output, decoder = tff.build_decoder2(input_dim = Z_DIM,  
+    print("==Building decoder==") 
+    if usemask==False: # Remove weights 
+        mask_weights=None
+    decoder_input, decoder_output, decoder = tff.build_decoder_skip(input_dim = Z_DIM,  
                                         shape_before_flattening = shape_before_flattening,
-                                        conv_filters = [64,64,32,3],
-                                        conv_kernel_size = [3,3,3,3],
-                                        conv_strides = [1,2,2,2],
-                                        conv_padding = ["valid","same","same","same"], 
-                                        conv_activation = ["LeakyRelu","LeakyRelu","LeakyRelu","sigmoid"])
-    """
-    decoder_input, decoder_output, decoder = tff.build_decoder_skip(input_dim = 64,  
-                                        shape_before_flattening = shape_before_flattening,
-                                        conv_filters =     [64,32,32,32,16,16,16,3],
-                                        conv_kernel_size = [3, 5, 5, 5, 5, 5, 5, 5],
-                                        conv_strides =     [1, 2, 1, 1, 2, 1, 1, 2],
-                                        conv_padding =     ["valid","same","same","same","same","same","same","same"], 
-                                        conv_activation =  ["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","sigmoid"], 
-                                        #conv_skip = dict({}), use_batch_norm = True, use_dropout = True)
-                                        conv_skip = dict({(1,3),(4,6)}), use_batch_norm = True, use_dropout = True, mask = mask_weights)
+                                        conv_filters =     decoder_conv_filters,
+                                        conv_kernel_size = decoder_conv_kernel_size,
+                                        conv_strides =     decoder_conv_strides,
+                                        conv_padding =     decoder_conv_padding, 
+                                        conv_activation =  decoder_conv_activation, 
+                                        conv_skip = decoder_conv_skip, use_batch_norm = decoder_use_batch_norm, use_dropout = decoder_use_dropout, mask = mask_weights)
     decoder.summary()
 
 
     print("==Attaching decoder and encoder and compiling==")
-    
-    
-    
-    #vae = tff.VAE(encoder, decoder, k1=K1, k2=K2, from_logits=from_logits, field_weights=None) 
-    vae = tff.VAE(encoder, decoder, k1=K1, k2=K2, from_logits=from_logits, field_weights=[2.0, 1.0, 2.0]) #, mask_weights=mask_weights)
+    vae = tff.VAE(encoder, decoder, k1=K1, k2=K2, from_logits=from_logits, field_weights=field_weights) #, mask_weights=mask_weights)
     print("vae.k1 = ", vae.k1, " , vae.k2 = ", vae.k2)
     if myinput == 'Y':
         INITIAL_EPOCH = 0
@@ -210,8 +239,10 @@ def ConstructVAE(INPUT_DIM, Z_DIM, checkpoint_name, N_EPOCHS, myinput, K1, K2, f
     
     return vae, history, N_EPOCHS, INITIAL_EPOCH, checkpoint, checkpoint_path
 
-def PrepareDataAndVAE(creation=None, DIFFERENT_YEARS=None):
-    WEIGHTS_FOLDER, RESCALE_TYPE, Z_DIM, BATCH_SIZE, LEARNING_RATE, N_EPOCHS, SET_YEARS, K1, K2, checkpoint_name, data_path, Model, lon_start, lon_end, lat_start, lat_end, Tot_Mon1 = PrepareParameters(creation)
+def PrepareDataAndVAE(creation=None, DIFFERENT_YEARS=None, WEIGHTS_FOLDER ='./models/', mode='pointwise',BATCH_SIZE=128, LEARNING_RATE=1e-3,SET_YEARS=range(100),SET_YEARS_LABEL='range100',Model='Plasim'):
+
+    checkpoint_name = WEIGHTS_FOLDER+'test'
+    
 
     if isinstance(DIFFERENT_YEARS, np.ndarray): # Need to check because otherwise comparing array to None would give an error
         SET_YEARS = DIFFERENT_YEARS # for benchmark runs we don't need all years or the same years, with different years we can load some other data.
@@ -220,16 +251,6 @@ def PrepareDataAndVAE(creation=None, DIFFERENT_YEARS=None):
             SET_YEARS = DIFFERENT_YEARS # for benchmark runs we don't need all years or the same years, with different years we can load some other data.
     
     myinput = CreateFolder(creation,checkpoint_name)
-    
-    """
-    _fields = load_data(dataset_years=8000, year_list=SET_YEARS) # Fix support for different years
-    firstkey = next(iter(_fields))
-    LON = _fields[firstkey].LON
-    LAT = _fields[firstkey].LAT
-    print("LON.shape = ", LON.shape, " ; LAT.shape = ", LAT.shape)
-    X, _Y, _year_permutation = prepare_XY(_fields)
-    """
-    
 
     X, _Y, _year_permutation, lat, lon = ln.prepare_data(load_data_kwargs = {'fields': ['t2m_filtered','zg500','mrso_filtered'], 'lat_end': 24, 'dataset_years': 8000, 'year_list': SET_YEARS},
                            prepare_XY_kwargs = {'roll_X_kwargs': {'roll_steps': 64}}) # That's the version that fails
@@ -243,8 +264,8 @@ def PrepareDataAndVAE(creation=None, DIFFERENT_YEARS=None):
     
     INPUT_DIM = X.shape[1:]  # Image dimension
     
-    X = RescaleNormalize(X,RESCALE_TYPE, creation, checkpoint_name)
-    
+    #X = RescaleNormalize(X,RESCALE_TYPE, creation, checkpoint_name)
+    X = normalize_X(X, checkpoint_name, creation=creation, mode=mode)
 
     print("X.shape = ", X.shape,  " ,np.mean(X[:,5,5,0]) = ", np.mean(X[:,5,5,0]), " ,np.std(X[:,5,5,0]) = ", np.std(X[:,5,5,0]), " , np.min(X) = ", np.min(X), " , np.max(X) = ", np.max(X))
     
@@ -266,9 +287,11 @@ def PrepareDataAndVAE(creation=None, DIFFERENT_YEARS=None):
     
     print("X.dtype = ", X.dtype, " ,filter_mask.dtype = ", filter_mask.dtype)
     
-    vae, history, N_EPOCHS, INITIAL_EPOCH, checkpoint, checkpoint_path = ConstructVAE(INPUT_DIM, Z_DIM, checkpoint_name, N_EPOCHS, myinput, K1, K2, from_logits=False, mask_weights=filter_mask)
+    #vae, history, N_EPOCHS, INITIAL_EPOCH, checkpoint, checkpoint_path = ConstructVAE(checkpoint_name, filter_mask, INPUT_DIM, Z_DIM, N_EPOCHS, myinput, K1, K2, from_logits=False, )
+    vae, history, N_EPOCHS, INITIAL_EPOCH, checkpoint, checkpoint_path = ConstructVAE(checkpoint_name, filter_mask, INPUT_DIM, myinput)
     
-    return X, lat, lon, vae, Z_DIM, N_EPOCHS, INITIAL_EPOCH, BATCH_SIZE, LEARNING_RATE, checkpoint_path, checkpoint_name, myinput, history
+    
+    return X, lat, lon, vae, N_EPOCHS, INITIAL_EPOCH, BATCH_SIZE, LEARNING_RATE, checkpoint_path, checkpoint_name, myinput, history
 
 if __name__ == '__main__': # we do this so that we can then load this file as a module in reconstruction.py
     print("==Checking GPU==")
@@ -281,7 +304,7 @@ if __name__ == '__main__': # we do this so that we can then load this file as a 
     tf.test.is_built_with_cuda()
 
     start = time.time()
-    X, lon, lat, vae, Z_DIM, N_EPOCHS, INITIAL_EPOCH, BATCH_SIZE, LEARNING_RATE, checkpoint_path, checkpoint_name, myinput, history = PrepareDataAndVAE()
+    X, lon, lat, vae, N_EPOCHS, INITIAL_EPOCH, BATCH_SIZE, LEARNING_RATE, checkpoint_path, checkpoint_name, myinput, history = PrepareDataAndVAE()
     print("np.max(X) = ", np.max(X),"np.min(X) = ", np.min(X))
     
     cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_path,save_weights_only=True,verbose=1)
