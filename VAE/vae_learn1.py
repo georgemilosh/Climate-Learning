@@ -34,6 +34,15 @@ ut = ln.ut # utilities
 ef = ln.ef # ERA_Fields_New
 tff = ln.tff # TF_Fields
 
+print("==Checking GPU==")
+import tensorflow as tf
+tf.test.is_gpu_available(
+    cuda_only=False, min_cuda_compute_capability=None
+)
+
+print("==Checking CUDA==")
+tf.test.is_built_with_cuda()
+
 # set spacing of the indentation
 ut.indentation_sep = '  '
 

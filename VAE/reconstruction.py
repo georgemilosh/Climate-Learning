@@ -1,18 +1,35 @@
 # George Miloshevich 2021
 # This routine is written for two parameters: input folder for VAE weights and the given epoch. It shows us how good the reconstruction of the VAE works
 import os, sys
-from glob import glob
 import shutil
+
 os.environ['TF_XLA_FLAGS'] = '--tf_xla_enable_xla_devices'  # https://stackoverflow.com/questions/65907365/tensorflow-not-creating-xla-devices-tf-xla-enable-xla-devices-not-set
 
+
+checkpoint_name = sys.argv[1]  # The name of the folder where the weights have been stored
+checkpoint = sys.argv[2]       # The checkpoint at which the weights have been stored
+
+import importlib.util
+def module_from_file(module_name, file_path): #The code that imports the file which originated the training with all the instructions
+            spec = importlib.util.spec_from_file_location(module_name, file_path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module
+        
+print("checkpoint_name = ", checkpoint_name)
+print("loading module from ", checkpoint_name+'/Funs.py')
+from importlib import import_module
+#foo = import_module(checkpoint_name+'/Funs.py', package=None)
+foo = module_from_file("foo", checkpoint_name+'/Funs.py')
+ef = foo.ef # Inherit ERA_Fields_New from the file we are calling
+
 print("==Importing tensorflow packages===")
+import random as rd  
+from scipy.stats import norm
 import numpy as np
-#from tensorflow.keras.preprocessing.image import ImageDataGenerator
-sys.path.insert(1, '../ERA')
-import TF_Fields as tff # tensorflow routines 
 
-
-
+tff = foo.tff # tensorflow routines 
+ut = foo.ut # utilities
 print("==Checking GPU==")
 import tensorflow as tf
 tf.test.is_gpu_available(
@@ -22,25 +39,19 @@ tf.test.is_gpu_available(
 print("==Checking CUDA==")
 tf.test.is_built_with_cuda()
 
-import importlib.util
-def module_from_file(module_name, file_path): #The code that imports the file which originated the training with all the instructions
-            spec = importlib.util.spec_from_file_location(module_name, file_path)
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            return module
-        
+import matplotlib.pyplot as plt
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+import cartopy.mpl.geoaxes
 
+import matplotlib.gridspec as gridspec
+import cartopy.crs as ccrs
+import cartopy.feature as cfeat
+data_proj = ccrs.PlateCarree()
 
-checkpoint_name = sys.argv[1]
-checkpoint = sys.argv[2]
+#from tensorflow.keras.preprocessing.image import ImageDataGenerator
+sys.path.insert(1, '../ERA')
+import cartopy_plots as cplt
 
-print("checkpoint_name = ", checkpoint_name)
-print("loading module from ", checkpoint_name+'/Funs.py')
-from importlib import import_module
-#foo = import_module(checkpoint_name+'/Funs.py', package=None)
-foo = module_from_file("foo", checkpoint_name+'/Funs.py')
-#sys.path.append(checkpoint_name)
-#import Funs as foo
 
 print("==Reading data==")
 
@@ -49,26 +60,16 @@ year_permutation = np.load(checkpoint_name+'/year_permutation.npy')
 X, lat, lon, vae, Z_DIM, N_EPOCHS, INITIAL_EPOCH, BATCH_SIZE, LEARNING_RATE, checkpoint_path, checkpoint_name, myinput, history = foo.PrepareDataAndVAE(checkpoint_name, DIFFERENT_YEARS=year_permutation[:800])
 # Construct 2D array for lon-lat:
 LON, LAT = np.meshgrid(lon,lat)
-
 print("X.shape = ", X.shape, " , np.max(X) = ", np.max(X), " , np.min (X) = ", np.min(X), " , np.mean(X[:,5,5,0]) = ", np.mean(X[:,5,5,0]), " , np.std(X[:,5,5,0]) = ", np.std(X[:,5,5,0]))
-
 print("==loading the model: ", checkpoint_name)
 vae = tf.keras.models.load_model(checkpoint_name, compile=False)
-
 
 nb_zeros_c = 4-len(str(checkpoint))
 checkpoint_i = '/cp-'+nb_zeros_c*'0'+str(checkpoint)+'.ckpt'
 
 vae.load_weights(checkpoint_name+checkpoint_i)
-
-
-import random as rd        
+      
 example_images = X[rd.sample(range(X.shape[0]), 5)]
-import matplotlib.pyplot as plt
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-import cartopy.mpl.geoaxes
-
-from scipy.stats import norm
 
 _,_,z_test = vae.encoder.predict(X[rd.sample(range(X.shape[0]), 200)])
 print("z_test.shape = ", z_test.shape)
@@ -87,26 +88,11 @@ for i in range(np.min([50, Z_DIM])):
     ax.plot(x,norm.pdf(x))
 
 WEIGHTS_FOLDER, RESCALE_TYPE, Z_DIM, BATCH_SIZE, LEARNING_RATE, N_EPOCHS, SET_YEARS, K1, K2, checkpoint_name, data_path, Model, lon_start, lon_end, lat_start, lat_end, Tot_Mon1 = foo.PrepareParameters(checkpoint_name)
-#import ERA_Fields as ef
-
-ef = foo.ef # Inherit ERA_Fields_New from the file we are calling
-# We are loading the fields just to extract LON, LAT which is a bit awkward. This can be simplified
-#zg500 = ef.Plasim_Field('zg','ANO_LONG_zg500','500 mbar Geopotential', Model, lat_start=lat_start, lat_end=lat_end, lon_start=lon_start, lon_end=lon_end,myprecision='single',mysampling='',years=8000)
-#zg500.load_field('/local/gmiloshe/PLASIM/Data_Plasim_LONG/', year_list=[0])
-#LON = zg500.LON # array with longitudes corresponding to each datapoint
-#LAT = zg500.LAT # array with latitudes  corresponding to each datapoint
-import matplotlib.gridspec as gridspec
-import cartopy.crs as ccrs
-import cartopy.feature as cfeat
-data_proj = ccrs.PlateCarree()
-import cartopy_plots as cplt
 
 def vae_generate_images(vae,Z_DIM,n_to_show=10):
     # Plot images generated by the autoencoder
     reconst_images = vae.decoder.predict(np.random.normal(0,1,size=(n_to_show,Z_DIM)))
     
-    #reconst_images1 = foo.ln.roll_X(reconst_images[...,1], roll_axis='lat', roll_steps=-64) # remove extra fields 
-    #reconst_images0 = foo.ln.roll_X(reconst_images[...,2], roll_axis='lat', roll_steps=-64) # remove extra fields 
     # prerolling has already occured so
     reconst_images1 = reconst_images[...,1] # remove extra fields 
     reconst_images0 = reconst_images[...,2] # remove extra fields 
@@ -157,13 +143,6 @@ def plot_compare(model, images=None):
     reconst_images1 = reconst_images[...,1] # remove extra fields 
     reconst_images0 = reconst_images[...,2] # remove extra fields 
     print("reconst_images.shape = ",reconst_images.shape)
-    
-    #reconst_images1 = foo.ln.roll_X(reconst_images[...,1], roll_axis='lat', roll_steps=-64) # remove extra fields
-    #reconst_images0 = foo.ln.roll_X(reconst_images[...,2], roll_axis='lat', roll_steps=-64) #reconst_images[...,0] # remove extra fields
-    #print("reconst_images.shape = ",reconst_images.shape)
-    
-    #images1 = foo.ln.roll_X(images[...,1], roll_axis='lat', roll_steps=-64)
-    #images0 = foo.ln.roll_X(images[...,2], roll_axis='lat', roll_steps=-64)
     
     images1 = images[...,1]
     images0 = images[...,2]
