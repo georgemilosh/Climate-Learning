@@ -751,10 +751,10 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
         # load the data
         field.load_field(mylocal+file_suffix, year_list=year_list)
         # Set area integral
-        field.abs_area_int, field.ano_area_int = field.Set_area_integral(area,mask,containing_folder=None) # don't save area integrals in order to avoid conflicts between different runs
+        field.abs_area_int, field.ano_area_int = field.Set_area_integral(area,mask,containing_folder=None) # don't save area integrals in order to avoid conflicts between different runs. Also potential BUG here
         # filter
         if do_filter: # set to zero all values outside `filter_area`
-            filter_mask = ef.create_mask(Model, filter_area, field.var, axes='last 2', return_full_mask=True)
+            filter_mask = ef.create_mask(Model, filter_area, field.var, axes='last 2', return_full_mask=True) # potential BUG here
             field.var *= filter_mask
 
         _fields[field_name] = field  

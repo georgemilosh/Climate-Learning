@@ -509,7 +509,7 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
         _Y_tr = np.concatenate([Y_tr, Y0_selected, Y1_selected], axis=0)
         _i_tr =  np.concatenate([i_tr, i0_selected, i1_selected], axis=0)
 
-        shuffle_permutation = np.random.permutation(Y_tr.shape[0]) # shuffle data
+        shuffle_permutation = np.random.permutation(_Y_tr.shape[0]) # shuffle data
         _X_tr = _X_tr[shuffle_permutation]
         _Y_tr = _Y_tr[shuffle_permutation]
         _i_tr = _i_tr[shuffle_permutation]
@@ -550,7 +550,7 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
 
         # save predictions
         np.save(f'{eon_folder}/q_tr.npy', q_tr)
-        np.save(f'{eon_folder}/Y_tr.npy', Y_tr)
+        np.save(f'{eon_folder}/Y_tr.npy', _Y_tr)
         np.save(f'{eon_folder}/q_va.npy', q_va)
 
     compute_p_func_kwargs['p_arg'] = p_arg_orig
