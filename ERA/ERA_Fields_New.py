@@ -581,13 +581,13 @@ def geo_contour(m, ax, Center_map, Lon, Lat, data_contour_value, data_contour_le
     if len(c_sign.levels) > len(v_sign): # len(v_sign) = 2 because it is a 2-uple
         p.clabel(c_sign, v_sign, inline=True,fmt=fmt,fontsize=14)
 
-def geo_contourf(m, ax, Center_map, Lon, Lat, data_colorbar_value, data_colorbar_level, colmap, title_frame, put_colorbar=True):
+def geo_contourf(m, ax, Center_map, Lon, Lat, data_colorbar_value, data_colorbar_level, colmap, title_frame, put_colorbar=True, draw_gridlines=True):
     '''
     ax, Center_Map aren't used
     '''
     if plotter == 'cartopy':
         return cplt.geo_contourf(m, Lon, Lat, data_colorbar_value,
-                                 levels=data_colorbar_level, cmap=colmap, title=title_frame, put_colorbar=put_colorbar)
+                                 levels=data_colorbar_level, cmap=colmap, title=title_frame, put_colorbar=put_colorbar, draw_gridlines=draw_gridlines)
     
     plt.cla()
     m.contourf(Lon, Lat, data_colorbar_value, levels=data_colorbar_level, cmap=colmap, extend='both', latlon=True)
