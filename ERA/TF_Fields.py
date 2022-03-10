@@ -49,8 +49,9 @@ class ConstMul(tf.keras.layers.Layer):
         return inputs * self.const_a + self.const_b
 
 class Sampling(tf.keras.layers.Layer):  # Normal distribution sampling for the encoder output of the variational autoencoder
-    """Uses (z_mean, z_log_var) to sample z, the vector encoding a digit."""
-
+    '''
+    Uses (z_mean, z_log_var) to sample z, the vector encoding a digit.
+    '''
     def call(self, inputs):
         z_mean, z_log_var = inputs
         batch = tf.shape(z_mean)[0]
@@ -59,6 +60,26 @@ class Sampling(tf.keras.layers.Layer):  # Normal distribution sampling for the e
         return z_mean + tf.exp(0.5 * z_log_var) * epsilon
     
 class VAE(tf.keras.Model): # Class of variational autoencoder
+    '''
+    Class Variation Autoencoder
+        inherits : keras.models.Model
+
+    Parameters
+    ----------
+    
+    encoder : 
+    decoder:
+    k1 : int
+        weight of reconstruction loss
+    k2 : int
+        weight of KL loss
+    from_logits : bool
+        Whether to use logits in binary cross entropy
+    field_weights: list of floats or NaN
+        if not None weights will be applied to the reconstructed field (last axis) when computing cross-entropy. 
+        The idea is to prioritize some fields, for instance the fields that will be filtered (masked) in the decoder
+        so that they contribute more. We know that soil moisture matters a lot for the heat waves, yet it is highly local
+    '''
     def __init__(self, encoder, decoder, k1=1, k2=1, from_logits=False, field_weights=None, **kwargs):
         super(VAE, self).__init__(**kwargs)
         self.encoder = encoder
@@ -140,7 +161,31 @@ class VAE(tf.keras.Model): # Class of variational autoencoder
             "kl_loss": self.kl_loss_tracker.result(),
         }
 
-def build_encoder_skip(input_dim, output_dim, conv_filters, conv_kernel_size, conv_strides, conv_padding, conv_activation, conv_skip, use_batch_norm = False, use_dropout = False):
+def build_encoder_skip(input_dim, output_dim, conv_filters = [32,64,64,64],
+                                                conv_kernel_size = [3,3,3,3],
+                                                conv_strides = [2,2,2,1],
+                                                conv_padding = ["same","same","same","valid"], 
+                                                conv_activation = ["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"],
+                                                conv_skip = dict({}),use_batch_norm=False, use_dropout=False):
+    
+    '''
+    builds encoder
+
+    Parameters
+    ----------
+    conv_channels : list of int, optional
+        number of channels corresponding to the convolutional layers
+    kernel_sizes : int, 2-tuple or list of ints or 2-tuples, optional
+        If list must be of the same size of `conv_channels`
+    strides : int, 2-tuple or list of ints or 2-tuples, optional
+        same as kernel_sizes
+    batch_normalizations : bool or list of bools, optional
+        whether to add a BatchNormalization layer after each Conv2D layer
+    conv_activations : str or list of str, optional
+        activation functions after each convolutional layer
+    conv_dropouts : float in [0,1] or list of floats in [0,1], optional
+        dropout to be applied after the BatchNormalization layer. If 0 no dropout is applied
+    '''
     # Number of Conv layers
     n_layers = len(conv_filters)
     encoder_inputs = tf.keras.Input(shape=input_dim, name ='encoder input')
@@ -194,48 +239,34 @@ def build_encoder_skip(input_dim, output_dim, conv_filters, conv_kernel_size, co
     encoder_outputs = [z_mean, z_log_var, z]
     encoder = tf.keras.Model(encoder_inputs, encoder_outputs, name="encoder")
     return encoder_inputs, encoder_outputs,  shape_before_flattening, encoder    
-    
-def build_encoder2(input_dim, output_dim, conv_filters, conv_kernel_size, conv_strides, conv_padding, conv_activation, use_batch_norm = False, use_dropout = False):
-    # Number of Conv layers
-    n_layers = len(conv_filters)
-    encoder_inputs = tf.keras.Input(shape=input_dim, name ='encoder input')
-    x = encoder_inputs
-    # Add convolutional layers
-    for i in range(n_layers):
-        print(i)
-        x = Conv2D(filters = conv_filters[i], 
-                kernel_size = conv_kernel_size[i],
-                strides = conv_strides[i], 
-                padding = conv_padding[i],
-                name = 'encoder_conv_' + str(i))(x)
 
-        if use_batch_norm:
-            x = BatchNormalization()(x)
-        if conv_activation[i] == 'LeakyRelu':
-            x = LeakyReLU()(x)
-        else:
-            x = Activation(conv_activation[i])(x)
 
-        if use_dropout:
-            x = Dropout(rate=0.25)(x)
 
-    shape_before_flattening = K.int_shape(x)[1:] 
-    print("shape_before_flattening = ", shape_before_flattening)
-    x = tf.keras.layers.Flatten()(x)
-    z_mean = tf.keras.layers.Dense(output_dim, name="z_mean")(x)
-    z_log_var = tf.keras.layers.Dense(output_dim, name="z_log_var")(x)
-    z = Sampling()([z_mean, z_log_var])
-    encoder_outputs = [z_mean, z_log_var, z]
-    encoder = tf.keras.Model(encoder_inputs, encoder_outputs, name="encoder")
-    return encoder_inputs, encoder_outputs,  shape_before_flattening, encoder
 
-def build_encoder(input_dim, output_dim, conv_filters, conv_kernel_size, conv_strides, conv_padding, use_batch_norm = False, use_dropout = False):
-    # For backward compatibility we keep the old version that used to have prescribed activation
-    conv_activation = ['LeakyRelu' for i in range(len(conv_filters))]
-    
-    return build_encoder2(input_dim, output_dim, conv_filters, conv_kernel_size, conv_strides, conv_padding, conv_activation, use_batch_norm, use_dropout)
+def build_decoder_skip(mask,input_dim, shape_before_flattening, conv_filters = [64,64,32,3],
+                                        conv_kernel_size = [3,3,3,3],
+                                        conv_strides = [1,2,2,2],
+                                        conv_padding = ["valid","same","same","same"], 
+                                        conv_activation = ["LeakyRelu","LeakyRelu","LeakyRelu","sigmoid"],
+                       conv_skip = dict({}), use_batch_norm = False, use_dropout = False, usemask=False):
+    '''
+    builds decoder
 
-def build_decoder_skip(input_dim, shape_before_flattening, conv_filters, conv_kernel_size, conv_strides,conv_padding, conv_activation, conv_skip, use_batch_norm = False, use_dropout = False, mask = None):
+    Parameters
+    ----------
+    conv_channels : list of int, optional
+        number of channels corresponding to the convolutional layers
+    kernel_sizes : int, 2-tuple or list of ints or 2-tuples, optional
+        If list must be of the same size of `conv_channels`
+    strides : int, 2-tuple or list of ints or 2-tuples, optional
+        same as kernel_sizes
+    batch_normalizations : bool or list of bools, optional
+        whether to add a BatchNormalization layer after each Conv2D layer
+    conv_activations : str or list of str, optional
+        activation functions after each convolutional layer
+    conv_dropouts : float in [0,1] or list of floats in [0,1], optional
+        dropout to be applied after the BatchNormalization layer. If 0 no dropout is applied
+    '''
     # Number of Conv layers
     n_layers = len(conv_filters)
     decoder_inputs = tf.keras.Input(shape=input_dim)
@@ -283,7 +314,7 @@ def build_decoder_skip(input_dim, shape_before_flattening, conv_filters, conv_ke
         
         x.append(actv)
         
-    if mask is not None: # a tensorflow array that will typically contain 
+    if usemask is not None: # a tensorflow array that will typically contain 
         decoder_outputs = ConstMul(mask,(~mask)*0.5)(x[-1])  # This will multiply the input by mask consisting of 0's (False) and 1's (True). Because the decoder is expected to reconstruct sigmoid function we add 0.5 where there were 0's
     else:
         decoder_outputs = x[-1]
@@ -291,42 +322,6 @@ def build_decoder_skip(input_dim, shape_before_flattening, conv_filters, conv_ke
     
     return decoder_inputs, decoder_outputs, decoder  
 
-def build_decoder2(input_dim, shape_before_flattening, conv_filters, conv_kernel_size, conv_strides,conv_padding, conv_activation):
-    # Number of Conv layers
-    n_layers = len(conv_filters)
-    decoder_inputs = tf.keras.Input(shape=input_dim)
-    
-    x = tf.keras.layers.Dense(tf.math.reduce_prod(shape_before_flattening), activation="relu")(decoder_inputs)
-    x = tf.keras.layers.Reshape(shape_before_flattening)(x)
-
-    # Add convolutional layers
-    for i in range(n_layers):
-        x = Conv2DTranspose(filters = conv_filters[i], 
-                            kernel_size = conv_kernel_size[i],
-                            strides = conv_strides[i], 
-                            padding = conv_padding[i],
-                            name = 'decoder_conv_' + str(i))(x)
-        if conv_activation[i] == 'LeakyRelu':
-            x = LeakyReLU()(x)
-        else:
-            x = Activation(conv_activation[i])(x)
-        # Adding a sigmoid layer at the end to restrict the outputs 
-        # between 0 and 1
-        #if i < n_layers - 1:
-        #    x = LeakyReLU()(x)
-        #else:
-        #    x = Activation('sigmoid')(x)
-    decoder_outputs = x
-    decoder = tf.keras.Model(decoder_inputs, decoder_outputs, name="decoder")
-
-    return decoder_inputs, decoder_outputs, decoder  
-
-
-def build_decoder(input_dim, shape_before_flattening, conv_filters, conv_kernel_size, conv_strides,conv_padding):
-    # For backward compatibility we keep the old version that used to have prescribed activation
-    conv_activation = ['LeakyRelu' for i in range(len(conv_filters))]
-    conv_activation[-1] = 'sigmoid'
-    return build_decoder2(input_dim, shape_before_flattening, conv_filters, conv_kernel_size, conv_strides,conv_padding, conv_activation) 
 
 def plot_compare(model, images=None, add_noise=False): # Plot images generated by the autoencoder
     model.encoder(images)
@@ -364,6 +359,86 @@ def vae_generate_images(vae,Z_DIM,n_to_show=10):
         sub.axis('off')        
         sub.imshow(img)
 
+#####################################################
+#### Old unused routines to be suppressed soon ######        
+##################################################### 
+
+def build_encoder2(input_dim, output_dim, conv_filters, conv_kernel_size, conv_strides, conv_padding, conv_activation, use_batch_norm = False, use_dropout = False):
+    # Number of Conv layers
+    n_layers = len(conv_filters)
+    encoder_inputs = tf.keras.Input(shape=input_dim, name ='encoder input')
+    x = encoder_inputs
+    # Add convolutional layers
+    for i in range(n_layers):
+        print(i)
+        x = Conv2D(filters = conv_filters[i], 
+                kernel_size = conv_kernel_size[i],
+                strides = conv_strides[i], 
+                padding = conv_padding[i],
+                name = 'encoder_conv_' + str(i))(x)
+
+        if use_batch_norm:
+            x = BatchNormalization()(x)
+        if conv_activation[i] == 'LeakyRelu':
+            x = LeakyReLU()(x)
+        else:
+            x = Activation(conv_activation[i])(x)
+
+        if use_dropout:
+            x = Dropout(rate=0.25)(x)
+
+    shape_before_flattening = K.int_shape(x)[1:] 
+    print("shape_before_flattening = ", shape_before_flattening)
+    x = tf.keras.layers.Flatten()(x)
+    z_mean = tf.keras.layers.Dense(output_dim, name="z_mean")(x)
+    z_log_var = tf.keras.layers.Dense(output_dim, name="z_log_var")(x)
+    z = Sampling()([z_mean, z_log_var])
+    encoder_outputs = [z_mean, z_log_var, z]
+    encoder = tf.keras.Model(encoder_inputs, encoder_outputs, name="encoder")
+    return encoder_inputs, encoder_outputs,  shape_before_flattening, encoder
+
+def build_encoder(input_dim, output_dim, conv_filters, conv_kernel_size, conv_strides, conv_padding, use_batch_norm = False, use_dropout = False):
+    # For backward compatibility we keep the old version that used to have prescribed activation
+    conv_activation = ['LeakyRelu' for i in range(len(conv_filters))]
+    
+    return build_encoder2(input_dim, output_dim, conv_filters, conv_kernel_size, conv_strides, conv_padding, conv_activation, use_batch_norm, use_dropout)
+
+def build_decoder2(input_dim, shape_before_flattening, conv_filters, conv_kernel_size, conv_strides,conv_padding, conv_activation):
+    # Number of Conv layers
+    n_layers = len(conv_filters)
+    decoder_inputs = tf.keras.Input(shape=input_dim)
+    
+    x = tf.keras.layers.Dense(tf.math.reduce_prod(shape_before_flattening), activation="relu")(decoder_inputs)
+    x = tf.keras.layers.Reshape(shape_before_flattening)(x)
+
+    # Add convolutional layers
+    for i in range(n_layers):
+        x = Conv2DTranspose(filters = conv_filters[i], 
+                            kernel_size = conv_kernel_size[i],
+                            strides = conv_strides[i], 
+                            padding = conv_padding[i],
+                            name = 'decoder_conv_' + str(i))(x)
+        if conv_activation[i] == 'LeakyRelu':
+            x = LeakyReLU()(x)
+        else:
+            x = Activation(conv_activation[i])(x)
+        # Adding a sigmoid layer at the end to restrict the outputs 
+        # between 0 and 1
+        #if i < n_layers - 1:
+        #    x = LeakyReLU()(x)
+        #else:
+        #    x = Activation('sigmoid')(x)
+    decoder_outputs = x
+    decoder = tf.keras.Model(decoder_inputs, decoder_outputs, name="decoder")
+
+    return decoder_inputs, decoder_outputs, decoder  
+
+
+def build_decoder(input_dim, shape_before_flattening, conv_filters, conv_kernel_size, conv_strides,conv_padding):
+    # For backward compatibility we keep the old version that used to have prescribed activation
+    conv_activation = ['LeakyRelu' for i in range(len(conv_filters))]
+    conv_activation[-1] = 'sigmoid'
+    return build_decoder2(input_dim, shape_before_flattening, conv_filters, conv_kernel_size, conv_strides,conv_padding, conv_activation) 
 
 
 #### Custom Metrics ######

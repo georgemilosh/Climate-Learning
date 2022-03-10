@@ -16,6 +16,8 @@ import numpy as np
 import shutil
 import pickle
 from pathlib import Path
+from colorama import Fore # support colored output in terminal
+from colorama import Style
 if __name__ == '__main__':
     logger = logging.getLogger()
     logger.handlers = [logging.StreamHandler(sys.stdout)]
@@ -140,19 +142,8 @@ def normalize_X(X,checkpoint_name, creation=None,mode='pointwise'):
 ########## NEURAL NETWORK DEFINITION ###########
 ################################################
 
-def ConstructVAE(checkpoint_name, mask_weights, INPUT_DIM, myinput, Z_DIM=64, N_EPOCHS=2, K1=0.9, K2=0.1, from_logits=False, field_weights=[2.0, 1.0, 2.0],
-                encoder_conv_filters       =[16, 16, 16, 32, 32,  32,   64, 64],
-                encoder_conv_kernel_size   =[5,  5,  5,  5,   5,   5,   5,  3],
-                encoder_conv_strides       =[2,  1,  1,  2,   1,   1,   2,  1],
-                encoder_conv_padding       =["same","same","same","same","same","same","same","valid"],
-                encoder_conv_activation    =["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"],
-                encoder_conv_skip          =dict({(0,2),(3,5)}), encoder_use_batch_norm=True, encoder_use_dropout=True,
-                decoder_conv_filters =     [64,32,32,32,16,16,16,3],
-                decoder_conv_kernel_size = [3, 5, 5, 5, 5, 5, 5, 5],
-                decoder_conv_strides =     [1, 2, 1, 1, 2, 1, 1, 2],
-                decoder_conv_padding =     ["valid","same","same","same","same","same","same","same"], 
-                decoder_conv_activation =  ["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","sigmoid"], 
-                decoder_conv_skip = dict({(1,3),(4,6)}), decoder_use_batch_norm=True, decoder_use_dropout=True, usemask=True):
+#def ConstructVAE(checkpoint_name, mask_weights, INPUT_DIM, myinput, Z_DIM=64, N_EPOCHS=2, K1=0.9, K2=0.1, from_logits=False, field_weights=[2.0, 1.0, 2.0],
+def ConstructVAE(checkpoint_name, mask_weights, INPUT_DIM, myinput, Z_DIM=64, N_EPOCHS=2, vae_kwargs=None, encoder_kwargs=None, decoder_kwargs=None):
     '''
     Creates a Variational AutoEncoder Model or load the existing one from the weights given in the model
 
@@ -164,20 +155,9 @@ def ConstructVAE(checkpoint_name, mask_weights, INPUT_DIM, myinput, Z_DIM=64, N_
         shape of a single input datapoint, i.e. not counting the axis corresponding to iteration through the datapoints (batch axis)
     Z_DIM: int
         dimension of the latent space
-    conv_channels : list of int, optional
-        number of channels corresponding to the convolutional layers
-    kernel_sizes : int, 2-tuple or list of ints or 2-tuples, optional
-        If list must be of the same size of `conv_channels`
-    strides : int, 2-tuple or list of ints or 2-tuples, optional
-        same as kernel_sizes
-    batch_normalizations : bool or list of bools, optional
-        whether to add a BatchNormalization layer after each Conv2D layer
-    conv_activations : str or list of str, optional
-        activation functions after each convolutional layer
-    conv_dropouts : float in [0,1] or list of floats in [0,1], optional
-        dropout to be applied after the BatchNormalization layer. If 0 no dropout is applied
-    max_pool_sizes : int or list of int, optional
-        size of max pooling layer to be applied after dropout. If 0 no max pool is applied
+    vae_kwargs:
+    encoder_kwargs:
+    decoder_kwargs:
 
     
 
@@ -185,32 +165,26 @@ def ConstructVAE(checkpoint_name, mask_weights, INPUT_DIM, myinput, Z_DIM=64, N_
     -------
     model : keras.models.Model
     '''
+    
+    ### preliminary operations
+    ##########################
+    if vae_kwargs is None:
+        vae_kwargs = {}
+    if encoder_kwargs is None:
+        encoder_kwargs = {}
+    if decoder_kwargs is None:
+        decoder_kwargs = {}
+    
     print("==Building encoder==")
-    encoder_inputs, encoder_outputs, shape_before_flattening, encoder  = tff.build_encoder_skip(input_dim = INPUT_DIM, 
-                                                output_dim = Z_DIM, 
-                                                conv_filters = encoder_conv_filters,
-                                                conv_kernel_size = encoder_conv_kernel_size,
-                                                conv_strides =     encoder_conv_strides,
-                                                conv_padding =     encoder_conv_padding, 
-                                                conv_activation =  encoder_conv_activation,
-                                                conv_skip = encoder_conv_skip, use_batch_norm=encoder_use_batch_norm, use_dropout=encoder_use_dropout)
+    encoder_inputs, encoder_outputs, shape_before_flattening, encoder  = tff.build_encoder_skip(input_dim = INPUT_DIM, output_dim = Z_DIM, **encoder_kwargs)
     encoder.summary()
     print("==Building decoder==") 
-    if usemask==False: # Remove weights 
-        mask_weights=None
-    decoder_input, decoder_output, decoder = tff.build_decoder_skip(input_dim = Z_DIM,  
-                                        shape_before_flattening = shape_before_flattening,
-                                        conv_filters =     decoder_conv_filters,
-                                        conv_kernel_size = decoder_conv_kernel_size,
-                                        conv_strides =     decoder_conv_strides,
-                                        conv_padding =     decoder_conv_padding, 
-                                        conv_activation =  decoder_conv_activation, 
-                                        conv_skip = decoder_conv_skip, use_batch_norm = decoder_use_batch_norm, use_dropout = decoder_use_dropout, mask = mask_weights)
+    decoder_input, decoder_output, decoder = tff.build_decoder_skip(mask=mask_weights, input_dim = Z_DIM, shape_before_flattening = shape_before_flattening, **decoder_kwargs)
     decoder.summary()
 
 
     print("==Attaching decoder and encoder and compiling==")
-    vae = tff.VAE(encoder, decoder, k1=K1, k2=K2, from_logits=from_logits, field_weights=field_weights) #, mask_weights=mask_weights)
+    vae = tff.VAE(encoder, decoder, **vae_kwargs) #, mask_weights=mask_weights)
     print("vae.k1 = ", vae.k1, " , vae.k2 = ", vae.k2)
     if myinput == 'Y':
         INITIAL_EPOCH = 0
@@ -251,6 +225,7 @@ def PrepareDataAndVAE(creation=None, DIFFERENT_YEARS=None, WEIGHTS_FOLDER ='./mo
             SET_YEARS = DIFFERENT_YEARS # for benchmark runs we don't need all years or the same years, with different years we can load some other data.
     
     myinput = CreateFolder(creation,checkpoint_name)
+    print("myinput = ", myinput) # Y/N/C question which controls the behavior: Y: overwrite, N: break, C: continue the training
 
     X, _Y, _year_permutation, lat, lon = ln.prepare_data(load_data_kwargs = {'fields': ['t2m_filtered','zg500','mrso_filtered'], 'lat_end': 24, 'dataset_years': 8000, 'year_list': SET_YEARS},
                            prepare_XY_kwargs = {'roll_X_kwargs': {'roll_steps': 64}}) # That's the version that fails
@@ -287,9 +262,20 @@ def PrepareDataAndVAE(creation=None, DIFFERENT_YEARS=None, WEIGHTS_FOLDER ='./mo
     
     print("X.dtype = ", X.dtype, " ,filter_mask.dtype = ", filter_mask.dtype)
     
-    #vae, history, N_EPOCHS, INITIAL_EPOCH, checkpoint, checkpoint_path = ConstructVAE(checkpoint_name, filter_mask, INPUT_DIM, Z_DIM, N_EPOCHS, myinput, K1, K2, from_logits=False, )
-    vae, history, N_EPOCHS, INITIAL_EPOCH, checkpoint, checkpoint_path = ConstructVAE(checkpoint_name, filter_mask, INPUT_DIM, myinput)
-    
+    vae, history, N_EPOCHS, INITIAL_EPOCH, checkpoint, checkpoint_path = ConstructVAE(checkpoint_name, filter_mask, INPUT_DIM, myinput, 
+                                            vae_kwargs={'k1': 0.9, 'k2': 0.1, 'from_logits': False, 'field_weights': [2.0, 1.0, 2.0]},
+                                        encoder_kwargs={'conv_filters':[16, 16, 16, 32, 32,  32,   64, 64],
+                                                    'conv_kernel_size':[5,  5,  5,  5,   5,   5,   5,  3], 
+                                                    'conv_strides'    :[2,  1,  1,  2,   1,   1,   2,  1],
+                                                    'conv_padding':["same","same","same","same","same","same","same","valid"], 
+                                                    'conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"], 
+                                                    'conv_skip':dict({(0,2),(3,5)}), 'use_batch_norm' : True, 'use_dropout' : True},
+                                        decoder_kwargs={'conv_filters':[64,32,32,32,16,16,16,3], 
+                                                    'conv_kernel_size':[3, 5, 5, 5, 5, 5, 5, 5], 
+                                                        'conv_strides':[1, 2, 1, 1, 2, 1, 1, 2],
+                                                        'conv_padding':["valid","same","same","same","same","same","same","same"], 
+                                                     'conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","sigmoid"], 
+                                                           'conv_skip':dict({(1,3),(4,6)}), 'use_batch_norm' : True, 'use_dropout' : True, 'usemask' : True})
     
     return X, lat, lon, vae, N_EPOCHS, INITIAL_EPOCH, BATCH_SIZE, LEARNING_RATE, checkpoint_path, checkpoint_name, myinput, history
 
@@ -312,7 +298,7 @@ if __name__ == '__main__': # we do this so that we can then load this file as a 
     vae.compile(optimizer=tf.keras.optimizers.Adam(lr = LEARNING_RATE))
     #vae.summary()
 
-    print("==fit ==")
+    print(f"== {Fore.GREEN}fit{Style.RESET_ALL} ==")
     print("X[X.shape[0]//10:,...].shape = ", X[X.shape[0]//10:,...].shape)
     my_history = vae.fit(X[X.shape[0]//10:,...], epochs=N_EPOCHS, initial_epoch=INITIAL_EPOCH, batch_size=BATCH_SIZE, shuffle=True, callbacks=[cp_callback]) # train on the last 9 folds
     if myinput == 'C':
