@@ -166,7 +166,9 @@ def build_encoder_skip(input_dim, output_dim, conv_filters = [32,64,64,64],
                                                 conv_strides = [2,2,2,1],
                                                 conv_padding = ["same","same","same","valid"], 
                                                 conv_activation = ["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"],
-                                                conv_skip = dict({}),use_batch_norm=False, use_dropout=False):
+                                                conv_skip = dict({}),
+                                                use_batch_norm=[False,False,False,False], 
+                                                use_dropout=[0,0,0,0]):
     
     '''
     builds encoder
@@ -201,7 +203,7 @@ def build_encoder_skip(input_dim, output_dim, conv_filters = [32,64,64,64],
                 padding = conv_padding[i],
                 name = 'encoder_conv_' + str(i))(x[i])
 
-        if use_batch_norm:
+        if use_batch_norm[i]:
             conv = BatchNormalization()(conv)
             print("conv = BatchNormalization()(conv)")
             
@@ -212,8 +214,8 @@ def build_encoder_skip(input_dim, output_dim, conv_filters = [32,64,64,64],
             actv = Activation(conv_activation[i])(conv)
             print("actv = Activation(conv_activation[i])(conv)")
 
-        if use_dropout:
-            actv = Dropout(rate=0.25)(actv)
+        if use_dropout[i]>0:
+            actv = Dropout(rate=use_dropout[i])(actv)
             print("actv = Dropout(rate=0.25)(actv)")
         
         if i in conv_skip.values(): # The arrow of the skip connection end here
@@ -248,7 +250,9 @@ def build_decoder_skip(mask,input_dim, shape_before_flattening, conv_filters = [
                                         conv_strides = [1,2,2,2],
                                         conv_padding = ["valid","same","same","same"], 
                                         conv_activation = ["LeakyRelu","LeakyRelu","LeakyRelu","sigmoid"],
-                       conv_skip = dict({}), use_batch_norm = False, use_dropout = False, usemask=False):
+                                        conv_skip = dict({}), 
+                                        use_batch_norm = [False,False,False,False], 
+                                        use_dropout = [0,0,0,0], usemask=False):
     '''
     builds decoder
 
@@ -286,7 +290,7 @@ def build_decoder_skip(mask,input_dim, shape_before_flattening, conv_filters = [
                             padding = conv_padding[i],
                             name = 'decoder_conv_' + str(i))(x[i])
         
-        if use_batch_norm:
+        if use_batch_norm[i]:
             conv = BatchNormalization()(conv)
             print("conv = BatchNormalization()(conv)")
             
@@ -297,8 +301,8 @@ def build_decoder_skip(mask,input_dim, shape_before_flattening, conv_filters = [
             actv = Activation(conv_activation[i])(conv)
             print("actv = Activation(conv_activation[i])(conv)")
             
-        if use_dropout:
-            actv = Dropout(rate=0.25)(actv)
+        if use_dropout[i]:
+            actv = Dropout(rate=use_dropout[i])(actv)
             print("actv = Dropout(rate=0.25)(actv)")
         
         if i in conv_skip.values(): # The arrow of the skip connection end here
