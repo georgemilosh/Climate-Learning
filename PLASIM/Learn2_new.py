@@ -1589,7 +1589,7 @@ def load_model(checkpoint, compile=False):
     Parameters
     ----------
     checkpoint : str
-        path to the checkpoint is is. For example with structure <folder>/cp-<epoch>.ckpt
+        path to the checkpoint is. For example with structure <folder>/cp-<epoch>.ckpt
     compile : bool, optional
         whether to compile the model, by default False
 

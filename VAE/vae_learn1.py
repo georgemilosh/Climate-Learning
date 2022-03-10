@@ -160,10 +160,10 @@ def normalize_X(X,checkpoint_name, creation=None,mode='pointwise'):
 
 @ut.execution_time  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function
-def ConstructVAE(checkpoint_name, mask_weights, INPUT_DIM, myinput, Z_DIM=64, N_EPOCHS=2, vae_kwargs=None, encoder_kwargs=None, decoder_kwargs=None):
+def create_or_load_vae(checkpoint_name, mask_weights, INPUT_DIM, myinput, Z_DIM=64, N_EPOCHS=2, vae_kwargs=None, encoder_kwargs=None, decoder_kwargs=None):
     '''
-    Creates a Variational AutoEncoder Model or load the existing one from the weights given in the model
-
+    Creates a Variational AutoEncoder Model or loads the existing one from the weights given in the model
+        
     Parameters
     ----------
     checkpoint_name
@@ -232,7 +232,7 @@ def ConstructVAE(checkpoint_name, mask_weights, INPUT_DIM, myinput, Z_DIM=64, N_
 
 @ut.execution_time  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function
-def PrepareDataAndVAE(creation=None, BATCH_SIZE=128, LEARNING_RATE=1e-3, SET_YEARS=range(100)):
+def PrepareDataAndVAE(creation=None, SET_YEARS=range(100)):
     '''
     Loads the data and Creates a Variational AutoEncoder 
     '''
@@ -265,7 +265,7 @@ def PrepareDataAndVAE(creation=None, BATCH_SIZE=128, LEARNING_RATE=1e-3, SET_YEA
     
     logger.info(f'{X.dtype = }, {filter_mask.dtype}')
    
-    vae, history, N_EPOCHS, INITIAL_EPOCH, checkpoint, checkpoint_path = ConstructVAE(checkpoint_name, filter_mask, INPUT_DIM, myinput, 
+    vae, history, N_EPOCHS, INITIAL_EPOCH, checkpoint, checkpoint_path = create_or_load_vae(checkpoint_name, filter_mask, INPUT_DIM, myinput, 
                                             vae_kwargs={'k1': 0.9, 'k2': 0.1, 'from_logits': False, 'field_weights': [2.0, 1.0, 2.0]},
                                         encoder_kwargs={'conv_filters':[16, 16, 16, 32, 32,  32,   64, 64],
                                                     'conv_kernel_size':[5,  5,  5,  5,   5,   5,   5,  3], 
@@ -284,22 +284,26 @@ def PrepareDataAndVAE(creation=None, BATCH_SIZE=128, LEARNING_RATE=1e-3, SET_YEA
                                                         'use_batch_norm' : [True,True,True,True,True,True,True,True], 
                                                         'use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25], 'usemask' : True})
     
-    return X, lat, lon, vae, N_EPOCHS, INITIAL_EPOCH, BATCH_SIZE, LEARNING_RATE, checkpoint_path, checkpoint_name, myinput, history
+    return X, lat, lon, vae, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, checkpoint_name, myinput, history
 
-if __name__ == '__main__': # we do this so that we can then load this file as a module in reconstruction.py
 
-    start = time.time()
-    X, lon, lat, vae, N_EPOCHS, INITIAL_EPOCH, BATCH_SIZE, LEARNING_RATE, checkpoint_path, checkpoint_name, myinput, history = PrepareDataAndVAE()
+@ut.execution_time  # prints the time it takes for the function to run
+#@ut.indent_logger(logger)   # indents the log messages produced by this function
+# logger indent causes: IndexError: string index out of range
+def train_vae(X, vae, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, checkpoint_name, myinput, history, batch_size=128, lr=1e-3):
+    
     logger.info(f" {np.max(X) = }, {np.min(X) = }")
     
     cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_path,save_weights_only=True,verbose=1)
 
-    vae.compile(optimizer=tf.keras.optimizers.Adam(lr = LEARNING_RATE))
-    #vae.summary()
+    vae.compile(optimizer=tf.keras.optimizers.Adam(lr = lr))
 
     logger.info(f"== {Fore.GREEN}fit{Style.RESET_ALL} ==")
-    logger.info(f'{ X[X.shape[0]//10:,...].shape = }')
-    my_history = vae.fit(X[X.shape[0]//10:,...], epochs=N_EPOCHS, initial_epoch=INITIAL_EPOCH, batch_size=BATCH_SIZE, shuffle=True, callbacks=[cp_callback]) # train on the last 9 folds
+    logger.info(f'{ X[X.shape[0]//10:,...].shape = }, {N_EPOCHS = }, {INITIAL_EPOCH = }, {batch_size = }')
+    logger.info(f'{cp_callback = }')
+    vae.summary()
+    my_history = vae.fit(X[X.shape[0]//10:,...], epochs=N_EPOCHS, initial_epoch=INITIAL_EPOCH, batch_size=batch_size, shuffle=True, callbacks=[cp_callback]) # train on the last 9 folds
+
     if myinput == 'C':
         logger.info("we merge the history dictionaries")
         logger.info(f" {len(history['loss'])}")
@@ -310,13 +314,15 @@ if __name__ == '__main__': # we do this so that we can then load this file as a 
         history = my_history.history
     logger.info(f" { len(history['loss']) = }")
 
-    end = time.time()
-    logger.info(f"Learning time = {end - start}")
-
     vae.save(checkpoint_name)
     with open(checkpoint_name+'/history', 'wb') as file_pi:
         pickle.dump(history, file_pi)
-    #np.save(checkpoint_name+'/history.npy',my_history.history)
+    return history['loss']
 
 
-    logger.info("==saved the model ==")
+if __name__ == '__main__': # we do this so that we can then load this file as a module in reconstruction.py
+
+    X, lon, lat, vae, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, checkpoint_name, myinput, history = PrepareDataAndVAE()
+    
+    
+    history_loss = train_vae(X, vae, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, checkpoint_name, myinput, history, batch_size=128, lr=1e-3)
