@@ -725,7 +725,7 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
     elif isinstance(year_list, tuple):
         year_list = np.arange(*year_list) # unpack the arguments of the tuple
     
-    mask, cell_area, lsm = ef.ExtractAreaWithMask(mylocal,Model,area) # extract land-sea mask and multiply it by cell area
+    mask, cell_area, lsm = ef.ExtractAreaWithMask(mylocal,Model,area) # extract land-sea mask and multiply it by cell area (normalized as to sum to 1 )
 
     if sampling == '3hrs': 
         prefix = ''

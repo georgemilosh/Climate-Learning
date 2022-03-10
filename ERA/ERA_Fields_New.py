@@ -1428,7 +1428,7 @@ class Plasim_Field:
             logger.info(f'file {filename_abs} loaded')
             logger.info(f'file {filename_ano_abs} loaded')
         else: # compute integrals            
-            self.abs_mask = np.tensordot(create_mask(self.Model,input_area,self.var, axes='last 2'), input_mask)
+            self.abs_mask = np.tensordot(create_mask(self.Model,input_area,self.var, axes='last 2'), input_mask) # potential BUG since self.var is cut in longitude and latitude when loaded
             
             #print("self.ano_abs_mask = self.abs_mask - np.mean(self.abs_mask,0)")
             self.ano_abs_mask = self.abs_mask - np.mean(self.abs_mask,0)    # Evaluate grid-point climatological mean 
