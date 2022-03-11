@@ -60,31 +60,13 @@ os.environ['TF_XLA_FLAGS'] = '--tf_xla_enable_xla_devices'  # https://stackoverf
 
 def move_to_folder(checkpoint_name):
     '''
-    Copies this file and its dependencies to a given folder. Asks for instructions for what to do if a potential overwrite
-    
+    Copies this file and its dependencies to a given folder. 
     Parameters
     ----------
     checkpoint_name: string
-        name of the folder to be created
+        name of the folder that accepts the copies
         
-    Returns
-    ---------
-    myinput: string
-        Y/N/C question which controls the behavior: Y: overwrite, N: break, C: continue the training
     '''
-    print("==Creating folders if they didn't exist==")
-    
-    if os.path.exists(checkpoint_name): # Create the directory
-        logger.info(f'folder {checkpoint_name} already exists. Should I overwrite?') 
-
-        myinput = input(" write Y to overwrite, N to stop execution, C to continue the run: ")
-        if myinput == "N":
-            sys.exit("User has aborted the program")
-        if myinput == "Y":
-            os.system("rm "+checkpoint_name+"/*.ckpt.*")
-    else:
-        logger.info(f'folder {checkpoint_name} created') 
-        os.mkdir(checkpoint_name)
 
     sys.stdout = ef.Logger(checkpoint_name)  # Keep a copy of print outputs there
     shutil.copy(__file__, checkpoint_name+'/Funs.py') # Copy this file to the directory of the training
@@ -93,7 +75,6 @@ def move_to_folder(checkpoint_name):
     shutil.copy('../ERA/ERA_Fields.py', checkpoint_name)
     shutil.copy('../ERA/TF_Fields.py', checkpoint_name)
 
-    return myinput
 
 ############################################
 ########## DATA PREPROCESSING ##############
@@ -232,25 +213,25 @@ def create_or_load_vae(checkpoint_name, mask_weights, INPUT_DIM, myinput, Z_DIM=
 
 @ut.execution_time  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function
-def PrepareDataAndVAE(creation=None, SET_YEARS=range(100)):
+def PrepareDataAndVAE(checkpoint_name, creation=None, myinput='Y', SET_YEARS=range(100)):
     '''
     Loads the data and Creates a Variational AutoEncoder 
+    
+    Parameters
+    ----------
+    creation: None or equal to checkpoint_name. If None we are starting from scratch
     '''
-    checkpoint_name = './models/test' # folder name where weights will be stored
-    
-    if creation is None: 
-        myinput = move_to_folder(checkpoint_name)
-    else:
-        myinput = 'Y'
-    
-    logger.info(f'{myinput = }') # Y/N/C question which controls the behavior: Y: overwrite, N: break, C: continue the training
-
     X, _Y, _year_permutation, lat, lon = ln.prepare_data(load_data_kwargs = {'fields': ['t2m_filtered','zg500','mrso_filtered'], 'lat_end': 24, 'dataset_years': 8000, 'year_list': SET_YEARS},
                            prepare_XY_kwargs = {'roll_X_kwargs': {'roll_steps': 64}}) # That's the version that fails
     
-    np.save(checkpoint_name+'/year_permutation',_year_permutation)
-    np.save(checkpoint_name+'/Y',_Y)
-
+    if creation is None:
+        np.save(checkpoint_name+'/year_permutation',_year_permutation)
+        np.save(checkpoint_name+'/Y',_Y)
+    else:
+        year_permutation_load = np.load(checkpoint_name+'/year_permutation.npy')
+        Y_load = np.load(checkpoint_name+'/Y.npy')
+        # TODO: Check optionally that the files are consistent
+    
     INPUT_DIM = X.shape[1:]  # Image dimension
     
     X = normalize_X(X, checkpoint_name, creation=creation, mode='pointwise')
@@ -284,7 +265,7 @@ def PrepareDataAndVAE(creation=None, SET_YEARS=range(100)):
                                                         'use_batch_norm' : [True,True,True,True,True,True,True,True], 
                                                         'use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25], 'usemask' : True})
     
-    return X, lat, lon, vae, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, checkpoint_name, myinput, history
+    return X, lat, lon, vae, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, history
 
 
 @ut.execution_time  # prints the time it takes for the function to run
@@ -298,7 +279,7 @@ def train_vae(X, vae, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, checkpoint_name,
 
     vae.compile(optimizer=tf.keras.optimizers.Adam(lr = lr))
 
-    logger.info(f"== {Fore.GREEN}fit{Style.RESET_ALL} ==")
+    logger.info(f"{Fore.GREEN}== fit =={Style.RESET_ALL}")
     logger.info(f'{ X[X.shape[0]//10:,...].shape = }, {N_EPOCHS = }, {INITIAL_EPOCH = }, {batch_size = }')
     logger.info(f'{cp_callback = }')
     vae.summary()
@@ -321,8 +302,28 @@ def train_vae(X, vae, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, checkpoint_name,
 
 
 if __name__ == '__main__': # we do this so that we can then load this file as a module in reconstruction.py
-
-    X, lon, lat, vae, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, checkpoint_name, myinput, history = PrepareDataAndVAE()
+    
+    checkpoint_name = './models/test5'
+    
+    
+    
+    # folder name where weights will be stored
+    myinput='Y' # default value
+    if os.path.exists(checkpoint_name): 
+        logger.info(f'folder {checkpoint_name} already exists. Should I overwrite?') 
+        myinput = input(" write Y to overwrite, N to stop execution, C to continue the run: ")
+        if myinput == "N": # cancel
+            sys.exit("User has aborted the program")
+        if myinput == "Y": # overwrite
+            os.system("rm -rf "+checkpoint_name+"/*")
+            move_to_folder(checkpoint_name) 
+    else: # Create the directory
+        logger.info(f'folder {checkpoint_name} created') 
+        os.mkdir(checkpoint_name)
+        move_to_folder(checkpoint_name)
+ 
+    X, lon, lat, vae, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, history = PrepareDataAndVAE(creation=None, checkpoint_name=checkpoint_name,myinput=myinput
+                                                                                           )
     
     
     history_loss = train_vae(X, vae, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, checkpoint_name, myinput, history, batch_size=128, lr=1e-3)

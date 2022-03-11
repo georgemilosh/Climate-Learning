@@ -58,7 +58,7 @@ print("==Reading data==")
 year_permutation = np.load(checkpoint_name+'/year_permutation.npy')
 
 #X, lat, lon, vae, Z_DIM, N_EPOCHS, INITIAL_EPOCH, BATCH_SIZE, LEARNING_RATE, checkpoint_path, checkpoint_name, myinput, history = foo.PrepareDataAndVAE(checkpoint_name, DIFFERENT_YEARS=year_permutation[:800])
-X, lat, lon, vae, N_EPOCHS, INITIAL_EPOCH, BATCH_SIZE, LEARNING_RATE, checkpoint_path, checkpoint_name, myinput, history = foo.PrepareDataAndVAE(checkpoint_name, SET_YEARS=year_permutation[:800])
+X, lat, lon, vae, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, history = foo.PrepareDataAndVAE(checkpoint_name, SET_YEARS=year_permutation[:800])
 # Construct 2D array for lon-lat:
 LON, LAT = np.meshgrid(lon,lat)
 print("X.shape = ", X.shape, " , np.max(X) = ", np.max(X), " , np.min (X) = ", np.min(X), " , np.mean(X[:,5,5,0]) = ", np.mean(X[:,5,5,0]), " , np.std(X[:,5,5,0]) = ", np.std(X[:,5,5,0]))
