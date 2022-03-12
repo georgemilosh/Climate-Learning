@@ -17,6 +17,8 @@ import time
 from datetime import datetime
 import json
 import logging
+import importlib
+from scipy import interpolate
 
 if __name__ == '__main__':
     logger = logging.getLogger()
@@ -671,6 +673,8 @@ def unbias_probabilities(Y_pred_prob, u=1):
 
     return Y_unb
 
+### IMPORT MODULE FROM A FILE ###
+
 def module_from_file(module_name, file_path): 
     '''
     The code that imports the file which originated the training with all the instructions
@@ -695,3 +699,128 @@ def module_from_file(module_name, file_path):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+### OTHER GENERAL PURPOSE STUFF ###
+
+class DelayedInitWrapper(object):
+    '''
+    Wrapper for handling delayed initialization of a class:
+        The class is initialized the first time one tries to acces one of its attributes
+
+    Parameters
+    ----------
+    constructor : callable
+        Constructor of the class
+    *args, **kwargs: arguments to pass to the constructor
+
+    Examples:
+    ---------
+    >>> class Test():
+    ...     def __init__(self, a, b=1):
+    ...         print('Initializing Test')
+    ...         self.a = a
+    ...         self.b = b
+
+    >>> a = 0
+    >>> t = DelayedInitWrapper(Test, a, b=42) # the Test object is not created yet
+
+    >>> print(t.a) # the first time you try to access an attribute of the class, it is created
+    Initializing Test
+    0
+
+    >>> print(t.a) # now it behaves like a normal Test object
+    0
+
+    '''
+    
+    wrargs = ['obj', '_constructor', '_init_args', '_init_kwargs']
+    
+    def __init__(self, constructor, *args, **kwargs):
+        self.obj = None
+        self._constructor = constructor
+        self._init_args = args
+        self._init_kwargs = kwargs
+        
+    
+    def __getattribute__(self, name):
+        if name in object.__getattribute__(self,'__dict__'):
+        # if name in object.__getattribute__(self,'__dir__')():
+            return object.__getattribute__(self,name)
+        if self.obj is None:
+            # print(f'Called {name}')
+            self.obj = self._constructor(*self._init_args, **self._init_kwargs)
+        return self.obj.__getattribute__(name)
+    
+    # def __getattr__(self, name):
+    #     # if name in ['obj', '_constructor', '_init_args', '_init_kwargs']:
+    #     #     return self.__dict__[name]
+    #     if self.obj is None:
+    #         print(f'Called {name}')
+    #         self.obj = self._constructor(*self._init_args, **self._init_kwargs)
+    #     return self.obj.__getattribute__(name)
+    
+    
+    def __setattr__(self, name, value):
+        if name in DelayedInitWrapper.wrargs:
+            object.__setattr__(self, name, value)
+            return
+        if self.obj is None:
+            print(f'Called {name}')
+            self.obj = self._constructor(*self._init_args, **self._init_kwargs)
+        self.obj.__setattr__(name, value)
+
+
+def adaptive_interpolation(func, x_range, max_xstep=0.1, max_ystep_rel=0.1, verbose=False, **kwargs):
+    '''
+    Interpolates a 1d function using an adaptive grid for computing it,
+    ensuring a better precision than with a fixed grid of points.
+
+    Parameters
+    ----------
+    func : callable with signature y = func(x)
+        Function to be interpolated
+    x_range : tuple
+        range in which to interpolate the function
+    max_xstep : float, optional
+        Maximum x-separation between consecutive points. The default is 0.1.
+    max_ystep_rel : float, optional
+        Maximum relative change of y between consecutive points, i.e. |1 - y[i-1]/y[i]|. The default is 0.1.
+    verbose : bool, optional
+        The default is False.
+        
+    **kwargs : 
+        additional arguments to pass to scipy.interpolate.interp1d
+
+    Returns
+    -------
+    xs : np.ndarray
+        x points (sorted)
+    ys : np.ndarray
+        y points corresponding to xs
+    yfunc : function with signature y = yfunc(x)
+        interpolating function
+
+    '''
+    if 'kind' not in kwargs:
+        kwargs['kind'] = 'cubic'
+    
+    xs = list(np.linspace(x_range[0], x_range[1], int((x_range[1] - x_range[0])/max_xstep)))
+    
+    ys = [func(x) for x in xs]
+    
+    i = len(ys) - 1
+    while i > 0:
+        if verbose:
+            print(f'\r{i = } out of {len(ys)}         ', end='')
+        if np.abs((ys[i] - ys[i - 1])/ys[i]) > max_ystep_rel and np.abs(xs[i] - xs[i - 1]) > 1e-8:
+            x = (xs[i] + xs[i - 1])/2
+            xs.insert(i, x)
+            # print(f'{x = }')
+            ys.insert(i, func(x))
+            i += 1
+        else:
+            i -= 1
+            
+    yfunc = interpolate.interp1d(xs, ys, **kwargs)
+    return np.array(xs), np.array(ys), yfunc
