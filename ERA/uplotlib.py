@@ -275,7 +275,7 @@ def side_hist_plot(xdata, ydata, bins=30, external_axes=None, fit=True, **kwargs
     else:
         xrange = ax_plot.get_ylim()
 
-        f1, x1 = np.histogram(ydata, bins=np.linspace(*xrange, bins+1))
+        f1, x1 = np.histogram(ydata, bins=np.linspace(*xrange, bins+1), density=True)
         x1 = 0.5*(x1[1:] + x1[:-1])
         ax_hist.plot(f1, x1, **kwargs)
     
