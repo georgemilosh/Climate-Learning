@@ -1,12 +1,12 @@
-# George Miloshevich 2021
+# George Miloshevich 2022
 # This routine is written for two parameters: input folder for VAE weights and the given epoch. It shows us how good the reconstruction of the VAE works
 import os, sys
 import shutil
-
+from pathlib import Path
 os.environ['TF_XLA_FLAGS'] = '--tf_xla_enable_xla_devices'  # https://stackoverflow.com/questions/65907365/tensorflow-not-creating-xla-devices-tf-xla-enable-xla-devices-not-set
 
 
-checkpoint_name = sys.argv[1]  # The name of the folder where the weights have been stored
+fold_folder = Path(sys.argv[1])  # The name of the folder where the weights have been stored
 checkpoint = sys.argv[2]       # The checkpoint at which the weights have been stored
 
 import importlib.util
@@ -16,11 +16,11 @@ def module_from_file(module_name, file_path): #The code that imports the file wh
             spec.loader.exec_module(module)
             return module
         
-print("checkpoint_name = ", checkpoint_name)
-print("loading module from ", checkpoint_name+'/Funs.py')
+print("fold_folder = ", fold_folder)
+print(f"loading module from  {fold_folder.parent}/Funs.py")
 from importlib import import_module
-#foo = import_module(checkpoint_name+'/Funs.py', package=None)
-foo = module_from_file("foo", checkpoint_name+'/Funs.py')
+#foo = import_module(fold_folder+'/Funs.py', package=None)
+foo = module_from_file("foo", f'{fold_folder.parent}/Funs.py')
 ef = foo.ef # Inherit ERA_Fields_New from the file we are calling
 
 print("==Importing tensorflow packages===")
@@ -55,20 +55,23 @@ import cartopy_plots as cplt
 
 print("==Reading data==")
 
-year_permutation = np.load(checkpoint_name+'/year_permutation.npy')
+year_permutation = np.load(f'{fold_folder.parent}/year_permutation.npy')
 
-#X, lat, lon, vae, Z_DIM, N_EPOCHS, INITIAL_EPOCH, BATCH_SIZE, LEARNING_RATE, checkpoint_path, checkpoint_name, myinput, history = foo.PrepareDataAndVAE(checkpoint_name, DIFFERENT_YEARS=year_permutation[:800])
-X, lat, lon, vae, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, history, _ = foo.PrepareDataAndVAE(checkpoint_name, SET_YEARS=year_permutation[:800])
+#X, lat, lon, vae, Z_DIM, N_EPOCHS, INITIAL_EPOCH, BATCH_SIZE, LEARNING_RATE, checkpoint_path, fold_folder, myinput, history = foo.PrepareDataAndVAE(fold_folder, DIFFERENT_YEARS=year_permutation[:800])
+
+history, history_loss, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, vae, X, _ = foo.run_vae(fold_folder, myinput='N',SET_YEARS=year_permutation[:800])
 # Construct 2D array for lon-lat:
-LON, LAT = np.meshgrid(lon,lat)
+
+
 print("X.shape = ", X.shape, " , np.max(X) = ", np.max(X), " , np.min (X) = ", np.min(X), " , np.mean(X[:,5,5,0]) = ", np.mean(X[:,5,5,0]), " , np.std(X[:,5,5,0]) = ", np.std(X[:,5,5,0]))
-print("==loading the model: ", checkpoint_name)
-vae = tf.keras.models.load_model(checkpoint_name, compile=False)
+print("==loading the model: ", fold_folder)
+vae = tf.keras.models.load_model(fold_folder, compile=False)
 
 nb_zeros_c = 4-len(str(checkpoint))
-checkpoint_i = '/cp-'+nb_zeros_c*'0'+str(checkpoint)+'.ckpt'
+checkpoint_i = '/cp-'+nb_zeros_c*'0'+str(checkpoint)+'.ckpt' # TODO: convert to f-strings
 
-vae.load_weights(checkpoint_name+checkpoint_i)
+print(f'load weights from {fold_folder}/{checkpoint_i}')
+vae.load_weights(f'{fold_folder}/{checkpoint_i}')
       
 example_images = X[rd.sample(range(X.shape[0]), 5)]
 
