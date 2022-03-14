@@ -211,11 +211,11 @@ def create_or_load_vae(folder, INPUT_DIM, myinput, filter_area='France', Z_DIM=6
     logger.info(f'{vae.k1 = },{vae.k2 = } ')
     if myinput == 'Y': # The run is to be performed from scratch
         INITIAL_EPOCH = 0
-        history = []
+        history_vae = []
         checkpoint = []
     else: # the run has to be continued
-        history = np.load(f'{folder}/history', allow_pickle=True)
-        INITIAL_EPOCH = len(history['loss'])
+        history_vae = np.load(f'{folder}/history_vae', allow_pickle=True)
+        INITIAL_EPOCH = len(history_vae['loss'])
         logger.info(f'==loading the model: {folder}')
         N_EPOCHS = N_EPOCHS + INITIAL_EPOCH 
         #vae = tf.keras.models.load_model(folder, compile=False)
@@ -232,9 +232,9 @@ def create_or_load_vae(folder, INPUT_DIM, myinput, filter_area='France', Z_DIM=6
     vae.compute_output_shape(tuple(INPUT_DIM_withnone))
     vae.summary()
 
-    checkpoint_path = str(folder)+"/cp-{epoch:04d}.ckpt" # TODO: convert checkpoints to f-strings
+    checkpoint_path = str(folder)+"/cp_vae-{epoch:04d}.ckpt" # TODO: convert checkpoints to f-strings
     
-    return vae, history, N_EPOCHS, INITIAL_EPOCH, checkpoint, checkpoint_path
+    return vae, history_vae, N_EPOCHS, INITIAL_EPOCH, checkpoint, checkpoint_path
 
 
 
@@ -317,10 +317,10 @@ def k_fold_cross_val(folder, myinput, X, Y, create_vae_kwargs=None, nfolds=10, v
         logger.info(f'{X_tr.shape = },{np.mean(X_tr[:,5,5,0]) = },{np.std(X_tr[:,5,5,0]) = }')
         
         logger.info(f"{Fore.YELLOW}{create_vae_kwargs = }{Style.RESET_ALL}")
-        vae, history, N_EPOCHS, INITIAL_EPOCH, checkpoint, checkpoint_path = create_or_load_vae(fold_folder, INPUT_DIM, myinput, filter_area='France', Z_DIM=64, N_EPOCHS=2,
+        vae, history_vae, N_EPOCHS, INITIAL_EPOCH, checkpoint, checkpoint_path = create_or_load_vae(fold_folder, INPUT_DIM, myinput, filter_area='France', Z_DIM=64, N_EPOCHS=2,
                                                 **create_vae_kwargs)
         if myinput!='N': 
-            history_loss = train_vae(X_tr, vae, checkpoint_path, fold_folder, myinput, N_EPOCHS, INITIAL_EPOCH, history, batch_size=128, lr=1e-3)
+            history_loss = train_vae(X_tr, vae, checkpoint_path, fold_folder, myinput, N_EPOCHS, INITIAL_EPOCH, history_vae, batch_size=128, lr=1e-3)
         else: # myinput='N' is useful when loading this function in reconstruction.py for instance
             history_loss = []
             
@@ -331,7 +331,7 @@ def k_fold_cross_val(folder, myinput, X, Y, create_vae_kwargs=None, nfolds=10, v
         gc.collect() # Garbage collector which removes some extra references to the objects. This is an attempt to micromanage the python handling of RAM
 
 
-    return history, history_loss, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, vae, X_va, X_tr
+    return history_vae, history_loss, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, vae, X_va, X_tr
 
 
 @ut.execution_time  # prints the time it takes for the function to run
@@ -366,7 +366,7 @@ def run_vae(folder, myinput='N', SET_YEARS=range(100)):
             Y_load = np.load(f'{folder.parent}/Y.npy')
         # TODO: Check optionally that the files are consistent
     
-    history, history_loss, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, vae, X_va, X_tr = k_fold_cross_val(folder, myinput, X, _Y,
+    history_vae, history_loss, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, vae, X_va, X_tr = k_fold_cross_val(folder, myinput, X, _Y,
                             create_vae_kwargs={'vae_kwargs':{'k1': 0.9, 'k2': 0.1, 'from_logits': False, 'field_weights': [2.0, 1.0, 2.0], 'filter_area':'France', 'Z_DIM': 64, 'N_EPOCHS':2},
                                             'encoder_kwargs':{'conv_filters':[16, 16, 16, 32, 32,  32,   64, 64],
                                                         'conv_kernel_size':[5,  5,  5,  5,   5,   5,   5,  3], 
@@ -385,13 +385,13 @@ def run_vae(folder, myinput='N', SET_YEARS=range(100)):
                                                             'use_batch_norm' : [True,True,True,True,True,True,True,True], 
                                                             'use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25], 'usemask' : True}})
     
-    return history, history_loss, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, vae, X_va, X_tr
+    return history_vae, history_loss, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, vae, X_va, X_tr
 
 
 @ut.execution_time  # prints the time it takes for the function to run
 #@ut.indent_logger(logger)   # indents the log messages produced by this function
 # logger indent causes: IndexError: string index out of range
-def train_vae(X, vae, checkpoint_path, folder, myinput, N_EPOCHS, INITIAL_EPOCH, history, batch_size=128, lr=1e-3):
+def train_vae(X, vae, checkpoint_path, folder, myinput, N_EPOCHS, INITIAL_EPOCH, history_vae, batch_size=128, lr=1e-3):
     
     logger.info(f" {np.max(X) = }, {np.min(X) = }")
     
@@ -403,22 +403,22 @@ def train_vae(X, vae, checkpoint_path, folder, myinput, N_EPOCHS, INITIAL_EPOCH,
     logger.info(f'{ X.shape = }, {N_EPOCHS = }, {INITIAL_EPOCH = }, {batch_size = }')
     logger.info(f'{cp_callback = }')
     vae.summary()
-    my_history = vae.fit(X, epochs=N_EPOCHS, initial_epoch=INITIAL_EPOCH, batch_size=batch_size, shuffle=True, callbacks=[cp_callback]) # train on the last 9 folds
+    my_history_vae = vae.fit(X, epochs=N_EPOCHS, initial_epoch=INITIAL_EPOCH, batch_size=batch_size, shuffle=True, callbacks=[cp_callback]) # train on the last 9 folds
 
     if myinput == 'C':
-        logger.info("we merge the history dictionaries")
-        logger.info(f" {len(history['loss']) = }")
-        logger.info(f" {len(my_history.history['loss']) = }")
-        for key in history:
-            history[key] = history[key]+my_history.history[key]
+        logger.info("we merge the history_vae dictionaries")
+        logger.info(f" {len(history_vae['loss']) = }")
+        logger.info(f" {len(my_history_vae.history['loss']) = }")
+        for key in history_vae:
+            history_vae[key] = history_vae[key]+my_history_vae.history[key]
     else:
-        history = my_history.history
-    logger.info(f" { len(history['loss']) = }")
+        history_vae = my_history_vae.history
+    logger.info(f" { len(history_vae['loss']) = }")
 
     vae.save(folder)
-    with open(folder+'/history', 'wb') as file_pi:
-        pickle.dump(history, file_pi)
-    return history['loss']
+    with open(folder+'/history_vae', 'wb') as file_pi:
+        pickle.dump(history_vae, file_pi)
+    return history_vae['loss']
 
 
 if __name__ == '__main__': # we do this so that we can then load this file as a module in reconstruction.py

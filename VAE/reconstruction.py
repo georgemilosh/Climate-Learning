@@ -68,7 +68,7 @@ print("==loading the model: ", fold_folder)
 vae = tf.keras.models.load_model(fold_folder, compile=False)
 
 nb_zeros_c = 4-len(str(checkpoint))
-checkpoint_i = '/cp-'+nb_zeros_c*'0'+str(checkpoint)+'.ckpt' # TODO: convert to f-strings
+checkpoint_i = '/cp_vae-'+nb_zeros_c*'0'+str(checkpoint)+'.ckpt' # TODO: convert to f-strings
 
 print(f'load weights from {fold_folder}/{checkpoint_i}')
 vae.load_weights(f'{fold_folder}/{checkpoint_i}')
