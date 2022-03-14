@@ -325,7 +325,7 @@ def k_fold_cross_val(folder, myinput, X, Y, create_vae_kwargs=None, nfolds=10, v
             history_loss = []
             
         my_memory.append(psutil.virtual_memory())
-        logger.info(f'RAM memory: {my_memory[i][3]:.3e}') # Getting % usage of virtual_memory ( 3rd field)
+        logger.info(f'RAM memory: {my_memory[-1][3]:.3e}') # Getting % usage of virtual_memory ( 3rd field)
 
         tf.keras.backend.clear_session()
         gc.collect() # Garbage collector which removes some extra references to the objects. This is an attempt to micromanage the python handling of RAM
