@@ -1322,6 +1322,7 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     float
         minimum value of `return_metric` during training
     '''
+    # GM: It seem "u" is not used in train_model, obsolete?
     ### preliminary operations
     ##########################
     if early_stopping_kwargs is None:
@@ -1712,10 +1713,10 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
             X_va = (X_va - X_mean)/X_std 
 
             # save X_mean and X_std
-            np.save(f'{fold_folder}/X_mean.npy', X_mean)
+            np.save(f'{fold_folder}/X_mean.npy', X_mean) # GM: Why not include all of this in normalize_X? It may simplify the code
             np.save(f'{fold_folder}/X_std.npy', X_std)
         
-
+            
         logger.info(f'{X_tr.shape = }, {X_va.shape = }')
 
         # at this point data is ready to be fed to the networks
