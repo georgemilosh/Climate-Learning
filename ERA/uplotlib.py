@@ -31,14 +31,14 @@ def plot(*args, ax=None, **kwargs):
         ys = args[0]
         xs = np.arange(len(ys))
     
-    if type(xs[0]) == unc.core.Variable or type(xs[0])==unc.core.AffineScalarFunc:
+    if isinstance(xs[0], unc.core.AffineScalarFunc):
         x_d = np.array([[x.n, x.s] for x in xs])
         x_val = x_d[:,0]
         x_err = x_d[:,1]
     else:
         x_val = xs
         x_err = None
-    if type(ys[0]) == unc.core.Variable or type(ys[0])==unc.core.AffineScalarFunc:
+    if isinstance(ys[0], unc.core.AffineScalarFunc):
         y_d = np.array([[y.n, y.s] for y in ys])
         y_val = y_d[:,0]
         y_err = y_d[:,1]
@@ -66,14 +66,14 @@ class DataMisaligner():
             ys = args[0]
             xs = np.arange(len(ys))
         
-        if type(xs[0]) == unc.core.Variable or type(xs[0])==unc.core.AffineScalarFunc:
+        if isinstance(xs[0], unc.core.AffineScalarFunc):
             x_d = np.array([[x.n, x.s] for x in xs])
             x_val = x_d[:,0]
             x_err = x_d[:,1]
         else:
             x_val = xs
             x_err = None
-        if type(ys[0]) == unc.core.Variable or type(ys[0])==unc.core.AffineScalarFunc:
+        if isinstance(ys[0], unc.core.AffineScalarFunc):
             y_d = np.array([[y.n, y.s] for y in ys])
             y_val = y_d[:,0]
             y_err = y_d[:,1]
@@ -176,7 +176,7 @@ class ExtendedKDE():
                 if array-like: array of points where to sample
             ax: optional, axis on which to execute the plot
         '''
-        if type(points) == int:
+        if isinstance(points, int):
             if xrange is not None:
                 points = np.linspace(*xrange, points)
             else:
@@ -202,9 +202,9 @@ def side_hist_plot(xdata, ydata, bins=30, external_axes=None, fit=True, **kwargs
     
     Params:
         'xdata': array-like
-        'ydata': array-like of ufloats
+        'ydata': array-like of (possibly) ufloats. If ufloats, the side histogram will be made using ExtendedKDE, otherwise with hist
         'bins': number of points for the kde plot
-        'external_axes': tupple of size 2, external axes on which to do the plot
+        'external_axes': tuple of size 2, external axes on which to do the plot
         'fit': whether to fit the histogram with a gaussian. Default True.
         
         **kwargs:
@@ -267,10 +267,17 @@ def side_hist_plot(xdata, ydata, bins=30, external_axes=None, fit=True, **kwargs
         ax_hist.set_ylim(*ax_plot.get_ylim())
         
     # hist
-    kernel = ExtendedKDE(ydata)
-    ax_hist.set_xlabel('Probability')
-    
-    x1,f1 = kernel.plot(points=bins, xrange=ax_plot.get_ylim(), ax=ax_hist, switch_xy=True, **kwargs)
+    if isinstance(ydata[0], unc.core.AffineScalarFunc):
+        kernel = ExtendedKDE(ydata)
+        ax_hist.set_xlabel('Probability')
+        
+        x1,f1 = kernel.plot(points=bins, xrange=ax_plot.get_ylim(), ax=ax_hist, switch_xy=True, **kwargs)
+    else:
+        xrange = ax_plot.get_ylim()
+
+        x1,f1 = np.histogram(ydata, bins=np.linspace(*xrange, bins))
+        x1 = 0.5*(x1[1:] + x1[:-1])
+        ax_hist.plot(f1, x1, **kwargs)
     
     plt.setp(ax_hist.get_yticklabels(), visible=False) #Turn off tick labels
     
