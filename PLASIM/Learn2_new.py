@@ -2523,7 +2523,7 @@ class Trainer():
             run_time = time.time() - start_time
             run_time_min = int(run_time/0.6)/100 # 2 decimal places of run time in minutes
             runs[run_id]['run_time'] = ut.pretty_time(run_time)
-            runs[run_id]['rune_time_min'] = run_time_min
+            runs[run_id]['run_time_min'] = run_time_min
 
             ut.dict2json(runs,self.runs_file)
 

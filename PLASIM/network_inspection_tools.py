@@ -213,7 +213,7 @@ def categorical_committor_histogram(q: np.ndarray, Y: np.ndarray, nbins: int = 5
     weight : 'loss' or None, optional
         if 'loss' the weight will be the contribution to the cross entropy loss, by default 'loss'
     normalize : bool, optional
-        If true the sum of the values of each bin will be one (beware: the sum of the values, not the integral of the histogram, which means we ignore bin width), by default True
+        If true the contribution per datapoint will be returned
 
     Returns
     -------
@@ -237,7 +237,7 @@ def categorical_committor_histogram(q: np.ndarray, Y: np.ndarray, nbins: int = 5
     y = y0 + y1
     
     if normalize:
-        y0 = y0/len(q0) # cannot use /= if y ha dtype=int
+        y0 = y0/len(q0) # cannot use /= if y has dtype=int
         y1 = y1/len(q1)
         y = y/(len(q0) + len(q1))
 
