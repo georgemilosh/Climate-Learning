@@ -59,7 +59,7 @@ year_permutation = np.load(f'{fold_folder.parent}/year_permutation.npy')
 
 #X, lat, lon, vae, Z_DIM, N_EPOCHS, INITIAL_EPOCH, BATCH_SIZE, LEARNING_RATE, checkpoint_path, fold_folder, myinput, history = foo.PrepareDataAndVAE(fold_folder, DIFFERENT_YEARS=year_permutation[:800])
 
-history, history_loss, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, Y, vae, X, _ = foo.run_vae(fold_folder, myinput='N')
+history, history_loss, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, Y, vae, X, _, _, _ = foo.run_vae(fold_folder, myinput='N')
 # Construct 2D array for lon-lat:
 
 
@@ -73,7 +73,7 @@ checkpoint_i = '/cp_vae-'+nb_zeros_c*'0'+str(checkpoint)+'.ckpt' # TODO: convert
 print(f'load weights from {fold_folder}/{checkpoint_i}')
 vae.load_weights(f'{fold_folder}/{checkpoint_i}')
       
-example_images = X[rd.sample(range(X.shape[0]), 5)]
+example_images = X[rd.sample(range(X.shape[0]), 5)] # random sample of 5 images from X's 0 axis
 
 _,_,z_test = vae.encoder.predict(X[rd.sample(range(X.shape[0]), 200)])
 print(f"{z_test.shape = }")
