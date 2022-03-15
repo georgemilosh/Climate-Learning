@@ -1850,23 +1850,29 @@ def TrainTestSplit(i,X, labels, undersampling_factor,verbose): # OLD VERSION # C
     return X_train, X_test, Y_train, Y_test, X_train_new, Y_train_new
 
 
-def TrainTestSplitIndices(i,X, labels, undersampling_factor, sampling='', newundersampling=False, thefield='', percent=5, contain_folder = 'Postproc', num_batches=10, j=1): # returns indices of the test labels, and train labels (undersampled or not)
+def TrainTestSplitIndices(i,X, labels, undersampling_factor, sampling='', newundersampling=False, thefield='', percent=5, contain_folder = 'Postproc', num_batches=10, j=1, j_test=None): # returns indices of the test labels, and train labels (undersampled or not)
     # Split the data into training/testing sets
     # i is the beginning, j corresponds to the end
+    if j_test is None:
+        j_test = j # if we set j_test=1 we get the default test set (non-complementary)
+    
     lower = int(i*X.shape[0]//num_batches)   # select the lower bound
     upper = int((i+j)*X.shape[0]//num_batches) # select the upper bound
+    upper_test = int((i+j_test)*X.shape[0]//num_batches) # select the upper bound
     print("initial lower = ", lower, " , initial upper = ", upper)
     if upper<= X.shape[0]: # The usual situation we encounter 
-        test_indices = np.array(range(lower,upper))  # extract the test set which is between the lower and the upper bound
-        # next we select the train set which is below the lower bound and above the uppder bound
         train_indices = np.array(list(range(lower))+list(range(upper,X.shape[0])))  # The indices of the train set (relative to the original set)
     else: # This happens if we chose large test sets and leave-one-out algorithm surpasses the size of our data, the rest of the test set starts from the beginning of the dataset
         upper = upper - X.shape[0]
         print("upper bound changed = ", upper)
         train_indices = np.array(range(upper,lower))  # extract the train set which is between the lower and the upper bound
         # next we select the test set which is below the lower bound and above the uppder bound
-        test_indices = np.array(list(range(upper))+list(range(lower,X.shape[0])))  # The indices of the train set (relative to the original set)
-
+    if upper_test<= X.shape[0]:
+        # next we select the train set which is below the lower bound and above the uppder bound
+        test_indices = np.array(range(lower,upper_test))  # extract the test set which is between the lower and the upper bound
+    else:
+        upper_test = upper_test - X.shape[0] 
+        test_indices = np.array(list(range(upper_test))+list(range(lower,X.shape[0])))  # The indices of the train set (relative to the original set)
     train_labels_indices = (labels[train_indices])                               # Array of labels of the train set (relative to the train set)
     train_true_labels_indices = (train_indices[(train_labels_indices)])               # The array of the indices of the true labels in the train set
     train_false_labels_indices = (train_indices[(~train_labels_indices)])             # The array indices of the false labels in the train set
