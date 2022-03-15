@@ -227,7 +227,7 @@ def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='m
             logger.error('Cannot compute a collective checkpoint as folds have a different number of eons. Computing independent checkpoints instead')
             collective = False
         # check that the nfolds histories have the same length
-        elif len(set([len(historyCustom[i] for i in range(nfolds))])) > 1:
+        elif len(set([len(historyCustom[i]) for i in range(nfolds)])) > 1:
             logger.error('Cannot compute a collective checkpoint from folds trained a different number of epochs. Computing independent checkpoints instead')
             collective = False
     
