@@ -59,12 +59,12 @@ year_permutation = np.load(f'{fold_folder.parent}/year_permutation.npy')
 
 #X, lat, lon, vae, Z_DIM, N_EPOCHS, INITIAL_EPOCH, BATCH_SIZE, LEARNING_RATE, checkpoint_path, fold_folder, myinput, history = foo.PrepareDataAndVAE(fold_folder, DIFFERENT_YEARS=year_permutation[:800])
 
-history, history_loss, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, vae, X, _ = foo.run_vae(fold_folder, myinput='N',SET_YEARS=year_permutation[:800])
+history, history_loss, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, Y, vae, X, _ = foo.run_vae(fold_folder, myinput='N')
 # Construct 2D array for lon-lat:
 
 
-print("X.shape = ", X.shape, " , np.max(X) = ", np.max(X), " , np.min (X) = ", np.min(X), " , np.mean(X[:,5,5,0]) = ", np.mean(X[:,5,5,0]), " , np.std(X[:,5,5,0]) = ", np.std(X[:,5,5,0]))
-print("==loading the model: ", fold_folder)
+print(f"{X.shape = }, {np.max(X) = }, {np.min(X) = }, {np.mean(X[:,5,5,0]) = }, {np.std(X[:,5,5,0]) = }")
+print(f"==loading the model: {fold_folder}")
 vae = tf.keras.models.load_model(fold_folder, compile=False)
 
 nb_zeros_c = 4-len(str(checkpoint))
@@ -76,7 +76,7 @@ vae.load_weights(f'{fold_folder}/{checkpoint_i}')
 example_images = X[rd.sample(range(X.shape[0]), 5)]
 
 _,_,z_test = vae.encoder.predict(X[rd.sample(range(X.shape[0]), 200)])
-print("z_test.shape = ", z_test.shape)
+print(f"{z_test.shape = }")
 
 Z_DIM = z_test.shape[1] #200 # Dimension of the latent vector (z)
 x = np.linspace(-3, 3, 300)
@@ -99,7 +99,7 @@ def vae_generate_images(vae,Z_DIM,n_to_show=10):
     # prerolling has already occured so
     reconst_images1 = reconst_images[...,1] # remove extra fields 
     reconst_images0 = reconst_images[...,2] # remove extra fields 
-    print("reconst_images.shape = ",reconst_images.shape)
+    print(f"{reconst_images.shape = }")
     
     levels = np.linspace(0, 1, 64)
     print("levels = ", levels)
@@ -113,7 +113,7 @@ def vae_generate_images(vae,Z_DIM,n_to_show=10):
         ax.append(m)
         img1 = reconst_images1[i].squeeze()   
         img0 = reconst_images0[i].squeeze()   
-        print("LON.shape = ", LON.shape, " ,LAT.shape = ", LAT.shape, " ,img0.shape = ", img0.shape, " ,img1.shape = ", img1.shape)
+        print(f"{LON.shape = } ,{LAT.shape = } ,{img0.shape = }, {img1.shape = }")
         print(iterate,jterate,img0.shape,img0.min(), img0.max())
         m.set_extent([-180,180, 30, 90], crs=data_proj)
         ef.geo_contourf(m, ax[iterate], 0, *cplt.Greenwich(LON, LAT,img0),levels, "seismic", f" generated zg500", put_colorbar=False, draw_gridlines=False)
@@ -145,18 +145,18 @@ def plot_compare(model, images=None):
     
     reconst_images1 = reconst_images[...,1] # remove extra fields 
     reconst_images0 = reconst_images[...,2] # remove extra fields 
-    print("reconst_images.shape = ",reconst_images.shape)
+    print(f"{reconst_images.shape = }")
     
     images1 = images[...,1]
     images0 = images[...,2]
-    print("images0.shape = ",images0.shape)
+    print(f"{images0.shape = }")
     
     
     #print("reconst_images.shape=",reconst_images.shape)
     n_to_show = 2*images0.shape[0]
     
     levels = np.linspace(0, 1, 64)
-    print("levels = ", levels)
+    print(f"{levels = }")
     fig2 = plt.figure(figsize=(40, 10))
     spec2 = gridspec.GridSpec(ncols=5, nrows=2, figure=fig2)
     iterate = 0
@@ -179,7 +179,7 @@ def plot_compare(model, images=None):
                    axes_kwargs=dict(map_projection=cartopy.crs.PlateCarree()))
         axins.add_feature(cartopy.feature.COASTLINE)
         axins.set_extent([-10,10, 40, 60], crs=data_proj)
-        print("LON.shape = ", LON.shape, " ,LAT.shape = ", LAT.shape, " ,img0.shape = ", img0.shape, " ,img1.shape = ", img1.shape)
+        print(f"{LON.shape = } ,{LAT.shape = } ,{img0.shape = }, {img1.shape = }")
         if jterate == 0:
             ef.geo_contourf(m, ax[iterate], 0, *cplt.Greenwich(LON, LAT,img0),levels, "seismic", f"actual", put_colorbar=False, draw_gridlines=False)
             ef.geo_contour (m, ax[iterate], 0, *cplt.Greenwich(LON, LAT,img1),levels, "PuRd", "summer")

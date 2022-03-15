@@ -1,4 +1,4 @@
-# George Miloshevich 2021
+# George Miloshevich 2022
 # Plot the development of metrics during training
 # Importation des librairies
 
@@ -23,7 +23,7 @@ def plot_metric(i,train_metrics, val_metrics, name_metrics,color_idx):
 checkpoint_name = sys.argv[1]
 
 fig = plt.figure()
-history = np.load(checkpoint_name+'/history', allow_pickle=True)#.item()
+history = np.load(checkpoint_name+'/history_vae', allow_pickle=True)#.item()
 print(history.keys())
 
 for key in history:

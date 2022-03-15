@@ -350,13 +350,13 @@ def run_vae(folder, myinput='N', SET_YEARS=range(100)):
     '''
     folder = Path(folder)
     logger.info(f"{myinput = }")
-    X, _Y, _year_permutation, lat, lon = ln.prepare_data(load_data_kwargs = {'fields': ['t2m_filtered','zg500','mrso_filtered'], 'lat_end': 24, 'dataset_years': 8000, 'year_list': SET_YEARS},
+    X, Y, _year_permutation, lat, lon = ln.prepare_data(load_data_kwargs = {'fields': ['t2m_filtered','zg500','mrso_filtered'], 'lat_end': 24, 'dataset_years': 8000, 'year_list': SET_YEARS},
                            prepare_XY_kwargs = {'roll_X_kwargs': {'roll_steps': 64}}) # That's the version that fails
     LON, LAT = np.meshgrid(lon,lat) 
     print(f'{X.shape = }')
     if myinput != 'N':
         np.save(f'{folder}/year_permutation',_year_permutation)
-        np.save(f'{folder}/Y',_Y)
+        np.save(f'{folder}/Y',Y)
     else:
         if os.path.exists(f'{folder}/reconstruction.py'): # We are outside the folds
             year_permutation_load = np.load(f'{folder}/year_permutation.npy')
@@ -366,7 +366,7 @@ def run_vae(folder, myinput='N', SET_YEARS=range(100)):
             Y_load = np.load(f'{folder.parent}/Y.npy')
         # TODO: Check optionally that the files are consistent
     
-    history_vae, history_loss, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, vae, X_va, X_tr = k_fold_cross_val(folder, myinput, X, _Y,
+    history_vae, history_loss, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, vae, X_va, X_tr = k_fold_cross_val(folder, myinput, X, Y,
                             create_vae_kwargs={'vae_kwargs':{'k1': 0.9, 'k2': 0.1, 'from_logits': False, 'field_weights': [2.0, 1.0, 2.0], 'filter_area':'France', 'Z_DIM': 64, 'N_EPOCHS':2},
                                             'encoder_kwargs':{'conv_filters':[16, 16, 16, 32, 32,  32,   64, 64],
                                                         'conv_kernel_size':[5,  5,  5,  5,   5,   5,   5,  3], 
@@ -385,7 +385,7 @@ def run_vae(folder, myinput='N', SET_YEARS=range(100)):
                                                             'use_batch_norm' : [True,True,True,True,True,True,True,True], 
                                                             'use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25], 'usemask' : True}})
     
-    return history_vae, history_loss, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, vae, X_va, X_tr
+    return history_vae, history_loss, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, Y, vae, X_va, X_tr
 
 
 @ut.execution_time  # prints the time it takes for the function to run
