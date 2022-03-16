@@ -50,6 +50,51 @@ def plot(*args, ax=None, **kwargs):
         return ax.errorbar(x_val, y_val, xerr=x_err, yerr=y_err, **kwargs)
     return plt.errorbar(x_val, y_val, xerr=x_err, yerr=y_err, **kwargs)
 
+def errorband(x, y, ax=None, band_alpha=0.5, **kwargs):
+    '''
+    Plots a curve with an errorband
+
+    Parameters
+    ----------
+    x : array-like of floats or ufloats
+        x array. If of ufloats a vertical errorband will be plotted
+    y : array-like of floats or ufloats
+        y array. If of ufloats a horizontal errorband will be plotted
+    ax : plt.Axis object, optional
+        axis over which to perform the plot, by default None
+    band_alpha : float, optional
+        transparency of the errorband, by default 0.5
+
+    Returns
+    -------
+    line :
+        output of plt.plot
+    shadey :
+        output of plt.fill_between
+    shadex :
+        output of plt.fill_betweenx
+    '''
+    color = kwargs.pop('color', None)
+    if ax is None:
+        ax = plt
+    x_val = nominal_value(x)
+    y_val = nominal_value(y)
+    line = ax.plot(x_val, y_val, color=color, **kwargs)
+    if color is None:
+        color = plt.gca().lines[-1].get_color()
+
+    shadey = None
+    y_std = std_dev(y)
+    if (y_std > 0).any():
+        shadey = ax.fill_between(x_val, y_val - y_std, y_val + y_std, color=color, alpha=band_alpha)
+
+    shadex = None
+    x_std = std_dev(x)
+    if (x_std > 0).any():
+        shadex = ax.fill_betweenx(y_val, x_val - x_std, x_val + x_std, color=color, alpha=band_alpha)
+
+    return line, shadey, shadex
+
 
 class DataMisaligner():
     def __init__(self, x_misalignment=0):
@@ -341,11 +386,11 @@ def nominal_value(x):
     
     If provided an array, performs the operation elementwise.
     '''
-    if type(x) == str:
+    if isinstance(x, str):
         if 'j' in x:
             return complex(x)
         return unc.ufloat_fromstr(x).n
-    if type(x) in [unc.core.Variable, unc.core.AffineScalarFunc]:
+    if isinstance(x, unc.core.AffineScalarFunc):
         return x.n
     return x
 
@@ -358,11 +403,11 @@ def std_dev(x):
     
     If provided an array, performs the operation elementwise.
     '''
-    if type(x) == str:
-        if 'j' in x:
+    if isinstance(x, str):
+        if 'j' in x: # complex number
             return 0.
         return unc.ufloat_fromstr(x).s
-    if type(x) in [unc.core.Variable, unc.core.AffineScalarFunc]:
+    if isinstance(x, unc.core.AffineScalarFunc):
         return x.s
     return 0.
 
