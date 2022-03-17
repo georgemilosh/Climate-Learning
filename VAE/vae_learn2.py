@@ -300,7 +300,7 @@ def k_fold_cross_val(folder, myinput, X, Y, create_vae_kwargs=None, train_vae_kw
             logger.info(f'{folder}/fold_num.npy does not exist')
     logger.info(f'{range_nfolds = }')    
     my_memory = [] # monitor RAM storage
-    
+    score = [] # for classification if need be  
     for i in range_nfolds:
         logger.info('=============')
         logger.log(35, f'fold {i} ({i+1}/{nfolds})')
@@ -354,6 +354,10 @@ def k_fold_cross_val(folder, myinput, X, Y, create_vae_kwargs=None, train_vae_kw
         checkpoint_path = tf.train.latest_checkpoint(fold_folder)
         logger.info(f"{checkpoint_path = }")
         if myinput == 'N': # if running this code in passive mode we have to re-load the weights         
+            if evaluate_epoch != 'last': # we load a specific checkpoint
+                checkpoint_path = str(fold_folder)+f"/cp_vae-{evaluate_epoch:04d}.ckpt" # TODO: convert checkpoints to f-strings
+                #nb_zeros_c = 4-len(str(checkpoint))
+                #checkpoint_i = '/cp_vae-'+nb_zeros_c*'0'+str(checkpoint)+'.ckpt' # TODO: convert to f-strings
             logger.info(f"==loading the model: {checkpoint_path}")
             vae = tf.keras.models.load_model(fold_folder, compile=False)
             
@@ -363,7 +367,7 @@ def k_fold_cross_val(folder, myinput, X, Y, create_vae_kwargs=None, train_vae_kw
            _,_,z_tr = vae.encoder.predict(X_tr)
            _,_,z_va = vae.encoder.predict(X_va)
            print(f"{z_tr.shape = }, {z_tr.shape = }" )
-       	   score = classify(z_tr, Y_tr, z_va, Y_va) 
+       	   score.append(classify(z_tr, Y_tr, z_va, Y_va)) 
         else:
            score=None
         my_memory.append(psutil.virtual_memory())

@@ -63,13 +63,20 @@ def classify(z_tr, Y_tr, z_va, Y_va):
     '''
 
     logger.info(f"{Fore.YELLOW}==classify of classification.py=={Style.RESET_ALL}")
-    return None
+        
+    logreg = LogisticRegression(solver='liblinear',C=1e5)
+    logreg.fit(z_tr, Y_tr)
+    Y_pr = logreg.predict(z_va) 
+    print(f"{Y_pr.shape = }, {z_tr.shape = }" )
+
+    TP, TN, FP, FN, MCC = ef.ComputeMCC(Y_va, Y_pr, 'True')
+    return TP, TN, FP, FN, MCC
 
 foo.classify = classify
 
 history, history_loss, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, Y, vae, X_va, Y_va, X_tr, Y_tr, score = foo.run_vae(folder, myinput='N')
 # Construct 2D array for lon-lat:
-
+print(score)
 """
 print(f"{X_tr.shape = }, {np.max(X_tr) = }, {np.min(X_tr) = }, {np.mean(X_tr[:,5,5,0]) = }, {np.std(X_tr[:,5,5,0]) = }")
 print(f"==loading the model: {fold_folder}")
