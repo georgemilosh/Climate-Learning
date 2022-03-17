@@ -61,7 +61,7 @@ year_permutation = np.load(f'{fold_folder.parent}/year_permutation.npy')
 
 #X, lat, lon, vae, Z_DIM, N_EPOCHS, INITIAL_EPOCH, BATCH_SIZE, LEARNING_RATE, checkpoint_path, fold_folder, myinput, history = foo.PrepareDataAndVAE(fold_folder, DIFFERENT_YEARS=year_permutation[:800])
 
-history, history_loss, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, Y, vae, X, _, _, _ = foo.run_vae(fold_folder, myinput='N')
+history, history_loss, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, Y, vae, X, _, _, _ = foo.run_vae(fold_folder, myinput='N', SET_YEARS=year_permutation)
 # Construct 2D array for lon-lat:
 
 
