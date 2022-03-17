@@ -7,7 +7,7 @@ os.environ['TF_XLA_FLAGS'] = '--tf_xla_enable_xla_devices'  # https://stackoverf
 
 
 folder = Path(sys.argv[1])  # The name of the folder where the weights have been stored
-checkpoint = sys.argv[2]       # The checkpoint at which the weights have been stored
+checkpoint = int(sys.argv[2])       # The checkpoint at which the weights have been stored
 
 import logging
 from colorama import Fore # support colored output in terminal
@@ -74,7 +74,7 @@ def classify(z_tr, Y_tr, z_va, Y_va):
 
 foo.classify = classify
 
-history, history_loss, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, Y, vae, X_va, Y_va, X_tr, Y_tr, score = foo.run_vae(folder, myinput='N')
+history, history_loss, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, Y, vae, X_va, Y_va, X_tr, Y_tr, score = foo.run_vae(folder, myinput='N', evaluate_epoch=checkpoint)
 # Construct 2D array for lon-lat:
 print(score)
 """
