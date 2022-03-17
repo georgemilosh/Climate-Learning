@@ -365,7 +365,7 @@ def k_fold_cross_val(folder, myinput, X, Y, create_vae_kwargs=None, train_vae_kw
            print(f"{z_tr.shape = }, {z_tr.shape = }" )
        	   score = classify(z_tr, Y_tr, z_va, Y_va) 
         else:
-           score
+           score=None
         my_memory.append(psutil.virtual_memory())
         logger.info(f'RAM memory: {my_memory[-1][3]:.3e}') # Getting % usage of virtual_memory ( 3rd field)
 
