@@ -4,7 +4,9 @@ import os, sys
 import shutil
 from pathlib import Path
 os.environ['TF_XLA_FLAGS'] = '--tf_xla_enable_xla_devices'  # https://stackoverflow.com/questions/65907365/tensorflow-not-creating-xla-devices-tf-xla-enable-xla-devices-not-set
-
+import logging
+logger = logging.getLogger(__name__)
+logger.level = logging.INFO
 
 fold_folder = Path(sys.argv[1])  # The name of the folder where the weights have been stored
 checkpoint = sys.argv[2]       # The checkpoint at which the weights have been stored

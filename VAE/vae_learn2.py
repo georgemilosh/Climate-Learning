@@ -70,6 +70,7 @@ def move_to_folder(folder):
         name of the folder that accepts the copies
         
     '''
+    logger.info(f"{Fore.YELLOW}==move_to_folder=={Style.RESET_ALL}")
 
     sys.stdout = ef.Logger(folder)  # Keep a copy of print outputs there
     shutil.copy(__file__, folder+'/Funs.py') # Copy this file to the directory of the training
@@ -113,6 +114,7 @@ def normalize_X(X,folder, myinput='N',mode='pointwise'):
         maxX : field-wise maximum of X 
         minX : field-wise minimum of X 
     '''
+    logger.info(f"{Fore.YELLOW}==normalize_X=={Style.RESET_ALL}")
     if mode == 'pointwise':
         logger.info("===Normalizing X===")
         if myinput != 'N': # mean and std have to be computed
@@ -171,6 +173,7 @@ def create_or_load_vae(folder, INPUT_DIM, myinput, filter_area='France', Z_DIM=6
         it may change as well because of myinput='C'
     '''
     
+    logger.info(f"{Fore.YELLOW}==create_or_load_vae=={Style.RESET_ALL}")
     ### preliminary operations
     ##########################
     if vae_kwargs is None:
@@ -220,10 +223,9 @@ def create_or_load_vae(folder, INPUT_DIM, myinput, filter_area='France', Z_DIM=6
         N_EPOCHS = N_EPOCHS + INITIAL_EPOCH 
         #vae = tf.keras.models.load_model(folder, compile=False)
         checkpoint = tf.train.latest_checkpoint(folder)
-        logger.info(f'checkpoint =  {checkpoint}')
         vae.load_weights(checkpoint)
         
-    logger.info(f'INITIAL_EPOCH =  {INITIAL_EPOCH}')
+    logger.info(f'{INITIAL_EPOCH = },{checkpoint = }')
 
     INPUT_DIM_withnone = list(INPUT_DIM)
     INPUT_DIM_withnone.insert(0,None)
@@ -233,16 +235,24 @@ def create_or_load_vae(folder, INPUT_DIM, myinput, filter_area='France', Z_DIM=6
     vae.summary()
 
     checkpoint_path = str(folder)+"/cp_vae-{epoch:04d}.ckpt" # TODO: convert checkpoints to f-strings
-    
+    logger.info(f'{checkpoint_path = }') 
     return vae, history_vae, N_EPOCHS, INITIAL_EPOCH, checkpoint, checkpoint_path
 
-
+@ut.execution_time
+@ut.indent_logger(logger)
+def classify(z_tr, Y_tr, z_va, Y_va):
+    '''
+    At the moment is void
+    '''
+    
+    logger.info(f"{Fore.YELLOW}==classify=={Style.RESET_ALL}")
+    return None
 
 @ut.execution_time
 #@ut.indent_logger(logger)   # -> Causes error:   File "/ClimateDynamics/MediumSpace/ClimateLearningFR/gmiloshe/ERA/utilities.py", line 88, in wrapper
 #    message = (indentation_sep+f'\n{indentation_sep}'.join(message[:-1].split('\n')) + message[-1])
 #IndexError: string index out of range
-def k_fold_cross_val(folder, myinput, X, Y, create_vae_kwargs=None, nfolds=10, val_folds=1, range_nfolds=None, u=1, normalization_mode='pointwise'):
+def k_fold_cross_val(folder, myinput, X, Y, create_vae_kwargs=None, nfolds=10, val_folds=1, range_nfolds=None, u=1, normalization_mode='pointwise', classification=False, evaluate_epoch='last'):
     '''
     Performs k fold cross validation on a model architecture.
 
@@ -261,9 +271,16 @@ def k_fold_cross_val(folder, myinput, X, Y, create_vae_kwargs=None, nfolds=10, v
     val_folds : int, optional
         number of folds to be used for the validation set for every split
     u : float, optional
-        undersampling factor (>=1). If = 1 no undersampling is performed (NOT OPERATION AT THE MOMENT)
-    
+        undersampling factor (>=1). If = 1 no undersampling is performed (NOT OPERATIONAL AT THE MOMENT)
+    normalization_mode: str
+    type of normalization we will use, if 'pointwise' grid-point normalization will be used (see normalize_X)
+    classification: bool
+        whether to perform classification or not
+    evaluate_epoch: str or int
+    epoch at which we wish to perform dimensionality reduction for classification. if 'last' then last checkpoint of vae will be used
     '''
+    
+    logger.info(f"{Fore.YELLOW}==k_fold_cross_val=={Style.RESET_ALL}")
     if create_vae_kwargs is None:
         create_vae_kwargs = {}
 
@@ -271,14 +288,14 @@ def k_fold_cross_val(folder, myinput, X, Y, create_vae_kwargs=None, nfolds=10, v
 
     # k fold cross validation
     scores = []
-    if myinput != 'N': # In training regime, otherwise default value for reconstruction
-        range_nfolds=range(nfolds) #range(2)
-    else:
-        if not os.path.exists(f'{folder}/reconstruction.py'): # we are inside of one of the folds
+    range_nfolds=range(nfolds) #range(2)
+    if myinput == 'N': # In training regime, otherwise default value for reconstruction
+        if os.path.exists(f'{folder}/fold_num.npy'): # # we are inside of one of the folds
+            logger.log(35,f'{folder}/fold_num.npy exists')
             range_nfolds=[int(np.load(f'{folder}/fold_num.npy'))]  #the other option would be parsing the fold_N string to get i in future
         else: # we are outside of the folds
-            range_nfolds=range(nfolds)
-        
+            logger.log(35,f'{folder}/fold_num.npy does not exist')
+    logger.log(35,f'{range_nfolds = }')    
     my_memory = [] # monitor RAM storage
     
     for i in range_nfolds:
@@ -287,14 +304,14 @@ def k_fold_cross_val(folder, myinput, X, Y, create_vae_kwargs=None, nfolds=10, v
         logger.info('=============')
         # create fold_folder
        
-        if not os.path.exists(f'{folder}/reconstruction.py'): # # we are inside of one of the folds
-            logger.info(f'{folder}/reconstruction.py does not exist')
-            fold_folder=folder
+        fold_folder=folder # this allows us to work in a fold by default
+        if os.path.exists(f'{folder}/fold_num.npy'): # # we are inside of one of the folds
+            logger.log(35,f'{folder}/fold_num.npy exists')
         else: # we are not inside of one of the folds, either this is a new run, or we need to iterate through the runs
-            logger.info(f'{folder}/reconstruction.py exists')
+            logger.log(35,f'{folder}/fold_num.npy does not exist')
             if myinput != 'N': # if 'N' do not create a new folder (just loading) 
                 fold_folder = f'{folder}/fold_{i}'
-                if myinput == 'Y': # If 'C' we con't need to change anything
+                if myinput == 'Y': # If 'C' we don't need to change anything
                     os.mkdir(fold_folder)
                     np.save(f'{fold_folder}/fold_num',i) # the other option would be parsing the fold_N string to get i in future
 
@@ -316,14 +333,27 @@ def k_fold_cross_val(folder, myinput, X, Y, create_vae_kwargs=None, nfolds=10, v
         X_va = normalize_X(X_va, fold_folder, myinput='N', mode=normalization_mode) #validation is always normalized passively (based on already computed normalization)
         logger.info(f'{X_tr.shape = },{np.mean(X_tr[:,5,5,0]) = },{np.std(X_tr[:,5,5,0]) = }')
         
-        logger.info(f"{Fore.YELLOW}{create_vae_kwargs = }{Style.RESET_ALL}")
+        logger.info(f"{Fore.RED}{create_vae_kwargs = }{Style.RESET_ALL}")
         vae, history_vae, N_EPOCHS, INITIAL_EPOCH, checkpoint, checkpoint_path = create_or_load_vae(fold_folder, INPUT_DIM, myinput, filter_area='France', Z_DIM=64, N_EPOCHS=2,
                                                 **create_vae_kwargs)
         if myinput!='N': 
             history_loss = train_vae(X_tr, vae, checkpoint_path, fold_folder, myinput, N_EPOCHS, INITIAL_EPOCH, history_vae, batch_size=128, lr=1e-3)
-        else: # myinput='N' is useful when loading this function in reconstruction.py for instance
-            history_loss = []
+        else: # myinput='N' is useful when loading this function in reconstruction.py or classification for instance
+            history_loss = np.load(f"{fold_folder}/history_vae", allow_pickle=True)['loss']
+    # Now we decide whether to use a different epoch for the projection
+        checkpoint_path = tf.train.latest_checkpoint(fold_folder)
+        logger.info(f"{checkpoint_path = }")
+        if myinput == 'N': # if running this code in passive mode we have to re-load the weights         
+            logger.info(f"==loading the model: {checkpoint_path}")
+            vae = tf.keras.models.load_model(fold_folder, compile=False)
             
+            vae.load_weights(f'{checkpoint_path}')
+            logger.info(f'{checkpoint_path} weights loaded')
+        if classification:
+           _,_,z_tr = vae.encoder.predict(X_tr)
+           _,_,z_va = vae.encoder.predict(X_va)
+           print(f"{z_tr.shape = }, {z_tr.shape = }" )
+       	   score = classify(z_tr, Y_tr, z_va, Y_va) 
         my_memory.append(psutil.virtual_memory())
         logger.info(f'RAM memory: {my_memory[-1][3]:.3e}') # Getting % usage of virtual_memory ( 3rd field)
 
@@ -337,7 +367,7 @@ def k_fold_cross_val(folder, myinput, X, Y, create_vae_kwargs=None, nfolds=10, v
 @ut.execution_time  # prints the time it takes for the function to run
 #@ut.indent_logger(logger)   # indents the log messages produced by this function
 # logger indent causes: IndexError: string index out of range
-def run_vae(folder, myinput='N', SET_YEARS=range(8000), XY_run_vae_kwargs=None):# SET_YEARS=range(100), XY_run_vae_kwargs=None):
+def run_vae(folder, myinput='N', SET_YEARS=range(100), XY_run_vae_kwargs=None):# SET_YEARS=range(8000), XY_run_vae_kwargs=None):
     '''
     Loads the data and Creates a Variational AutoEncoder 
     
@@ -349,6 +379,7 @@ def run_vae(folder, myinput='N', SET_YEARS=range(8000), XY_run_vae_kwargs=None):
         initial data hold-out. Should be set to range(8000) for a real run
     '''
     
+    logger.info(f"{Fore.YELLOW}==run_vae=={Style.RESET_ALL}")
         
     folder = Path(folder)
     logger.info(f"{myinput = }")
@@ -378,7 +409,7 @@ def run_vae(folder, myinput='N', SET_YEARS=range(8000), XY_run_vae_kwargs=None):
         # TODO: Check optionally that the files are consistent
     
     history_vae, history_loss, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, vae, X_va, Y_va, X_tr, Y_tr = k_fold_cross_val(folder, myinput, X, Y,
-                            create_vae_kwargs={'vae_kwargs':{'k1': 0.9, 'k2': 0.1, 'from_logits': False, 'field_weights': [2.0, 1.0, 2.0], 'filter_area':'France', 'Z_DIM': 64, 'N_EPOCHS':10#100
+                            create_vae_kwargs={'vae_kwargs':{'k1': 0.9, 'k2': 0.1, 'from_logits': False, 'field_weights': [2.0, 1.0, 2.0], 'filter_area':'France', 'Z_DIM': 64, 'N_EPOCHS': 2#10#100
                                                             },
                                             'encoder_kwargs':{'conv_filters':[16, 16, 16, 32, 32,  32,   64, 64],
                                                         'conv_kernel_size':[5,  5,  5,  5,   5,   5,   5,  3], 
@@ -404,8 +435,9 @@ def run_vae(folder, myinput='N', SET_YEARS=range(8000), XY_run_vae_kwargs=None):
 #@ut.indent_logger(logger)   # indents the log messages produced by this function
 # logger indent causes: IndexError: string index out of range
 def train_vae(X, vae, checkpoint_path, folder, myinput, N_EPOCHS, INITIAL_EPOCH, history_vae, batch_size=128, lr=1e-3):
-    
-    logger.info(f" {np.max(X) = }, {np.min(X) = }")
+        
+    logger.info(f"{Fore.YELLOW}==train_vae=={Style.RESET_ALL}")
+    logger.info(f"{np.max(X) = }, {np.min(X) = }")
     
     cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_path,save_weights_only=True,verbose=1)
 
@@ -430,6 +462,7 @@ def train_vae(X, vae, checkpoint_path, folder, myinput, N_EPOCHS, INITIAL_EPOCH,
     vae.save(folder)
     with open(folder+'/history_vae', 'wb') as file_pi:
         pickle.dump(history_vae, file_pi)
+    
     return history_vae['loss']
 
 
