@@ -312,8 +312,8 @@ def k_fold_cross_val(folder, myinput, X, Y, create_vae_kwargs=None, train_vae_kw
             logger.log(35,f'{folder}/fold_num.npy exists')
         else: # we are not inside of one of the folds, either this is a new run, or we need to iterate through the runs
             logger.log(35,f'{folder}/fold_num.npy does not exist')
+            fold_folder = f'{folder}/fold_{i}'
             if myinput != 'N': # if 'N' do not create a new folder (just loading) 
-                fold_folder = f'{folder}/fold_{i}'
                 if myinput == 'Y': # If 'C' we don't need to change anything
                     os.mkdir(fold_folder)
                     np.save(f'{fold_folder}/fold_num',i) # the other option would be parsing the fold_N string to get i in future
@@ -364,6 +364,8 @@ def k_fold_cross_val(folder, myinput, X, Y, create_vae_kwargs=None, train_vae_kw
            _,_,z_va = vae.encoder.predict(X_va)
            print(f"{z_tr.shape = }, {z_tr.shape = }" )
        	   score = classify(z_tr, Y_tr, z_va, Y_va) 
+        else:
+           score
         my_memory.append(psutil.virtual_memory())
         logger.info(f'RAM memory: {my_memory[-1][3]:.3e}') # Getting % usage of virtual_memory ( 3rd field)
 
@@ -371,7 +373,7 @@ def k_fold_cross_val(folder, myinput, X, Y, create_vae_kwargs=None, train_vae_kw
         gc.collect() # Garbage collector which removes some extra references to the objects. This is an attempt to micromanage the python handling of RAM
 
 
-    return history_vae, history_loss, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, vae, X_va, Y_va, X_tr, Y_tr 
+    return history_vae, history_loss, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, vae, X_va, Y_va, X_tr, Y_tr, score 
 
 
 @ut.execution_time  # prints the time it takes for the function to run
@@ -436,8 +438,8 @@ def run_vae(folder, myinput='N', SET_YEARS=range(100), reconst_red_years_set=10,
             Y_load = np.load(f'{folder.parent}/Y.npy')
         # TODO: Check optionally that the files are consistent
     
-    history_vae, history_loss, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, vae, X_va, Y_va, X_tr, Y_tr = k_fold_cross_val(folder, myinput, X, Y,
-                            create_vae_kwargs={'vae_kwargs':{'k1': 0.9, 'k2': 0.1, 'from_logits': False, 'field_weights': [2.0, 1.0, 2.0], 'filter_area':'France', 'Z_DIM': 64, 'N_EPOCHS': 2#10#100
+    history_vae, history_loss, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, vae, X_va, Y_va, X_tr, Y_tr, score = k_fold_cross_val(folder, myinput, X, Y,
+                            create_vae_kwargs={'vae_kwargs':{'k1': 0.9, 'k2': 0.1, 'from_logits': False, 'field_weights': [2.0, 1.0, 2.0], 'filter_area':'France', 'Z_DIM': 64, 'N_EPOCHS': 100#10#2
                                                             },
                                             'encoder_kwargs':{'conv_filters':[16, 16, 16, 32, 32,  32,   64, 64],
                                                         'conv_kernel_size':[5,  5,  5,  5,   5,   5,   5,  3], 
@@ -457,7 +459,7 @@ def run_vae(folder, myinput='N', SET_YEARS=range(100), reconst_red_years_set=10,
                                                             'use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25], 'usemask' : True}},
                              train_vae_kwargs={'batch_size': 128, 'lr': 1e-3},
                              **k_fold_cross_val_kwargs)
-    return history_vae, history_loss, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, Y, vae, X_va, Y_va, X_tr, Y_tr 
+    return history_vae, history_loss, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, Y, vae, X_va, Y_va, X_tr, Y_tr, score 
 
 
 @ut.execution_time  # prints the time it takes for the function to run
