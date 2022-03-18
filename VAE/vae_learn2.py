@@ -309,7 +309,7 @@ def k_fold_cross_val(folder, myinput, X, Y, year_permutation, create_vae_kwargs=
         # create fold_folder
        
         fold_folder=folder # this allows us to work in a fold by default
-        if os.path.exists(f'{folder}/fold_num.npy'): # # we are inside of one of the folds
+        if os.path.exists(f'{folder}/fold_num.npy'): # # we are inside of one of the folds (we are running the script in the reconstruction mode)
             logger.log(35,f'{folder}/fold_num.npy exists')
         else: # we are not inside of one of the folds, either this is a new run, or we need to iterate through the runs
             logger.log(35,f'{folder}/fold_num.npy does not exist')
@@ -390,7 +390,7 @@ def k_fold_cross_val(folder, myinput, X, Y, year_permutation, create_vae_kwargs=
 @ut.execution_time  # prints the time it takes for the function to run
 #@ut.indent_logger(logger)   # indents the log messages produced by this function
 # logger indent causes: IndexError: string index out of range
-def run_vae(folder, myinput='N', SET_YEARS=range(100), XY_run_vae_kwargs=None, evaluate_epoch='last'):# SET_YEARS=range(8000), XY_run_vae_kwargs=None):
+def run_vae(folder, myinput='N', SET_YEARS=range(100), year_permutation=None, XY_run_vae_kwargs=None, evaluate_epoch='last'):# SET_YEARS=range(8000), XY_run_vae_kwargs=None):
     '''
     Loads the data and Creates a Variational AutoEncoder 
     
@@ -419,7 +419,7 @@ def run_vae(folder, myinput='N', SET_YEARS=range(100), XY_run_vae_kwargs=None, e
     if XY_run_vae_kwargs is None: # we don't have X and Y yet, need to load them (may take a lot of time!)
 	# loading full X can be heavy and unnecessary for reconstruction.py so we choose to work with validation automatically provided that folder already involves a fold: 
         X, Y, year_permutation, lat, lon = ln.prepare_data(load_data_kwargs = {'fields': ['t2m_filtered','zg500','mrso_filtered'], 'lat_end': 24, 'dataset_years': 8000, 'year_list': SET_YEARS},
-                               prepare_XY_kwargs = {'roll_X_kwargs': {'roll_steps': 64}}) # That's the version that fails
+                                   prepare_XY_kwargs = {'roll_X_kwargs': {'roll_steps': 64},'year_permutation' : year_permutation}) # That's the version that fails
         LON, LAT = np.meshgrid(lon,lat)
     else: # we already have X and Y yet, no need to load them
         logger.info(f"loading from provided XY_run_vae_kwargs")
@@ -470,7 +470,7 @@ def run_vae(folder, myinput='N', SET_YEARS=range(100), XY_run_vae_kwargs=None, e
 #@ut.indent_logger(logger)   # indents the log messages produced by this function
 # logger indent causes: IndexError: string index out of range
 def train_vae(X, vae, checkpoint_path, folder, myinput, N_EPOCHS, INITIAL_EPOCH, history_vae, batch_size=128, lr=1e-3):
-        
+    
     logger.info(f"{Fore.YELLOW}==train_vae=={Style.RESET_ALL}")
     logger.info(f"{np.max(X) = }, {np.min(X) = }")
     
