@@ -15,7 +15,7 @@ logging.getLogger().handlers = [logging.StreamHandler(sys.stdout)]
 ut.indentation_sep = '  '
 
 # create a work directory
-work_dir = './test3'
+work_dir = './__test__/t1'
 
 t = ln.Trainer(work_dir)
 
@@ -33,7 +33,8 @@ d = {
 
     'dense_units': [128, 64, 16, 2], # number of neurons per fully connected layer
     'dense_dropouts': [0.5, 0.5, 0.1, 0],
-    'dense_activations': ['relu', 'relu', 'relu', None]
+    'dense_activations': ['relu', 'relu', 'relu', None],
+    'training_epochs': 5
 }
 
 

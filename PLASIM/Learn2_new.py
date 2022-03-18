@@ -2436,7 +2436,8 @@ class Trainer():
         optimal_checkpoint_kwargs = ut.extract_nested(run_kwargs, 'optimal_checkpoint_kwargs')
         load_from, tl_info = get_transfer_learning_folders(load_from, f'{self.root_folder}/{folder}', nfolds,
                                                            optimal_checkpoint_kwargs=optimal_checkpoint_kwargs)
-        tl_info = tl_info['tl_info']
+        if tl_info:
+            tl_info = tl_info['tl_from']
 
         if load_from is not None: # we actually do transfer learning
             # avoid computing the transfer learning folders by setting up a bypass for when `get_transfer_learning_folders` is called inside `k_fold_cross_val`
