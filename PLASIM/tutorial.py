@@ -15,7 +15,7 @@ logging.getLogger().handlers = [logging.StreamHandler(sys.stdout)]
 ut.indentation_sep = '  '
 
 # create a work directory
-work_dir = './test2'
+work_dir = './test3'
 
 t = ln.Trainer(work_dir)
 
