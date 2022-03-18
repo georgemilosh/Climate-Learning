@@ -67,16 +67,24 @@ i = int(np.load(f'{fold_folder}/fold_num.npy'))
 
 
 #X, lat, lon, vae, Z_DIM, N_EPOCHS, INITIAL_EPOCH, BATCH_SIZE, LEARNING_RATE, checkpoint_path, fold_folder, myinput, history = foo.PrepareDataAndVAE(fold_folder, DIFFERENT_YEARS=year_permutation[:800])
-
 year_permutation_va = np.load(f'{fold_folder}/year_permutation_va.npy')
-SET_YEARS = list(year_permutation_va[rd.sample(range(len(year_permutation_va)), 10)])  # select random 10 years out of the validation set
-logger.info(f"{SET_YEARS = }")
+# Select times we want to show for reconstruction
+if False: # select at random 10 years out of the validation set 
+    year_permutation = list(year_permutation_va[rd.sample(range(len(year_permutation_va)), 10)])  
+    day_permutation = rd.sample(range(77*len(year_permutation)), 5) # There are 77 days in summer by default
+else: # avoid random permutation, just select minimum number of years allowed in fold
+    year_permutation = [year_permutation_va[3]]
+    day_permutation = [4,5,6,7,8] # the length has to be 5 for plotting purposes
+    
+#TODO: convert the day permuation to the appropriate day and year
+logger.info(f"{year_permutation = },{day_permutation = }")
 
-history, history_loss, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, Y, vae, X, _, _, _, _ = foo.run_vae(fold_folder, myinput='N', SET_YEARS=SET_YEARS)
+
+history, history_loss, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, Y, vae, X_va, Y_va, X_tr, Y_tr, _ = foo.run_vae(fold_folder, myinput='N', year_permutation=year_permutation)
 # Construct 2D array for lon-lat:
 
 
-logger.info(f"{X.shape = }, {np.max(X) = }, {np.min(X) = }, {np.mean(X[:,5,5,0]) = }, {np.std(X[:,5,5,0]) = }")
+logger.info(f"{X_va.shape = }, {np.max(X_va) = }, {np.min(X_va) = }, {np.mean(X_va[:,5,5,0]) = }, {np.std(X_va[:,5,5,0]) = }")
 logger.info(f"==loading the model: {fold_folder}")
 vae = tf.keras.models.load_model(fold_folder, compile=False)
 
@@ -86,9 +94,12 @@ checkpoint_i = '/cp_vae-'+nb_zeros_c*'0'+str(checkpoint)+'.ckpt' # TODO: convert
 logger.info(f'load weights from {fold_folder}/{checkpoint_i}')
 vae.load_weights(f'{fold_folder}/{checkpoint_i}')
       
-example_images = X[rd.sample(range(X.shape[0]), 5)] # random sample of 5 images from X's 0 axis
+example_images = X_va[day_permutation] # random sample of 5 images from X's 0 axis
 
-_,_,z_test = vae.encoder.predict(X[rd.sample(range(X.shape[0]), 200)])
+num_samples = np.min([X_va.shape[0],200])
+day_permutation2 = rd.sample(range(X_va.shape[0]), num_samples) # this one is just to show that we map to normal distribution so we have to take more points
+logger.info(f'{len(day_permutation2) = }') 
+_,_,z_test = vae.encoder.predict(X_va[day_permutation2])
 logger.info(f"{z_test.shape = }")
 
 Z_DIM = z_test.shape[1] #200 # Dimension of the latent vector (z)
@@ -116,7 +127,8 @@ def vae_generate_images(vae,Z_DIM,n_to_show=10):
     logger.info(f"{reconst_images.shape = }")
     
     levels = np.linspace(0, 1, 64)
-    logger.info("levels = ", levels)
+    logger.info(f"{levels = }"
+               )
     fig2 = plt.figure(figsize=(40, 10))
     spec2 = gridspec.GridSpec(ncols=5, nrows=2, figure=fig2)
     iterate = 0
