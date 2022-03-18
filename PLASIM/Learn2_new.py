@@ -788,6 +788,7 @@ def assign_labels(field, time_start=30, time_end=120, T=14, percent=5, threshold
         2D array with shape (years, days) and values 0 or 1
     '''
     A, A_flattened, threshold =  field.ComputeTimeAverage(time_start, time_end, T=T, percent=percent, threshold=threshold)[:3]
+    logger.info(f"{threshold = }")
     return np.array(A >= threshold, dtype=int)
 
 @ut.execution_time
