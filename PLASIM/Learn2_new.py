@@ -1812,11 +1812,11 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
         except KeyError:
             first_epoch = get_default_params(optimal_checkpoint)['first_epoch']
             
-        opt_checkpoint, fold_subfolder = optimal_checkpoint(folder,nfolds, **optimal_checkpoint_kwargs) - first_epoch
+        opt_checkpoint, fold_subfolder = optimal_checkpoint(folder,nfolds, **optimal_checkpoint_kwargs)
 
         # recompute the scores
         for i in range(nfolds):
-            scores[i] = np.load(f'{folder}/fold_{i}/{fold_subfolder}history.npy', allow_pickle=True).item()[return_metric][opt_checkpoint]
+            scores[i] = np.load(f'{folder}/fold_{i}/{fold_subfolder}history.npy', allow_pickle=True).item()[return_metric][opt_checkpoint - first_epoch]
 
         # reload the models at their proper checkpoint and recompute Y_pred_unbiased
         batch_size = train_model_kwargs['batch_size']
