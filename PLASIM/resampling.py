@@ -84,7 +84,8 @@ def select(*arrays, amount=0.1, p=None, if_not_enough_data='raise'):
                 if amount > len(p):
                     raise ValueError(f'You are asking to select {amount} datapoints but only {len(p)} are left in the reservoir.')
                 logger.warning(f'You are asking to select {amount} datapoints from a population of {selectable_data}. Including also data that had 0 probability of being selected')
-                p[p == 0] += s/(100*(len(p) - selectable_data)) # we add to the population at p=0 1% of the probability mass of the population at p > 0
+                p[p == 0] += s/(100*(len(p) - selectable_data + 1)) # we add to the population at p=0 1% of the probability mass of the population at p > 0
+                                                                    # the +1 ensures we add something if `selectable_data` == 0
                 s = np.sum(p)
             else:
                 raise ValueError(f'You are asking to select {amount} datapoints but only {selectable_data} are selectable in the reservoir.')
