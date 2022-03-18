@@ -2391,13 +2391,13 @@ class Trainer():
             if os.path.exists(f'{self.root_folder}/lock.txt'): # check if there is a lock
                 self.allow_run = False
                 logger.error('Lock detected: cannot run')
-            elif os.path.exists(self.config_file):
+            elif os.path.exists(self.config_file): # if there is a config file we check it is compatible with self.config_dict
                 config_in_folder = ut.json2dict(self.config_file)
                 if config_in_folder == self.config_dict:
                     self.allow_run = True
                 else:
                     self.allow_run = False
-            else:
+            else: # if there is no config file we create it
                 ut.dict2json(self.config_dict, self.config_file)
                 self.allow_run = True
 
@@ -2441,7 +2441,7 @@ class Trainer():
             run_kwargs = ut.set_values_recursive(run_kwargs, {'load_from': load_from})
 
             # force the dataset to the same year permutation
-            year_permutation = list(np.load(f'{self.root_folder}/{load_from}/year_permutation.npy', allow_pickle=True))
+            year_permutation = list(np.load(f"{self.root_folder}/{tl_info['run']}/year_permutation.npy", allow_pickle=True))
             run_kwargs = ut.set_values_recursive(run_kwargs, {'year_permutation': year_permutation})
 
             # these arguments are ignored due to transfer learning, so warn the user if they had been provided
@@ -2582,8 +2582,15 @@ def main():
 
     logger.info(f'{arg_dict = }')
 
+    trainer_kwargs = get_default_params(Trainer)
+    trainer_kwargs.pop('config')
+    trainer_kwargs.pop('root_folder') # this two parameters cannot be changed
+    for k in arg_dict:
+        if k in trainer_kwargs:
+            trainer_kwargs[k] = arg_dict.pop(k)
+
     # create trainer
-    trainer = Trainer(config='./config.json')
+    trainer = Trainer(config='./config.json', **trainer_kwargs)
 
     # schedule runs
     trainer.schedule(**arg_dict)
