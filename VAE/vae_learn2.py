@@ -16,7 +16,6 @@ import numpy as np
 import shutil
 import psutil
 import gc
-import random as rd
 import pickle
 from pathlib import Path
 from colorama import Fore # support colored output in terminal
@@ -253,7 +252,7 @@ def classify(z_tr, Y_tr, z_va, Y_va, u=1):
 #@ut.indent_logger(logger)   # -> Causes error:   File "/ClimateDynamics/MediumSpace/ClimateLearningFR/gmiloshe/ERA/utilities.py", line 88, in wrapper
 #    message = (indentation_sep+f'\n{indentation_sep}'.join(message[:-1].split('\n')) + message[-1])
 #IndexError: string index out of range
-def k_fold_cross_val(folder, myinput, X, Y, create_vae_kwargs=None, train_vae_kwargs=None, nfolds=10, val_folds=1, range_nfolds=None, u=1, normalization_mode='pointwise', classification=True, evaluate_epoch='last'):
+def k_fold_cross_val(folder, myinput, X, Y, year_permutation, create_vae_kwargs=None, train_vae_kwargs=None, nfolds=10, val_folds=1, range_nfolds=None, u=1, normalization_mode='pointwise', classification=True, evaluate_epoch='last'):
     '''
     Performs k fold cross validation on a model architecture.
 
@@ -265,6 +264,8 @@ def k_fold_cross_val(folder, myinput, X, Y, create_vae_kwargs=None, train_vae_kw
         all data (train + val)
     Y : np.ndarray
         all labels
+    year_permutation : np.ndarray
+        provided here to be stored in individual fold during training
     create_vae_kwargs : dict
         dictionary with the parameters to create a vae model
     nfolds : int, optional
@@ -329,7 +330,13 @@ def k_fold_cross_val(folder, myinput, X, Y, create_vae_kwargs=None, train_vae_kw
             classification=False # we will not do classification in this case (not compatible with current set-up of reconstruction)
         else:
             X_tr, Y_tr, X_va, Y_va = ln.k_fold_cross_val_split(i, X, Y, nfolds=nfolds, val_folds=val_folds)
-        
+            if myinput == 'Y': # we also store the year permuation in individual folds so that we can easily access the appropriate years
+                _,_,_,year_permutation_va = ln.k_fold_cross_val_split(i, np.array(year_permutation), np.array(year_permutation)
+                                                                      , nfolds=nfolds, val_folds=val_folds) # we want years that correspond to validation
+                np.save(f'{fold_folder}/year_permutation_va',year_permutation_va)
+                logger.info(f'saved {fold_folder}/year_permutation_va.npy')
+                np.save(f'{fold_folder}/Y_va',Y_va)
+                logger.info(f'saved {fold_folder}/Y_va.npy')
         INPUT_DIM = X_va.shape[1:]  # Image dimension
         logger.info(f"{Fore.RED}{INPUT_DIM = }{Style.RESET_ALL}")
         # perform undersampling
@@ -364,12 +371,12 @@ def k_fold_cross_val(folder, myinput, X, Y, create_vae_kwargs=None, train_vae_kw
             vae.load_weights(f'{checkpoint_path}')
             logger.info(f'{checkpoint_path} weights loaded')
         if classification:
-           _,_,z_tr = vae.encoder.predict(X_tr)
-           _,_,z_va = vae.encoder.predict(X_va)
-           print(f"{z_tr.shape = }, {z_va.shape = }" )
-       	   score.append(classify(z_tr, Y_tr, z_va, Y_va, u)) 
+            _,_,z_tr = vae.encoder.predict(X_tr)
+            _,_,z_va = vae.encoder.predict(X_va)
+            logger.info(f"{z_tr.shape = }, {z_va.shape = }" )
+            score.append(classify(z_tr, Y_tr, z_va, Y_va, u)) 
         else:
-           score=None
+            score=None
         my_memory.append(psutil.virtual_memory())
         logger.info(f'RAM memory: {my_memory[-1][3]:.3e}') # Getting % usage of virtual_memory ( 3rd field)
 
@@ -383,7 +390,7 @@ def k_fold_cross_val(folder, myinput, X, Y, create_vae_kwargs=None, train_vae_kw
 @ut.execution_time  # prints the time it takes for the function to run
 #@ut.indent_logger(logger)   # indents the log messages produced by this function
 # logger indent causes: IndexError: string index out of range
-def run_vae(folder, myinput='N', SET_YEARS=range(100), reconst_red_years_set=10,XY_run_vae_kwargs=None, evaluate_epoch='last'):# SET_YEARS=range(8000), XY_run_vae_kwargs=None):
+def run_vae(folder, myinput='N', SET_YEARS=range(100), XY_run_vae_kwargs=None, evaluate_epoch='last'):# SET_YEARS=range(8000), XY_run_vae_kwargs=None):
     '''
     Loads the data and Creates a Variational AutoEncoder 
     
@@ -393,7 +400,7 @@ def run_vae(folder, myinput='N', SET_YEARS=range(100), reconst_red_years_set=10,
         'N': used for post-processing mode
     SET_YEARS: 
         initial data complement to a hold-out. Should be set to range(8000) for a real run
-    reconst_red_years: int
+    reconst_reduce_years_set: int
         number of years to be taken randomly for reconstruction
     XY_run_vae_kwargs: 
         X, Y, year_permutation that are supplied in case we need to run this function in succession to avoid loading the data all the time
@@ -406,18 +413,11 @@ def run_vae(folder, myinput='N', SET_YEARS=range(100), reconst_red_years_set=10,
     folder = Path(folder)
     logger.info(f"{myinput = }")
     
-    k_fold_cross_val_kwargs = {'nfolds' : 10, 'val_folds' :1, 'range_nfolds' :None, 'u':1, 'normalization_mode' : 'pointwise', 'classification':True, 'evaluate_epoch':evaluate_epoch}
+    k_fold_cross_val_kwargs = {'nfolds' : 10, 'val_folds' :1, 'range_nfolds' :None, 'u':1, 'normalization_mode' : 'pointwise', 'classification':True, 'evaluate_epoch': evaluate_epoch}
     nfolds = k_fold_cross_val_kwargs['nfolds']
     val_folds = k_fold_cross_val_kwargs['val_folds']
     if XY_run_vae_kwargs is None: # we don't have X and Y yet, need to load them (may take a lot of time!)
-        
-	# loading full X can be heavy and unnecessary for reconstruction.py so we choose to work with validation automatically provided that folder already involves a fold:
-         
-        if os.path.exists(f'{folder}/fold_num.npy'): # If we are inside the folds
-            i = int(np.load(f'{folder}/fold_num.npy'))
-            _,_,_,SET_YEARS = ln.k_fold_cross_val_split(i, SET_YEARS, SET_YEARS, nfolds=nfolds, val_folds=val_folds) # we want years that correspond to validation
-            SET_YEARS = list(SET_YEARS[rd.sample(range(len(SET_YEARS)), reconst_red_years_set)])
-            logger.log(35,f"{SET_YEARS = }")
+	# loading full X can be heavy and unnecessary for reconstruction.py so we choose to work with validation automatically provided that folder already involves a fold: 
         X, Y, year_permutation, lat, lon = ln.prepare_data(load_data_kwargs = {'fields': ['t2m_filtered','zg500','mrso_filtered'], 'lat_end': 24, 'dataset_years': 8000, 'year_list': SET_YEARS},
                                prepare_XY_kwargs = {'roll_X_kwargs': {'roll_steps': 64}}) # That's the version that fails
         LON, LAT = np.meshgrid(lon,lat)
@@ -442,7 +442,7 @@ def run_vae(folder, myinput='N', SET_YEARS=range(100), reconst_red_years_set=10,
             Y_load = np.load(f'{folder.parent}/Y.npy')
         # TODO: Check optionally that the files are consistent
     
-    history_vae, history_loss, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, vae, X_va, Y_va, X_tr, Y_tr, score = k_fold_cross_val(folder, myinput, X, Y,
+    history_vae, history_loss, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, vae, X_va, Y_va, X_tr, Y_tr, score = k_fold_cross_val(folder, myinput, X, Y, year_permutation,
                             create_vae_kwargs={'vae_kwargs':{'k1': 0.9, 'k2': 0.1, 'from_logits': False, 'field_weights': [2.0, 1.0, 2.0], 'filter_area':'France', 'Z_DIM': 64, 'N_EPOCHS': 100#10#2
                                                             },
                                             'encoder_kwargs':{'conv_filters':[16, 16, 16, 32, 32,  32,   64, 64],
@@ -511,7 +511,7 @@ if __name__ == '__main__': # we do this so that we can then load this file as a 
     myinput='Y' # default value
     if os.path.exists(folder): 
         logger.info(f'folder {folder} already exists. Should I overwrite?') 
-        myinput = input(" write Y to overwrite, N to stop execution, C to continue the run: ")
+        myinput = input(" write Y to delete the contains of the folder and start from scratch, N to stop execution, C to continue the run: ")
         if myinput == "N": # cancel
             sys.exit("User has aborted the program")
         if myinput == "Y": # overwrite
