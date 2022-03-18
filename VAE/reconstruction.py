@@ -28,6 +28,7 @@ from importlib import import_module
 #foo = import_module(fold_folder+'/Funs.py', package=None)
 foo = module_from_file("foo", f'{fold_folder.parent}/Funs.py')
 ef = foo.ef # Inherit ERA_Fields_New from the file we are calling
+ln = foo.ln
 
 logger.info("==Importing tensorflow packages===")
 import random as rd  
@@ -62,10 +63,16 @@ import cartopy_plots as cplt
 logger.info("==Reading data==")
 
 year_permutation = np.load(f'{fold_folder.parent}/year_permutation.npy')
+i = int(np.load(f'{fold_folder}/fold_num.npy'))
+
 
 #X, lat, lon, vae, Z_DIM, N_EPOCHS, INITIAL_EPOCH, BATCH_SIZE, LEARNING_RATE, checkpoint_path, fold_folder, myinput, history = foo.PrepareDataAndVAE(fold_folder, DIFFERENT_YEARS=year_permutation[:800])
 
-history, history_loss, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, Y, vae, X, _, _, _, _ = foo.run_vae(fold_folder, myinput='N', SET_YEARS=year_permutation)
+year_permutation_va = np.load(f'{fold_folder}/year_permutation_va.npy')
+SET_YEARS = list(year_permutation_va[rd.sample(range(len(year_permutation_va)), 10)])  # select random 10 years out of the validation set
+logger.info(f"{SET_YEARS = }")
+
+history, history_loss, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, Y, vae, X, _, _, _, _ = foo.run_vae(fold_folder, myinput='N', SET_YEARS=SET_YEARS)
 # Construct 2D array for lon-lat:
 
 
@@ -125,7 +132,7 @@ def vae_generate_images(vae,Z_DIM,n_to_show=10):
         logger.info(f"{LON.shape = } ,{LAT.shape = } ,{img0.shape = }, {img1.shape = }")
         m.set_extent([-180,180, 30, 90], crs=data_proj)
         ef.geo_contourf(m, ax[iterate], 0, *cplt.Greenwich(LON, LAT,img0),levels, "seismic", f" generated", put_colorbar=False, draw_gridlines=False)
-        ef.geo_contour (m, ax[iterate], 0, *cplt.Greenwich(LON, LAT,img1),levels, "PuRd", "summer")
+        ef.geo_contour (m, ax[iterate], 0, *cplt.Greenwich(LON, LAT,img1),levels, "summer", "PRGn")
         
         
         for img_sub, loc_string, title_sub in zip([img0, img2],["upper left","upper right"],["t2m","mrso"]):
@@ -138,7 +145,7 @@ def vae_generate_images(vae,Z_DIM,n_to_show=10):
             axins[-1].set_extent([-5,7, 42, 52], crs=data_proj)
 
             ef.geo_contourf(axins[-1], ax[iterate], 0, *cplt.Greenwich(LON, LAT,img_sub),levels, "seismic", "", put_colorbar=False, draw_gridlines=False)
-            ef.geo_contour (axins[-1], ax[iterate], 0, *cplt.Greenwich(LON, LAT,img1),levels, "PuRd", "summer")
+            ef.geo_contour (axins[-1], ax[iterate], 0, *cplt.Greenwich(LON, LAT,img1),levels, "summer", "PRGn")
 
 
             axins[-1].set_title(title_sub)
@@ -193,10 +200,10 @@ def plot_compare(model, images=None):
         logger.info(f"{LON.shape = } ,{LAT.shape = } ,{img0.shape = }, {img1.shape = }")
         if jterate == 0:
             ef.geo_contourf(m, ax[iterate], 0, *cplt.Greenwich(LON, LAT,img0),levels, "seismic", f"actual", put_colorbar=False, draw_gridlines=False)
-            ef.geo_contour (m, ax[iterate], 0, *cplt.Greenwich(LON, LAT,img1),levels, "PuRd", "summer")
+            ef.geo_contour (m, ax[iterate], 0, *cplt.Greenwich(LON, LAT,img1),levels, "summer", "PRGn")
         else:
             ef.geo_contourf(m, ax[iterate], 0, *cplt.Greenwich(LON, LAT,img0),levels, "seismic", f"reconstructed", put_colorbar=False, draw_gridlines=False)
-            ef.geo_contour (m, ax[iterate], 0, *cplt.Greenwich(LON, LAT,img1),levels, "PuRd", "summer")
+            ef.geo_contour (m, ax[iterate], 0, *cplt.Greenwich(LON, LAT,img1),levels, "summer", "PRGn")
             
         for img_sub, loc_string, title_sub in zip([img0, img2],["upper left","upper right"],["t2m","mrso"]):
             axins.append(inset_axes(m, width="40%", height="50%", loc=loc_string, 
@@ -208,10 +215,11 @@ def plot_compare(model, images=None):
             axins[-1].set_extent([-5,7, 42, 52], crs=data_proj)
 
             ef.geo_contourf(axins[-1], ax[iterate], 0, *cplt.Greenwich(LON, LAT,img_sub),levels, "seismic", "", put_colorbar=False, draw_gridlines=False)
-            ef.geo_contour (axins[-1], ax[iterate], 0, *cplt.Greenwich(LON, LAT,img1),levels, "PuRd", "summer")
+            ef.geo_contour (axins[-1], ax[iterate], 0, *cplt.Greenwich(LON, LAT,img1),levels, "summer", "PRGn")
 
 
             axins[-1].set_title(title_sub)
+            
             
         iterate += 1
         if iterate > 4:
