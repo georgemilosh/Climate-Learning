@@ -152,7 +152,7 @@ def compute_p_func(q, Y, assume_label_knowledge, p_mode='future_loss', p_arg=Non
             q_min0, q_max0, l0 = p_arg
             l = len(q)
             
-            f = (l*1./l0 - 1) if l > l0 else 1.
+            f = (l*1./l0 - 1) if l > 2*l0 else 1.
             q_min = q_min0/f
             q_max = q_max0/f
 
