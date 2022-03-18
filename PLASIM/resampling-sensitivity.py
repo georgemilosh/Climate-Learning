@@ -87,6 +87,7 @@ def select(*arrays, amount=0.1, p=None, if_not_enough_data='raise'):
                 p[p == 0] += s/(100*(len(p) - selectable_data)) # we add to the population at p=0 1% of the probability mass of the population at p > 0
                 s = np.sum(p)
             else:
+                logger.error(f'You are asking to select {amount} datapoints but only {selectable_data} are selectable in the reservoir.')
                 raise ValueError(f'You are asking to select {amount} datapoints but only {selectable_data} are selectable in the reservoir.')
         
         if np.abs(s - 1) > 1e-7:
