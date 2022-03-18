@@ -4,7 +4,13 @@ import os, sys
 import shutil
 from pathlib import Path
 os.environ['TF_XLA_FLAGS'] = '--tf_xla_enable_xla_devices'  # https://stackoverflow.com/questions/65907365/tensorflow-not-creating-xla-devices-tf-xla-enable-xla-devices-not-set
-
+import logging
+if __name__ == '__main__':
+    logger = logging.getLogger()
+    logger.handlers = [logging.StreamHandler(sys.stdout)]
+else:
+    logger = logging.getLogger(__name__)
+logger.level = logging.INFO
 
 fold_folder = Path(sys.argv[1])  # The name of the folder where the weights have been stored
 checkpoint = sys.argv[2]       # The checkpoint at which the weights have been stored
@@ -16,27 +22,27 @@ def module_from_file(module_name, file_path): #The code that imports the file wh
             spec.loader.exec_module(module)
             return module
         
-print("fold_folder = ", fold_folder)
-print(f"loading module from  {fold_folder.parent}/Funs.py")
+logger.info(f"{fold_folder = }")
+logger.info(f"loading module from  {fold_folder.parent}/Funs.py")
 from importlib import import_module
 #foo = import_module(fold_folder+'/Funs.py', package=None)
 foo = module_from_file("foo", f'{fold_folder.parent}/Funs.py')
 ef = foo.ef # Inherit ERA_Fields_New from the file we are calling
 
-print("==Importing tensorflow packages===")
+logger.info("==Importing tensorflow packages===")
 import random as rd  
 from scipy.stats import norm
 import numpy as np
 
 tff = foo.tff # tensorflow routines 
 ut = foo.ut # utilities
-print("==Checking GPU==")
+logger.info("==Checking GPU==")
 import tensorflow as tf
 tf.test.is_gpu_available(
     cuda_only=False, min_cuda_compute_capability=None
 )
 
-print("==Checking CUDA==")
+logger.info("==Checking CUDA==")
 tf.test.is_built_with_cuda()
 
 import matplotlib.pyplot as plt
@@ -53,30 +59,30 @@ sys.path.insert(1, '../ERA')
 import cartopy_plots as cplt
 
 
-print("==Reading data==")
+logger.info("==Reading data==")
 
 year_permutation = np.load(f'{fold_folder.parent}/year_permutation.npy')
 
 #X, lat, lon, vae, Z_DIM, N_EPOCHS, INITIAL_EPOCH, BATCH_SIZE, LEARNING_RATE, checkpoint_path, fold_folder, myinput, history = foo.PrepareDataAndVAE(fold_folder, DIFFERENT_YEARS=year_permutation[:800])
 
-history, history_loss, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, Y, vae, X, _, _, _ = foo.run_vae(fold_folder, myinput='N')
+history, history_loss, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, Y, vae, X, _, _, _, _ = foo.run_vae(fold_folder, myinput='N', SET_YEARS=year_permutation)
 # Construct 2D array for lon-lat:
 
 
-print(f"{X.shape = }, {np.max(X) = }, {np.min(X) = }, {np.mean(X[:,5,5,0]) = }, {np.std(X[:,5,5,0]) = }")
-print(f"==loading the model: {fold_folder}")
+logger.info(f"{X.shape = }, {np.max(X) = }, {np.min(X) = }, {np.mean(X[:,5,5,0]) = }, {np.std(X[:,5,5,0]) = }")
+logger.info(f"==loading the model: {fold_folder}")
 vae = tf.keras.models.load_model(fold_folder, compile=False)
 
 nb_zeros_c = 4-len(str(checkpoint))
 checkpoint_i = '/cp_vae-'+nb_zeros_c*'0'+str(checkpoint)+'.ckpt' # TODO: convert to f-strings
 
-print(f'load weights from {fold_folder}/{checkpoint_i}')
+logger.info(f'load weights from {fold_folder}/{checkpoint_i}')
 vae.load_weights(f'{fold_folder}/{checkpoint_i}')
       
 example_images = X[rd.sample(range(X.shape[0]), 5)] # random sample of 5 images from X's 0 axis
 
 _,_,z_test = vae.encoder.predict(X[rd.sample(range(X.shape[0]), 200)])
-print(f"{z_test.shape = }")
+logger.info(f"{z_test.shape = }")
 
 Z_DIM = z_test.shape[1] #200 # Dimension of the latent vector (z)
 x = np.linspace(-3, 3, 300)
@@ -97,36 +103,45 @@ def vae_generate_images(vae,Z_DIM,n_to_show=10):
     reconst_images = vae.decoder.predict(np.random.normal(0,1,size=(n_to_show,Z_DIM)))
     
     # prerolling has already occured so
+    reconst_images2 = reconst_images[...,2] # remove extra fields 
     reconst_images1 = reconst_images[...,1] # remove extra fields 
-    reconst_images0 = reconst_images[...,2] # remove extra fields 
-    print(f"{reconst_images.shape = }")
+    reconst_images0 = reconst_images[...,0] # remove extra fields 
+    logger.info(f"{reconst_images.shape = }")
     
     levels = np.linspace(0, 1, 64)
-    print("levels = ", levels)
+    logger.info("levels = ", levels)
     fig2 = plt.figure(figsize=(40, 10))
     spec2 = gridspec.GridSpec(ncols=5, nrows=2, figure=fig2)
     iterate = 0
     jterate = 0
     ax = []
+    axins= []
     for i in range(n_to_show):
         m = fig2.add_subplot(spec2[jterate,iterate], projection=ccrs.Orthographic(central_latitude=90))
         ax.append(m)
+        img2 = reconst_images2[i].squeeze() 
         img1 = reconst_images1[i].squeeze()   
         img0 = reconst_images0[i].squeeze()   
-        print(f"{LON.shape = } ,{LAT.shape = } ,{img0.shape = }, {img1.shape = }")
-        print(iterate,jterate,img0.shape,img0.min(), img0.max())
+        logger.info(f"{LON.shape = } ,{LAT.shape = } ,{img0.shape = }, {img1.shape = }")
         m.set_extent([-180,180, 30, 90], crs=data_proj)
-        ef.geo_contourf(m, ax[iterate], 0, *cplt.Greenwich(LON, LAT,img0),levels, "seismic", f" generated zg500", put_colorbar=False, draw_gridlines=False)
+        ef.geo_contourf(m, ax[iterate], 0, *cplt.Greenwich(LON, LAT,img0),levels, "seismic", f" generated", put_colorbar=False, draw_gridlines=False)
         ef.geo_contour (m, ax[iterate], 0, *cplt.Greenwich(LON, LAT,img1),levels, "PuRd", "summer")
         
-        axins = inset_axes(m, width="40%", height="40%", loc="upper right", 
-                   axes_class=cartopy.mpl.geoaxes.GeoAxes, 
-                   axes_kwargs=dict(map_projection=cartopy.crs.PlateCarree()))
         
-        axins.add_feature(cartopy.feature.COASTLINE)
-        axins.set_extent([-10,10, 40, 60], crs=data_proj)
-        ef.geo_contourf(axins, ax[iterate], 0, *cplt.Greenwich(LON, LAT,img0),levels, "seismic", "", put_colorbar=False, draw_gridlines=False)
-        ef.geo_contour (axins, ax[iterate], 0, *cplt.Greenwich(LON, LAT,img1),levels, "PuRd", "summer")
+        for img_sub, loc_string, title_sub in zip([img0, img2],["upper left","upper right"],["t2m","mrso"]):
+            axins.append(inset_axes(m, width="40%", height="50%", loc=loc_string, 
+                       axes_class=cartopy.mpl.geoaxes.GeoAxes, 
+                       axes_kwargs=dict(map_projection=cartopy.crs.PlateCarree())))
+
+
+            axins[-1].add_feature(cartopy.feature.COASTLINE)
+            axins[-1].set_extent([-5,7, 42, 52], crs=data_proj)
+
+            ef.geo_contourf(axins[-1], ax[iterate], 0, *cplt.Greenwich(LON, LAT,img_sub),levels, "seismic", "", put_colorbar=False, draw_gridlines=False)
+            ef.geo_contour (axins[-1], ax[iterate], 0, *cplt.Greenwich(LON, LAT,img1),levels, "PuRd", "summer")
+
+
+            axins[-1].set_title(title_sub)
         iterate += 1
         if iterate > 4:
             iterate = 0
@@ -142,55 +157,62 @@ def plot_compare(model, images=None):
     mean, logvar, z_sample = model.encoder(images)
     reconst_images = model.decoder(z_sample).numpy()
     
-    
+    reconst_images2 = reconst_images[...,2] # remove extra fields 
     reconst_images1 = reconst_images[...,1] # remove extra fields 
-    reconst_images0 = reconst_images[...,2] # remove extra fields 
-    print(f"{reconst_images.shape = }")
-    
+    reconst_images0 = reconst_images[...,0] # remove extra fields 
+    logger.info(f"{reconst_images.shape = }")
+    images2 = images[...,2]
     images1 = images[...,1]
-    images0 = images[...,2]
-    print(f"{images0.shape = }")
+    images0 = images[...,0]
+    logger.info(f"{images0.shape = }")
     
-    
-    #print("reconst_images.shape=",reconst_images.shape)
     n_to_show = 2*images0.shape[0]
     
     levels = np.linspace(0, 1, 64)
-    print(f"{levels = }")
+    logger.info(f"{levels = }")
     fig2 = plt.figure(figsize=(40, 10))
     spec2 = gridspec.GridSpec(ncols=5, nrows=2, figure=fig2)
     iterate = 0
     jterate = 0
     ax = []
+    axins = []
     for i in range(n_to_show):
         m = fig2.add_subplot(spec2[jterate,iterate], projection=ccrs.Orthographic(central_latitude=90))
         ax.append(m)
         if jterate == 0:
+            img2 = images2[i].squeeze()
             img1 = images1[i].squeeze() 
             img0 = images0[i].squeeze() 
         else:
+            img2 = reconst_images2[i-5].squeeze() 
             img1 = reconst_images1[i-5].squeeze()  
             img0 = reconst_images0[i-5].squeeze()  
-        print(iterate,jterate,img0.shape,img0.min(), img0.max())
+        logger.info(f"{iterate = }, {jterate = },{img0.shape = },{img0.min() = }, {img0.max() = }")
         m.set_extent([-180,180, 30, 90], crs=data_proj)
         
-        axins = inset_axes(m, width="50%", height="50%", loc="upper right", 
-                   axes_class=cartopy.mpl.geoaxes.GeoAxes, 
-                   axes_kwargs=dict(map_projection=cartopy.crs.PlateCarree()))
-        axins.add_feature(cartopy.feature.COASTLINE)
-        axins.set_extent([-10,10, 40, 60], crs=data_proj)
-        print(f"{LON.shape = } ,{LAT.shape = } ,{img0.shape = }, {img1.shape = }")
+        logger.info(f"{LON.shape = } ,{LAT.shape = } ,{img0.shape = }, {img1.shape = }")
         if jterate == 0:
             ef.geo_contourf(m, ax[iterate], 0, *cplt.Greenwich(LON, LAT,img0),levels, "seismic", f"actual", put_colorbar=False, draw_gridlines=False)
             ef.geo_contour (m, ax[iterate], 0, *cplt.Greenwich(LON, LAT,img1),levels, "PuRd", "summer")
-            ef.geo_contourf(axins, ax[iterate], 0, *cplt.Greenwich(LON, LAT,img0),levels, "seismic", "", put_colorbar=False, draw_gridlines=False)
         else:
             ef.geo_contourf(m, ax[iterate], 0, *cplt.Greenwich(LON, LAT,img0),levels, "seismic", f"reconstructed", put_colorbar=False, draw_gridlines=False)
             ef.geo_contour (m, ax[iterate], 0, *cplt.Greenwich(LON, LAT,img1),levels, "PuRd", "summer")
-            ef.geo_contourf(axins, ax[iterate], 0, *cplt.Greenwich(LON, LAT,img0),levels, "seismic", "", put_colorbar=False, draw_gridlines=False)
-        
-        ef.geo_contour (axins, ax[iterate], 0, *cplt.Greenwich(LON, LAT,img1),levels, "PuRd", "summer")
-        
+            
+        for img_sub, loc_string, title_sub in zip([img0, img2],["upper left","upper right"],["t2m","mrso"]):
+            axins.append(inset_axes(m, width="40%", height="50%", loc=loc_string, 
+                       axes_class=cartopy.mpl.geoaxes.GeoAxes, 
+                       axes_kwargs=dict(map_projection=cartopy.crs.PlateCarree())))
+
+
+            axins[-1].add_feature(cartopy.feature.COASTLINE)
+            axins[-1].set_extent([-5,7, 42, 52], crs=data_proj)
+
+            ef.geo_contourf(axins[-1], ax[iterate], 0, *cplt.Greenwich(LON, LAT,img_sub),levels, "seismic", "", put_colorbar=False, draw_gridlines=False)
+            ef.geo_contour (axins[-1], ax[iterate], 0, *cplt.Greenwich(LON, LAT,img1),levels, "PuRd", "summer")
+
+
+            axins[-1].set_title(title_sub)
+            
         iterate += 1
         if iterate > 4:
             iterate = 0

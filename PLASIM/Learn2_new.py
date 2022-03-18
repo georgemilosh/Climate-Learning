@@ -788,6 +788,7 @@ def assign_labels(field, time_start=30, time_end=120, T=14, percent=5, threshold
         2D array with shape (years, days) and values 0 or 1
     '''
     A, A_flattened, threshold =  field.ComputeTimeAverage(time_start, time_end, T=T, percent=percent, threshold=threshold)[:3]
+    logger.info(f"{threshold = }")
     return np.array(A >= threshold, dtype=int)
 
 @ut.execution_time
@@ -1812,11 +1813,11 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
         except KeyError:
             first_epoch = get_default_params(optimal_checkpoint)['first_epoch']
             
-        opt_checkpoint, fold_subfolder = optimal_checkpoint(folder,nfolds, **optimal_checkpoint_kwargs) - first_epoch
+        opt_checkpoint, fold_subfolder = optimal_checkpoint(folder,nfolds, **optimal_checkpoint_kwargs)
 
         # recompute the scores
         for i in range(nfolds):
-            scores[i] = np.load(f'{folder}/fold_{i}/{fold_subfolder}history.npy', allow_pickle=True).item()[return_metric][opt_checkpoint]
+            scores[i] = np.load(f'{folder}/fold_{i}/{fold_subfolder}history.npy', allow_pickle=True).item()[return_metric][opt_checkpoint - first_epoch]
 
         # reload the models at their proper checkpoint and recompute Y_pred_unbiased
         batch_size = train_model_kwargs['batch_size']
@@ -2391,13 +2392,13 @@ class Trainer():
             if os.path.exists(f'{self.root_folder}/lock.txt'): # check if there is a lock
                 self.allow_run = False
                 logger.error('Lock detected: cannot run')
-            elif os.path.exists(self.config_file):
+            elif os.path.exists(self.config_file): # if there is a config file we check it is compatible with self.config_dict
                 config_in_folder = ut.json2dict(self.config_file)
                 if config_in_folder == self.config_dict:
                     self.allow_run = True
                 else:
                     self.allow_run = False
-            else:
+            else: # if there is no config file we create it
                 ut.dict2json(self.config_dict, self.config_file)
                 self.allow_run = True
 
@@ -2435,13 +2436,14 @@ class Trainer():
         optimal_checkpoint_kwargs = ut.extract_nested(run_kwargs, 'optimal_checkpoint_kwargs')
         load_from, tl_info = get_transfer_learning_folders(load_from, f'{self.root_folder}/{folder}', nfolds,
                                                            optimal_checkpoint_kwargs=optimal_checkpoint_kwargs)
+        tl_info = tl_info['tl_info']
 
         if load_from is not None: # we actually do transfer learning
             # avoid computing the transfer learning folders by setting up a bypass for when `get_transfer_learning_folders` is called inside `k_fold_cross_val`
             run_kwargs = ut.set_values_recursive(run_kwargs, {'load_from': load_from})
 
             # force the dataset to the same year permutation
-            year_permutation = list(np.load(f'{self.root_folder}/{load_from}/year_permutation.npy', allow_pickle=True))
+            year_permutation = list(np.load(f"{self.root_folder}/{tl_info['run']}/year_permutation.npy", allow_pickle=True))
             run_kwargs = ut.set_values_recursive(run_kwargs, {'year_permutation': year_permutation})
 
             # these arguments are ignored due to transfer learning, so warn the user if they had been provided
@@ -2582,8 +2584,15 @@ def main():
 
     logger.info(f'{arg_dict = }')
 
+    trainer_kwargs = get_default_params(Trainer)
+    trainer_kwargs.pop('config')
+    trainer_kwargs.pop('root_folder') # this two parameters cannot be changed
+    for k in arg_dict:
+        if k in trainer_kwargs:
+            trainer_kwargs[k] = arg_dict.pop(k)
+
     # create trainer
-    trainer = Trainer(config='./config.json')
+    trainer = Trainer(config='./config.json', **trainer_kwargs)
 
     # schedule runs
     trainer.schedule(**arg_dict)
