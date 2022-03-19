@@ -82,7 +82,7 @@ else: # avoid random permutation, just select minimum number of years allowed in
 logger.info(f"{year_permutation = },{day_permutation = }")
 
 logger.info(f"{Style.RESET_ALL}")
-history, history_loss, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, Y, vae, X_va, Y_va, X_tr, Y_tr, _ = foo.run_vae(fold_folder, myinput='N', year_permutation=year_permutation)
+history, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, Y, vae, X_va, Y_va, X_tr, Y_tr, _ = foo.run_vae(fold_folder, myinput='N', year_permutation=year_permutation)
 
 logger.info(f"{Fore.BLUE}")
 logger.info(f"{Y_va[day_permutation] = }")
@@ -107,7 +107,7 @@ logger.info(f"{z_test.shape = }")
 Z_DIM = z_test.shape[1] #200 # Dimension of the latent vector (z)
 x = np.linspace(-3, 3, 300)
 
-fig = plt.figure(figsize=(20, 20))
+fig = plt.figure(figsize=(20, 15))
 fig.subplots_adjust(hspace=0.6, wspace=0.4)
 
 for i in range(np.min([50, Z_DIM])):
@@ -116,6 +116,8 @@ for i in range(np.min([50, Z_DIM])):
     ax.axis('off')
     ax.text(0.5, -0.35, str(i), fontsize=10, ha='center', transform=ax.transAxes)
     ax.plot(x,norm.pdf(x))
+
+fig.tight_layout()
 
 
 def vae_generate_images(vae,Z_DIM,n_to_show=10):
@@ -167,7 +169,7 @@ def vae_generate_images(vae,Z_DIM,n_to_show=10):
         if iterate > 4:
             iterate = 0
             jterate = 1
-        
+    fig2.tight_layout()
         
 vae_generate_images(vae,Z_DIM,n_to_show=10)
 
@@ -239,6 +241,7 @@ def plot_compare(model, images=None):
         if iterate > 4:
             iterate = 0
             jterate = 1
+    fig2.tight_layout()
 
         
 plot_compare(vae,example_images)

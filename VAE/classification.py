@@ -83,7 +83,7 @@ def classify(X_tr, z_tr, Y_tr, X_va, z_va, Y_va, u=1):
 
 foo.classify = classify
 logger.info(f"{Style.RESET_ALL}")
-history, history_loss, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, Y, vae, X_va, Y_va, X_tr, Y_tr, score = foo.run_vae(folder, myinput='N', evaluate_epoch=checkpoint)
+history, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, Y, vae, X_va, Y_va, X_tr, Y_tr, score = foo.run_vae(folder, myinput='N', evaluate_epoch=checkpoint)
 logger.info(f"{Fore.BLUE}") #  indicates we are inside the routine 
 # the rest of the code goes here
 logger.info(f"{Style.RESET_ALL}")
