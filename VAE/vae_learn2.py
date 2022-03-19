@@ -240,7 +240,7 @@ def create_or_load_vae(folder, INPUT_DIM, myinput, vae_kwargs=None, encoder_kwar
 
 @ut.execution_time
 @ut.indent_logger(logger)
-def classify(z_tr, Y_tr, z_va, Y_va, u=1):
+def classify(X_tr, z_tr, Y_tr, X_va, z_va, Y_va, u=1):
     '''
     At the moment is void
     '''
@@ -374,7 +374,7 @@ def k_fold_cross_val(folder, myinput, X, Y, year_permutation, create_vae_kwargs=
             _,_,z_tr = vae.encoder.predict(X_tr)
             _,_,z_va = vae.encoder.predict(X_va)
             logger.info(f"{z_tr.shape = }, {z_va.shape = }" )
-            score.append(classify(z_tr, Y_tr, z_va, Y_va, u)) 
+            score.append(classify(X_tr, z_tr, Y_tr, X_va, z_va, Y_va, u)) 
         else:
             score=None
         my_memory.append(psutil.virtual_memory())

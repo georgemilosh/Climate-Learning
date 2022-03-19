@@ -5,6 +5,8 @@ import shutil
 from pathlib import Path
 os.environ['TF_XLA_FLAGS'] = '--tf_xla_enable_xla_devices'  # https://stackoverflow.com/questions/65907365/tensorflow-not-creating-xla-devices-tf-xla-enable-xla-devices-not-set
 import logging
+from colorama import Fore # support colored output in terminal
+from colorama import Style
 if __name__ == '__main__':
     logger = logging.getLogger()
     logger.handlers = [logging.StreamHandler(sys.stdout)]
@@ -21,7 +23,7 @@ def module_from_file(module_name, file_path): #The code that imports the file wh
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
             return module
-        
+logger.info(f"{Fore.BLUE}") #  indicates we are inside the routine       
 logger.info(f"{fold_folder = }")
 logger.info(f"loading module from  {fold_folder.parent}/Funs.py")
 from importlib import import_module
@@ -73,17 +75,17 @@ if False: # select at random 10 years out of the validation set
     year_permutation = list(year_permutation_va[rd.sample(range(len(year_permutation_va)), 10)])  
     day_permutation = rd.sample(range(77*len(year_permutation)), 5) # There are 77 days in summer by default
 else: # avoid random permutation, just select minimum number of years allowed in fold
-    year_permutation = [year_permutation_va[3]]
-    day_permutation = [4,5,6,7,8] # the length has to be 5 for plotting purposes
+    year_permutation = [year_permutation_va[0]]
+    day_permutation = range(23,23+5)##range(12,12+5)#[4,5,6,7,8] # the length has to be 5 for plotting purposes
     
 #TODO: convert the day permuation to the appropriate day and year
 logger.info(f"{year_permutation = },{day_permutation = }")
 
-
+logger.info(f"{Style.RESET_ALL}")
 history, history_loss, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, Y, vae, X_va, Y_va, X_tr, Y_tr, _ = foo.run_vae(fold_folder, myinput='N', year_permutation=year_permutation)
-# Construct 2D array for lon-lat:
 
-
+logger.info(f"{Fore.BLUE}")
+logger.info(f"{Y_va[day_permutation] = }")
 logger.info(f"{X_va.shape = }, {np.max(X_va) = }, {np.min(X_va) = }, {np.mean(X_va[:,5,5,0]) = }, {np.std(X_va[:,5,5,0]) = }")
 logger.info(f"==loading the model: {fold_folder}")
 vae = tf.keras.models.load_model(fold_folder, compile=False)
@@ -240,6 +242,6 @@ def plot_compare(model, images=None):
 
         
 plot_compare(vae,example_images)
-
+logger.info(f"{Style.RESET_ALL}")
 plt.show()
 

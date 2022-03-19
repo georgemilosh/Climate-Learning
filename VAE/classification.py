@@ -25,7 +25,7 @@ def module_from_file(module_name, file_path): #The code that imports the file wh
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
             return module
-        
+logger.info(f"{Fore.BLUE}") #  indicates we are inside the routine  
 print("fold_folder = ", folder)
 print(f"loading module from  {folder}/Funs.py")
 from importlib import import_module
@@ -58,13 +58,16 @@ print("==Reading data==")
 
 year_permutation = np.load(f'{folder}/year_permutation.npy')
 
-def classify(z_tr, Y_tr, z_va, Y_va, u=10):
+def classify(X_tr, z_tr, Y_tr, X_va, z_va, Y_va, u=1):
     '''
     insert description
     '''
-    u=10
+    u=1 #10
+    
     logger.info(f"{Fore.BLUE}")
     logger.info(f"==classify of classification.py==")
+    logger.info(f"{X_va[23,15,65,0] = }, {z_va[23,14] = }, {Y_va[23] = }") # Just testing if data is processed properly (potentially remove this line)
+    logger.info(f"{X_tr[23,15,65,0] = }, {z_tr[23,14] = }, {Y_tr[23] = }") # Just testing if data is processed properly (potentially remove this line)
     logger.info(f"Before undersampling: {len(Y_tr) = }, {len(Y_va) = }, {np.sum(Y_tr==1) = }, {np.sum(Y_va==1) = }")    
     z_tr, Y_tr = ln.undersample(z_tr, Y_tr, u=u)  
     logger.info(f"After undersampling: {len(Y_tr) = }, {len(Y_va) = }, {np.sum(Y_tr==1) = }, {np.sum(Y_va==1) = }")    
@@ -73,11 +76,16 @@ def classify(z_tr, Y_tr, z_va, Y_va, u=10):
     Y_pr = logreg.predict(z_va) 
 
     TP, TN, FP, FN, MCC = ef.ComputeMCC(Y_va, Y_pr, 'True')
+    logger.info(f"{Y_pr[23] = }")
     logger.info(f"{Style.RESET_ALL}")
-    return TP, TN, FP, FN, MCC
+    return TP, TN, FP, FN, MCC 
+#z_tr[23,24], Y_tr[23], z_va[23,24], Y_va[23]#
 
 foo.classify = classify
-
+logger.info(f"{Style.RESET_ALL}")
 history, history_loss, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, Y, vae, X_va, Y_va, X_tr, Y_tr, score = foo.run_vae(folder, myinput='N', evaluate_epoch=checkpoint)
+logger.info(f"{Fore.BLUE}") #  indicates we are inside the routine 
+# the rest of the code goes here
+logger.info(f"{Style.RESET_ALL}")
 # Construct 2D array for lon-lat:
 print(score)
