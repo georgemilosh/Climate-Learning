@@ -31,6 +31,9 @@ from importlib import import_module
 foo = module_from_file("foo", f'{fold_folder.parent}/Funs.py')
 ef = foo.ef # Inherit ERA_Fields_New from the file we are calling
 ln = foo.ln
+ut = foo.ut
+
+run_vae_kwargs = ut.json2dict(f"{fold_folder.parent}/config.json")
 
 logger.info("==Importing tensorflow packages===")
 import random as rd  
@@ -82,7 +85,10 @@ else: # avoid random permutation, just select minimum number of years allowed in
 logger.info(f"{year_permutation = },{day_permutation = }")
 
 logger.info(f"{Style.RESET_ALL}")
-history, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, vae, X_va, Y_va, X_tr, Y_tr, _ = foo.run_vae(fold_folder, myinput='N', year_permutation=year_permutation)
+run_vae_kwargs = ut.set_values_recursive(run_vae_kwargs, {'myinput' : 'N', 'year_permutation' :year_permutation})
+
+history, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, vae, X_va, Y_va, X_tr, Y_tr, _ = foo.run_vae(fold_folder, **run_vae_kwargs)
+
 
 logger.info(f"{Fore.BLUE}")
 logger.info(f"{Y_va[day_permutation] = }")

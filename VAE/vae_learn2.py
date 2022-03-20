@@ -76,6 +76,7 @@ def move_to_folder(folder):
     shutil.copy('history.py', folder)  # Also copy a version of the files we work with to analyze the results of the training
     shutil.copy('reconstruction.py', folder)
     shutil.copy('classification.py', folder)
+    shutil.copy('config.json', folder)
     shutil.copy('../ERA/ERA_Fields_New.py', folder)
     shutil.copy('../ERA/TF_Fields.py', folder)
     shutil.copy('../PLASIM/Learn2_new.py', folder)
@@ -147,7 +148,7 @@ def normalize_X(X,folder, myinput='N',mode='pointwise'):
 
 @ut.execution_time  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function
-def create_or_load_vae(folder, INPUT_DIM, myinput, vae_kwargs=None, encoder_kwargs=None, decoder_kwargs=None):
+def create_or_load_vae(folder, INPUT_DIM, myinput, VAE_kwargs=None, build_encoder_skip_kwargs=None, build_decoder_skip_kwargs=None):
     '''
     Creates a Variational AutoEncoder Model or loads the existing one 
         from the weights given in the model
@@ -161,18 +162,18 @@ def create_or_load_vae(folder, INPUT_DIM, myinput, vae_kwargs=None, encoder_kwar
         the axis corresponding to iteration through the datapoints (batch axis)
     Z_DIM: int
         dimension of the latent space
-    vae_kwargs: dictionary (optional)
+    VAE_kwargs: dictionary (optional)
         contains some extra parameters such as:
-            filter_area: str
+            mask_area: str
                 which geographical area we put a mask on
             Z_DIM: int
                 dimension of the latent space
             N_EPOCHS: int
                 number of epochs to train
         the rest are passed to tff.VAE constructor (see TF_Fields.py)
-    encoder_kwargs: dictionary (optional)
+    build_encoder_skip_kwargs: dictionary (optional)
         see tff.build_encoder_skip kwargs (TF_Fields.py)
-    decoder_kwargs: dictionary (optional)
+    build_decoder_skip_kwargs: dictionary (optional)
         see tff.build_decoder_skip kwargs (TF_Fields.py)
     
 
@@ -190,23 +191,23 @@ def create_or_load_vae(folder, INPUT_DIM, myinput, vae_kwargs=None, encoder_kwar
     logger.info(f"{Fore.YELLOW}==create_or_load_vae=={Style.RESET_ALL}")
     ### preliminary operations
     ##########################
-    if vae_kwargs is None:
-        vae_kwargs = {}
-    if encoder_kwargs is None:
-        encoder_kwargs = {}
-    if decoder_kwargs is None:
-        decoder_kwargs = {}
-    vae_kwargs_local = vae_kwargs.copy()
-    filter_area = vae_kwargs_local.pop('filter_area') # because vae_kwargs_local must be passed to tff.VAE constructor and we still need vae_kwargs for other folds
-    Z_DIM = vae_kwargs_local.pop('Z_DIM')
-    N_EPOCHS = vae_kwargs_local.pop('N_EPOCHS')
-    print_summary = vae_kwargs_local.pop('print_summary')
+    if VAE_kwargs is None:
+        VAE_kwargs = {}
+    if build_encoder_skip_kwargs is None:
+        build_encoder_skip_kwargs = {}
+    if build_decoder_skip_kwargs is None:
+        build_decoder_skip_kwargs = {}
+    VAE_kwargs_local = VAE_kwargs.copy()
+    mask_area = VAE_kwargs_local.pop('mask_area') # because vae_kwargs_local must be passed to tff.VAE constructor and we still need vae_kwargs for other folds
+    Z_DIM = VAE_kwargs_local.pop('Z_DIM')
+    N_EPOCHS = VAE_kwargs_local.pop('N_EPOCHS')
+    print_summary = VAE_kwargs_local.pop('print_summary')
     
     print(f"{Fore.GREEN}{INPUT_DIM[:-1] = }{Style.RESET_ALL}")
     
     ones_dim = np.ones(INPUT_DIM[:-1])
     
-    filter_mask = ln.roll_X(ef.create_mask('Plasim',filter_area, ones_dim, axes='last 2', return_full_mask=True),1)
+    filter_mask = ln.roll_X(ef.create_mask('Plasim',mask_area, ones_dim, axes='last 2', return_full_mask=True),1)
     logger.info(f'{filter_mask.shape = }')
     logger.info(f'{ones_dim.shape = }')
     logger.info(f'{np.array([filter_mask,ones_dim,filter_mask], dtype=bool).shape = }')
@@ -217,21 +218,21 @@ def create_or_load_vae(folder, INPUT_DIM, myinput, vae_kwargs=None, encoder_kwar
     
     
     logger.info("==Building encoder==")
-    encoder_inputs, encoder_outputs, shape_before_flattening, encoder  = tff.build_encoder_skip(input_dim = INPUT_DIM, output_dim = Z_DIM, **encoder_kwargs)
+    encoder_inputs, encoder_outputs, shape_before_flattening, encoder  = tff.build_encoder_skip(input_dim = INPUT_DIM, output_dim = Z_DIM, **build_encoder_skip_kwargs)
     if print_summary:
         encoder.summary()
     logger.info("==Building decoder==") 
-    decoder_input, decoder_output, decoder = tff.build_decoder_skip(mask=filter_mask, input_dim = Z_DIM, shape_before_flattening = shape_before_flattening, **decoder_kwargs)
+    decoder_input, decoder_output, decoder = tff.build_decoder_skip(mask=filter_mask, input_dim = Z_DIM, shape_before_flattening = shape_before_flattening, **build_decoder_skip_kwargs)
     if print_summary:
         decoder.summary()
 
 
     logger.info("==Attaching decoder and encoder and compiling==")
-    vae = tff.VAE(encoder, decoder, **vae_kwargs_local) #, mask_weights=mask_weights)
+    vae = tff.VAE(encoder, decoder, **VAE_kwargs) #, mask_weights=mask_weights)
     if print_summary:
         logger.info(f'{vae.k1 = },{vae.k2 = } ')
     
-    
+    #todo: consider breaking into a second function from here
 
     if myinput == 'Y': # The run is to be performed from scratch
         INITIAL_EPOCH = 0
@@ -241,7 +242,6 @@ def create_or_load_vae(folder, INPUT_DIM, myinput, vae_kwargs=None, encoder_kwar
         INITIAL_EPOCH = len(history_vae['loss'])
         logger.info(f'==loading the model: {folder}')
         N_EPOCHS = N_EPOCHS + INITIAL_EPOCH 
-        #vae = tf.keras.models.load_model(folder, compile=False)
         checkpoint_path = tf.train.latest_checkpoint(folder)
         logger.info(f'loading weights {checkpoint_path = }')
         vae.load_weights(checkpoint_path)
@@ -271,7 +271,7 @@ def classify(X_tr, z_tr, Y_tr, X_va, z_va, Y_va, u=1):
 
 @ut.execution_time
 @ut.indent_logger(logger)   
-def k_fold_cross_val(folder, myinput, X, Y, year_permutation, create_vae_kwargs=None, train_vae_kwargs=None, nfolds=10, val_folds=1, range_nfolds=None, u=1, normalization_mode='pointwise', classification=True, evaluate_epoch='last'):
+def k_fold_cross_val(folder, myinput, X, Y, year_permutation, create_or_load_vae_kwargs=None, train_vae_kwargs=None, nfolds=10, val_folds=1, range_nfolds=None, u=1, normalization_mode='pointwise', classification=True, evaluate_epoch='last'):
     '''
     Performs k fold cross validation on a model architecture.
 
@@ -285,7 +285,7 @@ def k_fold_cross_val(folder, myinput, X, Y, year_permutation, create_vae_kwargs=
         all labels
     year_permutation : np.ndarray
         provided here to be stored in individual fold during training
-    create_vae_kwargs : dict
+    create_or_load_vae_kwargs : dict
         dictionary with the parameters to create a vae model, see create_or_load_vae()
     nfolds : int, optional
         number of folds
@@ -325,8 +325,8 @@ def k_fold_cross_val(folder, myinput, X, Y, year_permutation, create_vae_kwargs=
     '''
     
     logger.info(f"{Fore.YELLOW}==k_fold_cross_val=={Style.RESET_ALL}")
-    if create_vae_kwargs is None:
-        create_vae_kwargs = {}
+    if create_or_load_vae_kwargs is None:
+        create_or_load_vae_kwargs = {}
     if train_vae_kwargs is None:
         train_vae_kwargs = {}
     #folder = folder.rstrip('/')
@@ -391,8 +391,8 @@ def k_fold_cross_val(folder, myinput, X, Y, year_permutation, create_vae_kwargs=
             logger.info(f'{X_tr.shape = },{np.mean(X_tr[:,5,5,0]) = },{np.std(X_tr[:,5,5,0]) = }')
         X_va = normalize_X(X_va, fold_folder, myinput='N', mode=normalization_mode) #validation is always normalized passively (based on already computed normalization)
         
-        logger.info(f"{Fore.RED}{create_vae_kwargs = }{Style.RESET_ALL}")
-        vae, history_vae, N_EPOCHS, INITIAL_EPOCH, ckpt_path_callback = create_or_load_vae(fold_folder, INPUT_DIM, myinput,**create_vae_kwargs)
+        logger.info(f"{Fore.RED}{create_or_load_vae_kwargs = }{Style.RESET_ALL}")
+        vae, history_vae, N_EPOCHS, INITIAL_EPOCH, ckpt_path_callback = create_or_load_vae(fold_folder, INPUT_DIM, myinput,**create_or_load_vae_kwargs)
         if myinput!='N': 
             history_loss = train_vae(X_tr, vae, ckpt_path_callback, fold_folder, myinput, N_EPOCHS, INITIAL_EPOCH, history_vae, **train_vae_kwargs)
         else: # myinput='N' is useful when loading this function in reconstruction.py or classification for instance
@@ -403,8 +403,6 @@ def k_fold_cross_val(folder, myinput, X, Y, year_permutation, create_vae_kwargs=
         if myinput == 'N': # if running this code in passive mode we have to re-load the weights         
             if evaluate_epoch != 'last': # we load a specific checkpoint
                 checkpoint_path = str(fold_folder)+f"/cp_vae-{evaluate_epoch:04d}.ckpt" # TODO: convert checkpoints to f-strings
-                #nb_zeros_c = 4-len(str(checkpoint))
-                #checkpoint_i = '/cp_vae-'+nb_zeros_c*'0'+str(checkpoint)+'.ckpt' # TODO: convert to f-strings
             logger.info(f"==loading the model: {checkpoint_path}")
             vae = tf.keras.models.load_model(fold_folder, compile=False)
             
@@ -472,8 +470,7 @@ def train_vae(X, vae, ckpt_path_callback, folder, myinput, N_EPOCHS, INITIAL_EPO
 
 @ut.execution_time  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function
-# logger indent causes: IndexError: string index out of range
-def run_vae(folder, myinput='N', SET_YEARS=range(100), year_permutation=None, XY_run_vae_kwargs=None, evaluate_epoch='last'):# SET_YEARS=range(8000), XY_run_vae_kwargs=None):
+def run_vae(folder, myinput='N', XY_run_vae_keywargs=None, k_fold_cross_val_kwargs = None, load_data_kwargs = None, prepare_XY_kwargs = None):# SET_YEARS=range(8000), XY_run_vae_kwargs=None):
     '''
     Loads the data and Creates a Variational AutoEncoder 
     
@@ -485,7 +482,7 @@ def run_vae(folder, myinput='N', SET_YEARS=range(100), year_permutation=None, XY
         initial data complement to a hold-out. Should be set to range(8000) for no hold-out
     reconst_reduce_years_set: int
         number of years to be taken randomly for reconstruction
-    XY_run_vae_kwargs: 
+    XY_run_vae_keywargs: 
         X, Y, year_permutation that are supplied in case we need to run this function 
         in succession to avoid loading the data all the time. Never tested this
     evaluate_epoch: str or int
@@ -526,21 +523,26 @@ def run_vae(folder, myinput='N', SET_YEARS=range(100), year_permutation=None, XY
         
     folder = Path(folder)
     logger.info(f"{myinput = }")
-    
-    k_fold_cross_val_kwargs = {'nfolds' : 10, 'val_folds' :1, 'range_nfolds' :None, 'u':1, 'normalization_mode' : 'pointwise', 'classification':True, 'evaluate_epoch': evaluate_epoch}
+    if k_fold_cross_val_kwargs is None:
+        k_fold_cross_val_kwargs = {}
+    if load_data_kwargs is None:
+        load_data_kwargs = {}
+    if prepare_XY_kwargs is None:
+        prepare_XY_kwargs = {}
+        
     nfolds = k_fold_cross_val_kwargs['nfolds']
     val_folds = k_fold_cross_val_kwargs['val_folds']
-    if XY_run_vae_kwargs is None: # we don't have X and Y yet, need to load them (may take a lot of time!)
+    if XY_run_vae_keywargs is None: # we don't have X and Y yet, need to load them (may take a lot of time!)
 	# loading full X can be heavy and unnecessary for reconstruction.py so we choose to work with validation automatically provided that folder already involves a fold: 
-        X, Y, year_permutation, lat, lon = ln.prepare_data(load_data_kwargs = {'fields': ['t2m_filtered','zg500','mrso_filtered'], 'lat_end': 24, 'dataset_years': 8000, 'year_list': SET_YEARS}, prepare_XY_kwargs = {'roll_X_kwargs': {'roll_steps': 64},'year_permutation' : year_permutation}) # That's the version that fails
+        X, Y, year_permutation, lat, lon = ln.prepare_data(load_data_kwargs = load_data_kwargs, prepare_XY_kwargs =prepare_XY_kwargs) # Here I follow the same structure as Alessandro has, otherwise we could use prepare_data_kwargs
         LON, LAT = np.meshgrid(lon,lat)
     else: # we already have X and Y yet, no need to load them
-        logger.info(f"loading from provided XY_run_vae_kwargs")
-        X = XY_run_vae_kwargs['X']
-        Y = XY_run_vae_kwargs['Y']
-        year_permutation = XY_run_vae_kwargs['year_permutation']
-        LAT = XY_run_vae_kwargs['LAT']
-        LON = XY_run_vae_kwargs['LON']
+        logger.info(f"loading from provided XY_run_vae_keywargs")
+        X = XY_run_vae_keywargs['X']
+        Y = XY_run_vae_keywargs['Y']
+        year_permutation = XY_run_vae_keywargs['year_permutation']
+        LAT = XY_run_vae_keywargs['LAT']
+        LON = XY_run_vae_keywargs['LON']
         
     print(f'{X.shape = }')
     if myinput != 'N':
@@ -555,35 +557,46 @@ def run_vae(folder, myinput='N', SET_YEARS=range(100), year_permutation=None, XY
             Y_load = np.load(f'{folder.parent}/Y.npy')
         # TODO: Check optionally that the files are consistent
     
-    history_vae, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, vae, X_va, Y_va, X_tr, Y_tr, score = k_fold_cross_val(folder, myinput, X, Y, year_permutation,
-                            create_vae_kwargs={'vae_kwargs':{'k1': 0.9, 'k2': 0.1, 'from_logits': False, 'print_summary': False, 'field_weights': [2.0, 1.0, 2.0], 'filter_area':'France', 'Z_DIM': 64, 'N_EPOCHS': 2#100#10#2
-                                                            },
-                                            'encoder_kwargs':{'conv_filters':[16, 16, 16, 32, 32,  32,   64, 64],
-                                                        'conv_kernel_size':[5,  5,  5,  5,   5,   5,   5,  3], 
-                                                        'conv_strides'    :[2,  1,  1,  2,   1,   1,   2,  1],
-                                                        'conv_padding':["same","same","same","same","same","same","same","valid"], 
-                                                        'conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"], 
-                                                        'conv_skip':dict({(0,2),(3,5)}), 
-                                                        'use_batch_norm' : [True,True,True,True,True,True,True,True], 
-                                                        'use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25]},
-                                            'decoder_kwargs':{'conv_filters':[64,32,32,32,16,16,16,3], 
-                                                        'conv_kernel_size':[3, 5, 5, 5, 5, 5, 5, 5], 
-                                                            'conv_strides':[1, 2, 1, 1, 2, 1, 1, 2],
-                                                            'conv_padding':["valid","same","same","same","same","same","same","same"], 
-                                                         'conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","sigmoid"], 
-                                                               'conv_skip':dict({(1,3),(4,6)}),
-                                                            'use_batch_norm' : [True,True,True,True,True,True,True,True], 
-                                                            'use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25], 'usemask' : True}},
-                             train_vae_kwargs={'batch_size': 128, 'lr': 1e-3},
-                             **k_fold_cross_val_kwargs)
+    history_vae, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, vae, X_va, Y_va, X_tr, Y_tr, score = k_fold_cross_val(folder, myinput, X, Y, year_permutation,**k_fold_cross_val_kwargs)
     return history_vae, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, vae, X_va, Y_va, X_tr, Y_tr, score 
 
+
+ln.k_fold_cross_val = k_fold_cross_val # so that we can use functions such as ln.get_default_params without confusion with Learn2_new.py
+ln.normalize_X = normalize_X
+ln.move_to_folder = move_to_folder
+ln.create_or_load_vae = create_or_load_vae
+ln.train_vae = train_vae
+ln.VAE = tff.VAE
+ln.build_encoder_skip = tff.build_encoder_skip
+ln.build_decoder_skip = tff.build_decoder_skip
 
 if __name__ == '__main__': # we do this so that we can then load this file as a module in reconstruction.py
     
     #folder = './models/test5'
     folder = sys.argv[1]
     
+    # Update the kwargs
+    run_vae_kwargs_default = ln.get_default_params(run_vae, recursive=True)
+    run_vae_kwargs_default = ut.set_values_recursive(run_vae_kwargs_default,
+                                              {'myinput':'Y', 'lat_end': 24,'fields': ['t2m_filtered','zg500','mrso_filtered'],'year_list': 'range(100)',
+                                               'print_summary' : False, 'k1': 0.9 , 'k2':0.1, 'field_weights': [2.0, 1.0, 2.0],'mask_area':'France', 'Z_DIM': 64, 'N_EPOCHS': 2, 'encoder_conv_filters':[16, 16, 16, 32, 32,  32,   64, 64],
+                                                        'encoder_conv_kernel_size':[5,  5,  5,  5,   5,   5,   5,  3], 
+                                                        'encoder_conv_strides'    :[2,  1,  1,  2,   1,   1,   2,  1],
+                                                        'encoder_conv_padding':["same","same","same","same","same","same","same","valid"], 
+                                                        'encoder_conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"], 
+                                                        'encoder_conv_skip':dict({(0,2),(3,5)}), 
+                                                        'encoder_use_batch_norm' : [True,True,True,True,True,True,True,True], 
+                                                        'encoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25], 
+                                               'decoder_conv_filters':[64,32,32,32,16,16,16,3], 
+                                                        'decoder_conv_kernel_size':[3, 5, 5, 5, 5, 5, 5, 5], 
+                                                            'decoder_conv_strides':[1, 2, 1, 1, 2, 1, 1, 2],
+                                                            'decoder_conv_padding':["valid","same","same","same","same","same","same","same"], 
+                                                         'decoder_conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","sigmoid"], 
+                                                               'decoder_conv_skip':dict({(1,3),(4,6)}),
+                                                            'decoder_use_batch_norm' : [True,True,True,True,True,True,True,True], 
+                                                            'decoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25], 'usemask' : True,'batch_size': 128, 'lr': 1e-3}) 
+    logger.info(ut.dict2str(run_vae_kwargs_default)) # a nice way of printing nested dictionaries
+    ut.dict2json(run_vae_kwargs_default,'config.json')
     
     # folder name where weights will be stored
     myinput='Y' # default value
@@ -599,5 +612,7 @@ if __name__ == '__main__': # we do this so that we can then load this file as a 
         logger.info(f'folder {folder} created') 
         os.mkdir(folder)
         move_to_folder(folder)
- 
-    run_vae(folder=folder,myinput=myinput)
+    #run_vae(folder=folder,myinput=myinput)
+    
+    
+    run_vae(folder, **run_vae_kwargs_default)

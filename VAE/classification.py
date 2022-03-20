@@ -32,7 +32,9 @@ from importlib import import_module
 #foo = import_module(fold_folder+'/Funs.py', package=None)
 foo = module_from_file("foo", f'{folder}/Funs.py')
 ef = foo.ef # Inherit ERA_Fields_New from the file we are calling
+ut = foo.ut
 
+run_vae_kwargs = ut.json2dict(f"{folder}/config.json")
 print("==Importing tensorflow packages===")
 import random as rd  
 from scipy.stats import norm
@@ -83,7 +85,8 @@ def classify(X_tr, z_tr, Y_tr, X_va, z_va, Y_va, u=1):
 
 foo.classify = classify
 logger.info(f"{Style.RESET_ALL}")
-history, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, vae, X_va, Y_va, X_tr, Y_tr, score = foo.run_vae(folder, myinput='N', evaluate_epoch=checkpoint)
+run_vae_kwargs = ut.set_values_recursive(run_vae_kwargs, {'myinput' : 'N', 'evaluate_epoch' :checkpoint})
+history, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, vae, X_va, Y_va, X_tr, Y_tr, score = foo.run_vae(folder, **run_vae_kwargs)
 logger.info(f"{Fore.BLUE}") #  indicates we are inside the routine 
 # the rest of the code goes here
 logger.info(f"{Style.RESET_ALL}")
