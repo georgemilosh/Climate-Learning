@@ -82,7 +82,7 @@ else: # avoid random permutation, just select minimum number of years allowed in
 logger.info(f"{year_permutation = },{day_permutation = }")
 
 logger.info(f"{Style.RESET_ALL}")
-history, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, Y, vae, X_va, Y_va, X_tr, Y_tr, _ = foo.run_vae(fold_folder, myinput='N', year_permutation=year_permutation)
+history, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, vae, X_va, Y_va, X_tr, Y_tr, _ = foo.run_vae(fold_folder, myinput='N', year_permutation=year_permutation)
 
 logger.info(f"{Fore.BLUE}")
 logger.info(f"{Y_va[day_permutation] = }")

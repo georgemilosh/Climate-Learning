@@ -12,6 +12,9 @@ from tensorflow.keras import datasets, layers, models # from https://www.tensorf
 from tensorflow.keras import backend as K
 import matplotlib.pyplot as plt
 
+
+
+
 def Custom_BCE(y_true,y_pred):
     '''
         binary cross entropy
@@ -19,6 +22,11 @@ def Custom_BCE(y_true,y_pred):
     p1 = y_true * tf.math.log(  tf.clip_by_value( y_pred , tf.keras.backend.epsilon() , 1 - tf.keras.backend.epsilon() ) + tf.keras.backend.epsilon() )
     p2 = ( 1 - y_true ) * tf.math.log( 1 -  tf.clip_by_value( y_pred , tf.keras.backend.epsilon() , 1 - tf.keras.backend.epsilon() ) + tf.keras.backend.epsilon() )
     return -tf.reduce_mean( p1 + p2 )
+
+
+#####################################################
+########### Variational Autoencoder  ################        
+##################################################### 
 
 
 class ConstMul(tf.keras.layers.Layer):
@@ -97,7 +105,7 @@ class VAE(tf.keras.Model): # Class of variational autoencoder
         #self.mask_weights = mask_weights # Choose which grid points the reconstruction loss cares about  # This idea didn't work due to some errors
         self.bce = tf.keras.losses.BinaryCrossentropy(from_logits=from_logits)
         #self.bce = Custom_BCE # Trying how custom binary cross entropy compares
-        print("VAE: self.from_logits = ", self.from_logits)
+        #print("VAE: self.from_logits = ", self.from_logits)
 
     @property
     def metrics(self):
@@ -135,18 +143,6 @@ class VAE(tf.keras.Model): # Class of variational autoencoder
                 else:
                     reconstruction_loss = factor*tf.reduce_mean([self.field_weights[i]*tf.reduce_mean(self.bce(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis], sample_weight=self.mask_weights[...,i])) for i in range(reconstruction.shape[3])])
             """
-            
-            """ #These are some previous versions 
-            if self.field_weights == None:
-                reconstruction_loss = self.k1*self.encoder_input_shape[1]*self.encoder_input_shape[2]*tf.reduce_mean(tf.cast([ tf.reduce_mean(self.bce(data[...,i], reconstruction[...,i])) for i in range(reconstruction.shape[3])], dtype=np.float32))
-            else: 
-                reconstruction_loss = self.k1*self.encoder_input_shape[1]*self.encoder_input_shape[2]*tf.reduce_mean(self.field_weights*tf.cast([ tf.reduce_mean(self.bce(data[...,i], reconstruction[...,i])) for i in range(reconstruction.shape[3])], dtype=np.float32)) # This is supposed to do the same as the one below it in comments, but we also add weights with respect to the last dimension. Unfortunately in tensorflow2.4 there is no way to add axis parameter in tf.keras.losses.binary_crossentropy, and tensroflow2.6 was not working well with large arrays that we are using here s
-                
-            reconstruction_loss = self.k1*tf.reduce_mean( # Use this loss for older versions of tensorflow
-                tf.reduce_sum(
-                    tf.keras.losses.binary_crossentropy(data, reconstruction, from_logits=self.from_logits), axis=(1, 2) # -Y_n Log( P_n) - (1 - Y_n) Log( 1 - P_n) is the expression for binary entropy
-                )                  # tf.keras.losses.binary_crossentropy ~ np.mean(-data*np.log(reconstruction)-(1-data)*np.log(1-reconstruction),-1)
-            )"""
             kl_loss = -0.5 * (1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var))
             kl_loss = self.k2*tf.reduce_mean(tf.reduce_sum(kl_loss, axis=1))
             total_loss = reconstruction_loss + kl_loss
@@ -171,22 +167,35 @@ def build_encoder_skip(input_dim, output_dim, conv_filters = [32,64,64,64],
                                                 use_dropout=[0,0,0,0]):
     
     '''
-    builds encoder
+    builds encoder with potential skip connections
 
     Parameters
     ----------
-    conv_channels : list of int, optional
-        number of channels corresponding to the convolutional layers
-    kernel_sizes : int, 2-tuple or list of ints or 2-tuples, optional
+    conv_filters : list of int, optional
+        number of filters corresponding to the convolutional layers
+    conv_kernel_size : int, 2-tuple or list of ints or 2-tuples, optional
         If list must be of the same size of `conv_channels`
-    strides : int, 2-tuple or list of ints or 2-tuples, optional
+    conv_strides : int, 2-tuple or list of ints or 2-tuples, optional
         same as kernel_sizes
-    batch_normalizations : bool or list of bools, optional
+    conv_padding : str
+        the type of padding used for each layer
+    use_batch_norm : bool or list of bools, optional
         whether to add a BatchNormalization layer after each Conv2D layer
     conv_activations : str or list of str, optional
         activation functions after each convolutional layer
-    conv_dropouts : float in [0,1] or list of floats in [0,1], optional
+    use_dropout : float in [0,1] or list of floats in [0,1], optional
         dropout to be applied after the BatchNormalization layer. If 0 no dropout is applied
+    conv_skip: dictionary
+        creates a skip connection between two layers given by key and value entries in the dictionary. 
+        If empty no skip connections are included. The skip connection will not work if 
+        the dimensions of layers mismatch. For this convolutional architecture should be implemented in future
+        
+    Returns
+    --------
+    encoder_inputs:
+    encoder_outputs:
+    shape_before_flattening:
+    encoder: 
     '''
     # Number of Conv layers
     n_layers = len(conv_filters)
@@ -196,7 +205,7 @@ def build_encoder_skip(input_dim, output_dim, conv_filters = [32,64,64,64],
     x.append(encoder_inputs)
     # Add convolutional layers
     for i in range(n_layers):
-        print(i, f"Conv2D, filters = {conv_filters[i]}, kernel_size = {conv_kernel_size[i]}, strides = {conv_strides[i]}, padding = {conv_padding[i]}")
+        #print(i, f"Conv2D, filters = {conv_filters[i]}, kernel_size = {conv_kernel_size[i]}, strides = {conv_strides[i]}, padding = {conv_padding[i]}")
         conv = Conv2D(filters = conv_filters[i], 
                 kernel_size = conv_kernel_size[i],
                 strides = conv_strides[i], 
@@ -205,35 +214,35 @@ def build_encoder_skip(input_dim, output_dim, conv_filters = [32,64,64,64],
 
         if use_batch_norm[i]:
             conv = BatchNormalization()(conv)
-            print("conv = BatchNormalization()(conv)")
+            #print("conv = BatchNormalization()(conv)")
             
         if conv_activation[i] == 'LeakyRelu':
             actv = LeakyReLU()(conv)
-            print("actv = LeakyReLU()(conv)")
+            #print("actv = LeakyReLU()(conv)")
         else:
             actv = Activation(conv_activation[i])(conv)
-            print("actv = Activation(conv_activation[i])(conv)")
+            #print("actv = Activation(conv_activation[i])(conv)")
 
         if use_dropout[i]>0:
             actv = Dropout(rate=use_dropout[i])(actv)
-            print("actv = Dropout(rate=0.25)(actv)")
+            #print("actv = Dropout(rate=0.25)(actv)")
         
         if i in conv_skip.values(): # The arrow of the skip connection end here
-            print('conv = keras.layers.add([conv, arrow_start])')
+            #print('conv = keras.layers.add([conv, arrow_start])')
             actv = keras.layers.add([actv, arrow_start])
             if use_batch_norm:
                 actv = BatchNormalization()(actv)
-                print("actv = BatchNormalization()(actv)")
+                #print("actv = BatchNormalization()(actv)")
         
         if i in conv_skip.keys(): # The arrow of the skip connection starts here
-            print('arrow_start = actv')
+            #print('arrow_start = actv')
             arrow_start = actv
         
         x.append(actv)
         
 
     shape_before_flattening = K.int_shape(x[-1])[1:] 
-    print("shape_before_flattening = ", shape_before_flattening)
+    #print("shape_before_flattening = ", shape_before_flattening)
     x.append(tf.keras.layers.Flatten()(x[-1]))
     z_mean = tf.keras.layers.Dense(output_dim, name="z_mean")(x[-1])
     z_log_var = tf.keras.layers.Dense(output_dim, name="z_log_var")(x[-1])
@@ -256,20 +265,38 @@ def build_decoder_skip(mask,input_dim, shape_before_flattening, conv_filters = [
     '''
     builds decoder
 
-    Parameters
+     Parameters
     ----------
-    conv_channels : list of int, optional
-        number of channels corresponding to the convolutional layers
-    kernel_sizes : int, 2-tuple or list of ints or 2-tuples, optional
+    mask: np.ndarray
+        A mask (filter) to be applied to the output of the decoder (provided that usemask=True)
+    shape_before_flattening: tuple, int
+        shape of the latent space before flattening. 
+    conv_filters : list of int, optional
+        number of filters corresponding to the convolutional layers
+    conv_kernel_size : int, 2-tuple or list of ints or 2-tuples, optional
         If list must be of the same size of `conv_channels`
-    strides : int, 2-tuple or list of ints or 2-tuples, optional
+    conv_strides : int, 2-tuple or list of ints or 2-tuples, optional
         same as kernel_sizes
-    batch_normalizations : bool or list of bools, optional
+    conv_padding : str
+        the type of padding used for each layer
+    use_batch_norm : bool or list of bools, optional
         whether to add a BatchNormalization layer after each Conv2D layer
     conv_activations : str or list of str, optional
         activation functions after each convolutional layer
-    conv_dropouts : float in [0,1] or list of floats in [0,1], optional
+    use_dropout : float in [0,1] or list of floats in [0,1], optional
         dropout to be applied after the BatchNormalization layer. If 0 no dropout is applied
+    conv_skip: dictionary
+        creates a skip connection between two layers given by key and value entries in the dictionary. 
+        If empty no skip connections are included. The skip connection will not work if 
+        the dimensions of layers mismatch. For this convolutional architecture should be implemented in future
+    usemask: bool
+        If True then `mask` will be applied to the output, so that we can ignore the values set to 0
+        
+    Returns
+    --------
+    decoder_inputs:
+    decoder_outputs:
+    encoder: 
     '''
     # Number of Conv layers
     n_layers = len(conv_filters)
@@ -283,7 +310,7 @@ def build_decoder_skip(mask,input_dim, shape_before_flattening, conv_filters = [
     
     # Add convolutional layers
     for i in range(n_layers):
-        print(i, f"Conv2D, filters = {conv_filters[i]}, kernel_size = {conv_kernel_size[i]}, strides = {conv_strides[i]}, padding = {conv_padding[i]}")
+        #print(i, f"Conv2D, filters = {conv_filters[i]}, kernel_size = {conv_kernel_size[i]}, strides = {conv_strides[i]}, padding = {conv_padding[i]}")
         conv = Conv2DTranspose(filters = conv_filters[i], 
                             kernel_size = conv_kernel_size[i],
                             strides = conv_strides[i], 
@@ -292,28 +319,28 @@ def build_decoder_skip(mask,input_dim, shape_before_flattening, conv_filters = [
         
         if use_batch_norm[i]:
             conv = BatchNormalization()(conv)
-            print("conv = BatchNormalization()(conv)")
+            #print("conv = BatchNormalization()(conv)")
             
         if conv_activation[i] == 'LeakyRelu':
             actv = LeakyReLU()(conv)
-            print("actv = LeakyReLU()(conv)")
+            #print("actv = LeakyReLU()(conv)")
         else:
             actv = Activation(conv_activation[i])(conv)
-            print("actv = Activation(conv_activation[i])(conv)")
+            #print("actv = Activation(conv_activation[i])(conv)")
             
         if use_dropout[i]:
             actv = Dropout(rate=use_dropout[i])(actv)
-            print("actv = Dropout(rate=0.25)(actv)")
+            #print("actv = Dropout(rate=0.25)(actv)")
         
         if i in conv_skip.values(): # The arrow of the skip connection end here
-            print('conv = keras.layers.add([conv, arrow_start])')
+            #print('conv = keras.layers.add([conv, arrow_start])')
             actv = keras.layers.add([actv, arrow_start])
             if use_batch_norm:
                 actv = BatchNormalization()(actv)
-                print("actv = BatchNormalization()(actv)")
+                #print("actv = BatchNormalization()(actv)")
         
         if i in conv_skip.keys(): # The arrow of the skip connection starts here
-            print('arrow_start = actv')
+            #print('arrow_start = actv')
             arrow_start = actv
         
         x.append(actv)
@@ -326,6 +353,12 @@ def build_decoder_skip(mask,input_dim, shape_before_flattening, conv_filters = [
     
     return decoder_inputs, decoder_outputs, decoder  
 
+
+
+
+#####################################################
+#### Old unused routines to be suppressed soon ######        
+##################################################### 
 
 def plot_compare(model, images=None, add_noise=False): # Plot images generated by the autoencoder
     model.encoder(images)
@@ -362,10 +395,6 @@ def vae_generate_images(vae,Z_DIM,n_to_show=10):
         sub = fig.add_subplot(2, n_to_show, i+1)
         sub.axis('off')        
         sub.imshow(img)
-
-#####################################################
-#### Old unused routines to be suppressed soon ######        
-##################################################### 
 
 def build_encoder2(input_dim, output_dim, conv_filters, conv_kernel_size, conv_strides, conv_padding, conv_activation, use_batch_norm = False, use_dropout = False):
     # Number of Conv layers

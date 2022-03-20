@@ -1,5 +1,5 @@
 # George Miloshevich 2022
-# inspired by https://keras.io/examples/generative/vae/
+# for the reference see https://keras.io/examples/generative/vae/
 # merged with (and upgraded to tensorflow 2) https://towardsdatascience.com/generating-new-faces-with-variational-autoencoders-d13cfcb5f0a8
 # Adapted some routines from Learn2_new.py of Alessandro Lovo
 
@@ -48,7 +48,7 @@ logger.info("==Checking CUDA==")
 tf.test.is_built_with_cuda()
 
 # set spacing of the indentation
-ut.indentation_sep = '  '
+ut.indentation_sep = '    '
 
 
 
@@ -183,7 +183,8 @@ def create_or_load_vae(folder, INPUT_DIM, myinput, vae_kwargs=None, encoder_kwar
         it may change if the myinput='C' thus the need to return
     INITIAL_EPOCH: int
         it may change as well because of myinput='C'
-    # TODO: clean up the mess corresponding to checkpoint which in some cases outputs checkpoint_path
+    ckpt_path_callback: str
+        contains the style of the checkpoint file
     '''
     
     logger.info(f"{Fore.YELLOW}==create_or_load_vae=={Style.RESET_ALL}")
@@ -199,6 +200,7 @@ def create_or_load_vae(folder, INPUT_DIM, myinput, vae_kwargs=None, encoder_kwar
     filter_area = vae_kwargs_local.pop('filter_area') # because vae_kwargs_local must be passed to tff.VAE constructor and we still need vae_kwargs for other folds
     Z_DIM = vae_kwargs_local.pop('Z_DIM')
     N_EPOCHS = vae_kwargs_local.pop('N_EPOCHS')
+    print_summary = vae_kwargs_local.pop('print_summary')
     
     print(f"{Fore.GREEN}{INPUT_DIM[:-1] = }{Style.RESET_ALL}")
     
@@ -216,40 +218,47 @@ def create_or_load_vae(folder, INPUT_DIM, myinput, vae_kwargs=None, encoder_kwar
     
     logger.info("==Building encoder==")
     encoder_inputs, encoder_outputs, shape_before_flattening, encoder  = tff.build_encoder_skip(input_dim = INPUT_DIM, output_dim = Z_DIM, **encoder_kwargs)
-    encoder.summary()
+    if print_summary:
+        encoder.summary()
     logger.info("==Building decoder==") 
     decoder_input, decoder_output, decoder = tff.build_decoder_skip(mask=filter_mask, input_dim = Z_DIM, shape_before_flattening = shape_before_flattening, **decoder_kwargs)
-    decoder.summary()
+    if print_summary:
+        decoder.summary()
 
 
     logger.info("==Attaching decoder and encoder and compiling==")
     vae = tff.VAE(encoder, decoder, **vae_kwargs_local) #, mask_weights=mask_weights)
-    logger.info(f'{vae.k1 = },{vae.k2 = } ')
+    if print_summary:
+        logger.info(f'{vae.k1 = },{vae.k2 = } ')
+    
+    
+
     if myinput == 'Y': # The run is to be performed from scratch
         INITIAL_EPOCH = 0
         history_vae = []
-        checkpoint = []
     else: # the run has to be continued
         history_vae = np.load(f'{folder}/history_vae', allow_pickle=True)
         INITIAL_EPOCH = len(history_vae['loss'])
         logger.info(f'==loading the model: {folder}')
         N_EPOCHS = N_EPOCHS + INITIAL_EPOCH 
         #vae = tf.keras.models.load_model(folder, compile=False)
-        checkpoint = tf.train.latest_checkpoint(folder)
-        vae.load_weights(checkpoint)
+        checkpoint_path = tf.train.latest_checkpoint(folder)
+        logger.info(f'loading weights {checkpoint_path = }')
+        vae.load_weights(checkpoint_path)
         
-    logger.info(f'{INITIAL_EPOCH = },{checkpoint = }')
+    logger.info(f'{INITIAL_EPOCH = }')
 
     INPUT_DIM_withnone = list(INPUT_DIM)
     INPUT_DIM_withnone.insert(0,None)
     
     vae.build(tuple(INPUT_DIM_withnone)) 
     vae.compute_output_shape(tuple(INPUT_DIM_withnone))
-    vae.summary()
+    if print_summary:
+        vae.summary()
 
-    checkpoint_path = str(folder)+"/cp_vae-{epoch:04d}.ckpt" # TODO: convert checkpoints to f-strings
-    logger.info(f'{checkpoint_path = }') 
-    return vae, history_vae, N_EPOCHS, INITIAL_EPOCH, checkpoint, checkpoint_path
+    ckpt_path_callback = str(folder)+"/cp_vae-{epoch:04d}.ckpt" # TODO: convert checkpoints to f-strings
+    logger.info(f'{ckpt_path_callback = }') 
+    return vae, history_vae, N_EPOCHS, INITIAL_EPOCH, ckpt_path_callback
 
 @ut.execution_time
 @ut.indent_logger(logger)
@@ -261,9 +270,7 @@ def classify(X_tr, z_tr, Y_tr, X_va, z_va, Y_va, u=1):
     return None
 
 @ut.execution_time
-#@ut.indent_logger(logger)   # -> Causes error:   File "/ClimateDynamics/MediumSpace/ClimateLearningFR/gmiloshe/ERA/utilities.py", line 88, in wrapper
-#    message = (indentation_sep+f'\n{indentation_sep}'.join(message[:-1].split('\n')) + message[-1])
-#IndexError: string index out of range
+@ut.indent_logger(logger)   
 def k_fold_cross_val(folder, myinput, X, Y, year_permutation, create_vae_kwargs=None, train_vae_kwargs=None, nfolds=10, val_folds=1, range_nfolds=None, u=1, normalization_mode='pointwise', classification=True, evaluate_epoch='last'):
     '''
     Performs k fold cross validation on a model architecture.
@@ -385,9 +392,9 @@ def k_fold_cross_val(folder, myinput, X, Y, year_permutation, create_vae_kwargs=
         X_va = normalize_X(X_va, fold_folder, myinput='N', mode=normalization_mode) #validation is always normalized passively (based on already computed normalization)
         
         logger.info(f"{Fore.RED}{create_vae_kwargs = }{Style.RESET_ALL}")
-        vae, history_vae, N_EPOCHS, INITIAL_EPOCH, checkpoint, checkpoint_path = create_or_load_vae(fold_folder, INPUT_DIM, myinput,**create_vae_kwargs)
+        vae, history_vae, N_EPOCHS, INITIAL_EPOCH, ckpt_path_callback = create_or_load_vae(fold_folder, INPUT_DIM, myinput,**create_vae_kwargs)
         if myinput!='N': 
-            history_loss = train_vae(X_tr, vae, checkpoint_path, fold_folder, myinput, N_EPOCHS, INITIAL_EPOCH, history_vae, **train_vae_kwargs)
+            history_loss = train_vae(X_tr, vae, ckpt_path_callback, fold_folder, myinput, N_EPOCHS, INITIAL_EPOCH, history_vae, **train_vae_kwargs)
         else: # myinput='N' is useful when loading this function in reconstruction.py or classification for instance
             history_loss = np.load(f"{fold_folder}/history_vae", allow_pickle=True)['loss']
     # Now we decide whether to use a different epoch for the projection
@@ -419,9 +426,52 @@ def k_fold_cross_val(folder, myinput, X, Y, year_permutation, create_vae_kwargs=
 
     return history_vae, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, vae, X_va, Y_va, X_tr, Y_tr, score 
 
+########################################
+###### TRAINING THE NETWORK ############
+########################################
 
 @ut.execution_time  # prints the time it takes for the function to run
-#@ut.indent_logger(logger)   # indents the log messages produced by this function
+@ut.indent_logger(logger)   # indents the log messages produced by this function: logger indent causes: IndexError: string index out of range
+def train_vae(X, vae, ckpt_path_callback, folder, myinput, N_EPOCHS, INITIAL_EPOCH, history_vae, batch_size=128, lr=1e-3):
+    '''
+    Trains the model
+
+    Parameters
+    ----------
+    
+    '''
+    
+    logger.info(f"{Fore.YELLOW}==train_vae=={Style.RESET_ALL}")
+    logger.info(f"{np.max(X) = }, {np.min(X) = }")
+    
+    cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=ckpt_path_callback,save_weights_only=True,verbose=1)
+
+    vae.compile(optimizer=tf.keras.optimizers.Adam(lr = lr))
+
+    logger.info(f"{Fore.GREEN}== fit =={Style.RESET_ALL}")
+    logger.info(f'{ X.shape = }, {N_EPOCHS = }, {INITIAL_EPOCH = }, {batch_size = }')
+    logger.info(f'{cp_callback = }')
+    vae.summary()
+    my_history_vae = vae.fit(X, epochs=N_EPOCHS, initial_epoch=INITIAL_EPOCH, batch_size=batch_size, shuffle=True, callbacks=[cp_callback], verbose=2) # train on the last 9 folds
+    # Note that we need verbose=2 statement or else @ut.indent_logger(logger) causes errors
+    if myinput == 'C':
+        logger.info("we merge the history_vae dictionaries")
+        logger.info(f" {len(history_vae['loss']) = }")
+        logger.info(f" {len(my_history_vae.history['loss']) = }")
+        for key in history_vae:
+            history_vae[key] = history_vae[key]+my_history_vae.history[key]
+    else:
+        history_vae = my_history_vae.history
+    logger.info(f" { len(history_vae['loss']) = }")
+
+    vae.save(folder)
+    with open(folder+'/history_vae', 'wb') as file_pi:
+        pickle.dump(history_vae, file_pi)
+    
+    return history_vae['loss']
+
+@ut.execution_time  # prints the time it takes for the function to run
+@ut.indent_logger(logger)   # indents the log messages produced by this function
 # logger indent causes: IndexError: string index out of range
 def run_vae(folder, myinput='N', SET_YEARS=range(100), year_permutation=None, XY_run_vae_kwargs=None, evaluate_epoch='last'):# SET_YEARS=range(8000), XY_run_vae_kwargs=None):
     '''
@@ -506,7 +556,7 @@ def run_vae(folder, myinput='N', SET_YEARS=range(100), year_permutation=None, XY
         # TODO: Check optionally that the files are consistent
     
     history_vae, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, vae, X_va, Y_va, X_tr, Y_tr, score = k_fold_cross_val(folder, myinput, X, Y, year_permutation,
-                            create_vae_kwargs={'vae_kwargs':{'k1': 0.9, 'k2': 0.1, 'from_logits': False, 'field_weights': [2.0, 1.0, 2.0], 'filter_area':'France', 'Z_DIM': 64, 'N_EPOCHS': 2#100#10#2
+                            create_vae_kwargs={'vae_kwargs':{'k1': 0.9, 'k2': 0.1, 'from_logits': False, 'print_summary': False, 'field_weights': [2.0, 1.0, 2.0], 'filter_area':'France', 'Z_DIM': 64, 'N_EPOCHS': 2#100#10#2
                                                             },
                                             'encoder_kwargs':{'conv_filters':[16, 16, 16, 32, 32,  32,   64, 64],
                                                         'conv_kernel_size':[5,  5,  5,  5,   5,   5,   5,  3], 
@@ -526,42 +576,7 @@ def run_vae(folder, myinput='N', SET_YEARS=range(100), year_permutation=None, XY
                                                             'use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25], 'usemask' : True}},
                              train_vae_kwargs={'batch_size': 128, 'lr': 1e-3},
                              **k_fold_cross_val_kwargs)
-    return history_vae, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, Y, vae, X_va, Y_va, X_tr, Y_tr, score 
-
-
-@ut.execution_time  # prints the time it takes for the function to run
-#@ut.indent_logger(logger)   # indents the log messages produced by this function
-# logger indent causes: IndexError: string index out of range
-def train_vae(X, vae, checkpoint_path, folder, myinput, N_EPOCHS, INITIAL_EPOCH, history_vae, batch_size=128, lr=1e-3):
-    
-    logger.info(f"{Fore.YELLOW}==train_vae=={Style.RESET_ALL}")
-    logger.info(f"{np.max(X) = }, {np.min(X) = }")
-    
-    cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_path,save_weights_only=True,verbose=1)
-
-    vae.compile(optimizer=tf.keras.optimizers.Adam(lr = lr))
-
-    logger.info(f"{Fore.GREEN}== fit =={Style.RESET_ALL}")
-    logger.info(f'{ X.shape = }, {N_EPOCHS = }, {INITIAL_EPOCH = }, {batch_size = }')
-    logger.info(f'{cp_callback = }')
-    vae.summary()
-    my_history_vae = vae.fit(X, epochs=N_EPOCHS, initial_epoch=INITIAL_EPOCH, batch_size=batch_size, shuffle=True, callbacks=[cp_callback]) # train on the last 9 folds
-
-    if myinput == 'C':
-        logger.info("we merge the history_vae dictionaries")
-        logger.info(f" {len(history_vae['loss']) = }")
-        logger.info(f" {len(my_history_vae.history['loss']) = }")
-        for key in history_vae:
-            history_vae[key] = history_vae[key]+my_history_vae.history[key]
-    else:
-        history_vae = my_history_vae.history
-    logger.info(f" { len(history_vae['loss']) = }")
-
-    vae.save(folder)
-    with open(folder+'/history_vae', 'wb') as file_pi:
-        pickle.dump(history_vae, file_pi)
-    
-    return history_vae['loss']
+    return history_vae, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, vae, X_va, Y_va, X_tr, Y_tr, score 
 
 
 if __name__ == '__main__': # we do this so that we can then load this file as a module in reconstruction.py
