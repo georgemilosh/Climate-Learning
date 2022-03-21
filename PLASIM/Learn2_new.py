@@ -1393,8 +1393,11 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     # return the best value of the return metric
     if return_metric not in history:
         logger.error(f'{return_metric = } is not one of the metrics monitored during training, returning NaN')
-        return np.NaN
-    return np.min(history[return_metric])
+        score = np.NaN
+    else:
+        score = np.min(history[return_metric])
+    logger.log(42, f'{score = }')
+    return score
 
 @ut.execution_time
 @ut.indent_logger(logger)
