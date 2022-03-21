@@ -88,7 +88,7 @@ class VAE(tf.keras.Model): # Class of variational autoencoder
         The idea is to prioritize some fields, for instance the fields that will be filtered (masked) in the decoder
         so that they contribute more. We know that soil moisture matters a lot for the heat waves, yet it is highly local
     '''
-    def __init__(self, encoder, decoder, k1=1, k2=1, from_logits=False, field_weights=None, **kwargs):
+    def __init__(self, encoder, decoder, k1=1, k2=1, from_logits=False, field_weights=None, mask_area=None, Z_DIM=2, N_EPOCHS=2, print_summary=True, **kwargs):
         super(VAE, self).__init__(**kwargs)
         self.encoder = encoder
         self.decoder = decoder
@@ -157,35 +157,35 @@ class VAE(tf.keras.Model): # Class of variational autoencoder
             "kl_loss": self.kl_loss_tracker.result(),
         }
 
-def build_encoder_skip(input_dim, output_dim, conv_filters = [32,64,64,64],
-                                                conv_kernel_size = [3,3,3,3],
-                                                conv_strides = [2,2,2,1],
-                                                conv_padding = ["same","same","same","valid"], 
-                                                conv_activation = ["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"],
-                                                conv_skip = dict({}),
-                                                use_batch_norm=[False,False,False,False], 
-                                                use_dropout=[0,0,0,0]):
+def build_encoder_skip(input_dim, output_dim, encoder_conv_filters = [32,64,64,64],
+                                                encoder_conv_kernel_size = [3,3,3,3],
+                                                encoder_conv_strides = [2,2,2,1],
+                                                encoder_conv_padding = ["same","same","same","valid"], 
+                                                encoder_conv_activation = ["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"],
+                                                encoder_conv_skip = dict({}),
+                                                encoder_use_batch_norm=[False,False,False,False], 
+                                                encoder_use_dropout=[0,0,0,0]):
     
     '''
     builds encoder with potential skip connections
 
     Parameters
     ----------
-    conv_filters : list of int, optional
+    encoder_conv_filters : list of int, optional
         number of filters corresponding to the convolutional layers
-    conv_kernel_size : int, 2-tuple or list of ints or 2-tuples, optional
+    encoder_conv_kernel_size : int, 2-tuple or list of ints or 2-tuples, optional
         If list must be of the same size of `conv_channels`
-    conv_strides : int, 2-tuple or list of ints or 2-tuples, optional
+    encoder_conv_strides : int, 2-tuple or list of ints or 2-tuples, optional
         same as kernel_sizes
-    conv_padding : str
+    encoder_conv_padding : str
         the type of padding used for each layer
-    use_batch_norm : bool or list of bools, optional
+    encoder_use_batch_norm : bool or list of bools, optional
         whether to add a BatchNormalization layer after each Conv2D layer
-    conv_activations : str or list of str, optional
+    encoder_conv_activations : str or list of str, optional
         activation functions after each convolutional layer
-    use_dropout : float in [0,1] or list of floats in [0,1], optional
+    encoder_use_dropout : float in [0,1] or list of floats in [0,1], optional
         dropout to be applied after the BatchNormalization layer. If 0 no dropout is applied
-    conv_skip: dictionary
+    encoder_conv_skip: dictionary
         creates a skip connection between two layers given by key and value entries in the dictionary. 
         If empty no skip connections are included. The skip connection will not work if 
         the dimensions of layers mismatch. For this convolutional architecture should be implemented in future
@@ -198,7 +198,7 @@ def build_encoder_skip(input_dim, output_dim, conv_filters = [32,64,64,64],
     encoder: 
     '''
     # Number of Conv layers
-    n_layers = len(conv_filters)
+    n_layers = len(encoder_conv_filters)
     encoder_inputs = tf.keras.Input(shape=input_dim, name ='encoder input')
     
     x = []
@@ -206,35 +206,35 @@ def build_encoder_skip(input_dim, output_dim, conv_filters = [32,64,64,64],
     # Add convolutional layers
     for i in range(n_layers):
         #print(i, f"Conv2D, filters = {conv_filters[i]}, kernel_size = {conv_kernel_size[i]}, strides = {conv_strides[i]}, padding = {conv_padding[i]}")
-        conv = Conv2D(filters = conv_filters[i], 
-                kernel_size = conv_kernel_size[i],
-                strides = conv_strides[i], 
-                padding = conv_padding[i],
+        conv = Conv2D(filters = encoder_conv_filters[i], 
+                kernel_size = encoder_conv_kernel_size[i],
+                strides = encoder_conv_strides[i], 
+                padding = encoder_conv_padding[i],
                 name = 'encoder_conv_' + str(i))(x[i])
 
-        if use_batch_norm[i]:
+        if encoder_use_batch_norm[i]:
             conv = BatchNormalization()(conv)
             #print("conv = BatchNormalization()(conv)")
             
-        if conv_activation[i] == 'LeakyRelu':
+        if encoder_conv_activation[i] == 'LeakyRelu':
             actv = LeakyReLU()(conv)
             #print("actv = LeakyReLU()(conv)")
         else:
-            actv = Activation(conv_activation[i])(conv)
+            actv = Activation(encoder_conv_activation[i])(conv)
             #print("actv = Activation(conv_activation[i])(conv)")
 
-        if use_dropout[i]>0:
-            actv = Dropout(rate=use_dropout[i])(actv)
+        if encoder_use_dropout[i]>0:
+            actv = Dropout(rate=encoder_use_dropout[i])(actv)
             #print("actv = Dropout(rate=0.25)(actv)")
         
-        if i in conv_skip.values(): # The arrow of the skip connection end here
+        if i in encoder_conv_skip.values(): # The arrow of the skip connection end here
             #print('conv = keras.layers.add([conv, arrow_start])')
             actv = keras.layers.add([actv, arrow_start])
-            if use_batch_norm:
+            if encoder_use_batch_norm:
                 actv = BatchNormalization()(actv)
                 #print("actv = BatchNormalization()(actv)")
         
-        if i in conv_skip.keys(): # The arrow of the skip connection starts here
+        if i in encoder_conv_skip.keys(): # The arrow of the skip connection starts here
             #print('arrow_start = actv')
             arrow_start = actv
         
@@ -254,14 +254,14 @@ def build_encoder_skip(input_dim, output_dim, conv_filters = [32,64,64,64],
 
 
 
-def build_decoder_skip(mask,input_dim, shape_before_flattening, conv_filters = [64,64,32,3],
-                                        conv_kernel_size = [3,3,3,3],
-                                        conv_strides = [1,2,2,2],
-                                        conv_padding = ["valid","same","same","same"], 
-                                        conv_activation = ["LeakyRelu","LeakyRelu","LeakyRelu","sigmoid"],
-                                        conv_skip = dict({}), 
-                                        use_batch_norm = [False,False,False,False], 
-                                        use_dropout = [0,0,0,0], usemask=False):
+def build_decoder_skip(mask,input_dim, shape_before_flattening, decoder_conv_filters = [64,64,32,3],
+                                        decoder_conv_kernel_size = [3,3,3,3],
+                                        decoder_conv_strides = [1,2,2,2],
+                                        decoder_conv_padding = ["valid","same","same","same"], 
+                                        decoder_conv_activation = ["LeakyRelu","LeakyRelu","LeakyRelu","sigmoid"],
+                                        decoder_conv_skip = dict({}), 
+                                        decoder_use_batch_norm = [False,False,False,False], 
+                                        decoder_use_dropout = [0,0,0,0], usemask=False):
     '''
     builds decoder
 
@@ -271,21 +271,21 @@ def build_decoder_skip(mask,input_dim, shape_before_flattening, conv_filters = [
         A mask (filter) to be applied to the output of the decoder (provided that usemask=True)
     shape_before_flattening: tuple, int
         shape of the latent space before flattening. 
-    conv_filters : list of int, optional
+    decoder_conv_filters : list of int, optional
         number of filters corresponding to the convolutional layers
-    conv_kernel_size : int, 2-tuple or list of ints or 2-tuples, optional
+    decoder_conv_kernel_size : int, 2-tuple or list of ints or 2-tuples, optional
         If list must be of the same size of `conv_channels`
-    conv_strides : int, 2-tuple or list of ints or 2-tuples, optional
+    decoder_conv_strides : int, 2-tuple or list of ints or 2-tuples, optional
         same as kernel_sizes
-    conv_padding : str
+    decoder_conv_padding : str
         the type of padding used for each layer
-    use_batch_norm : bool or list of bools, optional
+    decoder_use_batch_norm : bool or list of bools, optional
         whether to add a BatchNormalization layer after each Conv2D layer
-    conv_activations : str or list of str, optional
+    decoder_conv_activations : str or list of str, optional
         activation functions after each convolutional layer
-    use_dropout : float in [0,1] or list of floats in [0,1], optional
+    decoder_use_dropout : float in [0,1] or list of floats in [0,1], optional
         dropout to be applied after the BatchNormalization layer. If 0 no dropout is applied
-    conv_skip: dictionary
+    decoder_conv_skip: dictionary
         creates a skip connection between two layers given by key and value entries in the dictionary. 
         If empty no skip connections are included. The skip connection will not work if 
         the dimensions of layers mismatch. For this convolutional architecture should be implemented in future
@@ -299,7 +299,7 @@ def build_decoder_skip(mask,input_dim, shape_before_flattening, conv_filters = [
     encoder: 
     '''
     # Number of Conv layers
-    n_layers = len(conv_filters)
+    n_layers = len(decoder_conv_filters)
     decoder_inputs = tf.keras.Input(shape=input_dim)
     
     x = []
@@ -311,35 +311,35 @@ def build_decoder_skip(mask,input_dim, shape_before_flattening, conv_filters = [
     # Add convolutional layers
     for i in range(n_layers):
         #print(i, f"Conv2D, filters = {conv_filters[i]}, kernel_size = {conv_kernel_size[i]}, strides = {conv_strides[i]}, padding = {conv_padding[i]}")
-        conv = Conv2DTranspose(filters = conv_filters[i], 
-                            kernel_size = conv_kernel_size[i],
-                            strides = conv_strides[i], 
-                            padding = conv_padding[i],
+        conv = Conv2DTranspose(filters = decoder_conv_filters[i], 
+                            kernel_size = decoder_conv_kernel_size[i],
+                            strides = decoder_conv_strides[i], 
+                            padding = decoder_conv_padding[i],
                             name = 'decoder_conv_' + str(i))(x[i])
         
-        if use_batch_norm[i]:
+        if decoder_use_batch_norm[i]:
             conv = BatchNormalization()(conv)
             #print("conv = BatchNormalization()(conv)")
             
-        if conv_activation[i] == 'LeakyRelu':
+        if decoder_conv_activation[i] == 'LeakyRelu':
             actv = LeakyReLU()(conv)
             #print("actv = LeakyReLU()(conv)")
         else:
-            actv = Activation(conv_activation[i])(conv)
+            actv = Activation(decoder_conv_activation[i])(conv)
             #print("actv = Activation(conv_activation[i])(conv)")
             
-        if use_dropout[i]:
-            actv = Dropout(rate=use_dropout[i])(actv)
+        if decoder_use_dropout[i]:
+            actv = Dropout(rate=decoder_use_dropout[i])(actv)
             #print("actv = Dropout(rate=0.25)(actv)")
         
-        if i in conv_skip.values(): # The arrow of the skip connection end here
+        if i in decoder_conv_skip.values(): # The arrow of the skip connection end here
             #print('conv = keras.layers.add([conv, arrow_start])')
             actv = keras.layers.add([actv, arrow_start])
-            if use_batch_norm:
+            if decoder_use_batch_norm:
                 actv = BatchNormalization()(actv)
                 #print("actv = BatchNormalization()(actv)")
         
-        if i in conv_skip.keys(): # The arrow of the skip connection starts here
+        if i in decoder_conv_skip.keys(): # The arrow of the skip connection starts here
             #print('arrow_start = actv')
             arrow_start = actv
         
