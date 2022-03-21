@@ -487,6 +487,50 @@ def set_values_recursive(d_nested, d_flat, inplace=False):
             d_n[k] = d_flat[k]
     return d_n
 
+def compare_nested(d1, d2):
+    '''
+    Compares two nested dictionary.
+    An item is considered 'added' if it appears in the new version (`d1`) and not in the old one (`d2`) and so on
+
+    Parameters
+    ----------
+    d1 : dict
+        new version
+    d2 : dict
+        old version
+
+    Returns
+    -------
+    dict
+        dictionary containing the nested keys of the arguments that differ between the two dictionaries, either by being added, removed or changed
+
+    Examples
+    --------
+    >>> d1 = {'a': 10, 'b': {'e': 10, 'c': 8}, 'z': 'NO'}
+    >>> d2 = {'a': 11, 'b': {'e': 11, 'c': 8, 'w': 'hi'}}
+    >>> compare_nested(d1, d2)
+    {'a': {'old': 11, 'new': 10}, 'b': {'e': {'old': 11, 'new': 10}, 'w': {'removed': 'hi'}}, 'z': {'added': 'NO'}}
+    '''
+    diff = {}
+
+    for k,v in d1.items():
+        if k not in d2:
+            diff[k] = {'added': v}
+        elif v != d2[k]:
+            if isinstance(v, dict) and isinstance(d2[k], dict):
+                diff[k] = compare_nested(v, d2[k])
+            else:
+                diff[k] = {'old': d2[k], 'new': v}
+
+    for k,v in d2.items():
+        if k not in d1:
+            diff[k] = {'removed': v}
+
+    return diff
+
+
+### run arguments from folder name ###
+
 def get_run_arguments(run_folder):
     '''
     Retrieves the values of the parameters of a run
@@ -681,13 +725,18 @@ def module_from_file(module_name, file_path):
     
     Parameters
     ----------
-    module_name: str
+    module_name : str
         The name we give to the imported module
-    file_path: str
+    file_path : str
         The path to the python file containing the module
+
+    Returns
+    -------
+    module
+
     Examples
     --------
-    >>>>>>> foo = module_from_file("foo", 'models/Funs.py')
+    foo = module_from_file("foo", 'models/Funs.py')
     
     Potential Problems
     --------
