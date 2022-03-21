@@ -430,7 +430,13 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     df.index.name = 'epoch-1'
     logger.log(25, str(df))
 
-    # compute best score of the eon # TODO
+    # compute best score of the eon
+    if return_metric not in history:
+        logger.error(f'{return_metric = } is not one of the metrics monitored during training, returning NaN')
+        score = np.NaN
+    else:
+        score = np.min(history[return_metric])
+    logger.log(42, f'{score = }')
 
     # thanks to early stopping the model is reverted back to the best checkpoint
     
@@ -535,6 +541,13 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
         df.index.name = 'epoch-1'
         logger.log(25, str(df))
 
+        if return_metric not in history:
+            logger.error(f'{return_metric = } is not one of the metrics monitored during training, returning NaN')
+            score = np.NaN
+        else:
+            score = np.min(history[return_metric])
+        logger.log(42, f'{score = }')
+
         # compute q on the training dataset (using batches so I am sure the data fits in memory)
         q_tr = []
         for b in range(_Y_tr.shape[0]//batch_size + 1):
@@ -557,10 +570,7 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     compute_p_func_kwargs['p_arg'] = p_arg_orig
 
     # return the best value of the return metric
-    if return_metric not in history:
-        logger.error(f'{return_metric = } is not one of the metrics monitored during training, returning NaN')
-        return np.NaN
-    return np.min(history[return_metric])
+    return score
 
 #####################################################
 # set the modified function to override the old one #
