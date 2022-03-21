@@ -24,7 +24,7 @@ for i in range(nfolds):
     history = np.load(f'{folder}/fold_{i}/history_vae', allow_pickle=True)#.item()
     print(history.keys())
     
-    cmap = plt.cm.rainbow(color_idx[i])
+    
     for key in history:
         epochs = range(1, len(history[key])+1)
         print(epochs)
@@ -33,20 +33,24 @@ for i in range(nfolds):
         else:
             label =''
         if key=='loss':
+            cmap = plt.cm.Reds(color_idx[i])
             ln1 = ax1.plot(epochs, history[key], label =label, linestyle='solid', marker='.', color = cmap)
         elif key=='reconstruction_loss':
+            cmap = plt.cm.Blues(color_idx[i])
             ln2 = ax2.plot(epochs, history[key], label =label, linestyle='dashed', marker='*',color = cmap)
         elif key=='kl_loss':
+            cmap = plt.cm.Greens(color_idx[i])
             ln3 = ax3.plot(epochs, history[key], label =label, linestyle='dotted', marker='o',color = cmap)
         if i ==nfolds-1:
             lns = ln1+ln2+ln3
             
         
 labs = [l.get_label() for l in lns]
-ax1.legend(lns, labs, loc=0)
+ax3.legend(lns, labs, loc=0)
 
 ax1.set_xlabel("Epochs")
 ax1.set_ylabel("loss")
 ax2.set_ylabel("reconstruction_loss")
 ax3.set_ylabel("kl_loss")
+
 plt.show()
