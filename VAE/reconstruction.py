@@ -74,7 +74,7 @@ i = int(np.load(f'{fold_folder}/fold_num.npy'))
 #X, lat, lon, vae, Z_DIM, N_EPOCHS, INITIAL_EPOCH, BATCH_SIZE, LEARNING_RATE, checkpoint_path, fold_folder, myinput, history = foo.PrepareDataAndVAE(fold_folder, DIFFERENT_YEARS=year_permutation[:800])
 year_permutation_va = np.load(f'{fold_folder}/year_permutation_va.npy')
 # Select times we want to show for reconstruction
-if False: # select at random 10 years out of the validation set 
+if True: # select at random 10 years out of the validation set 
     year_permutation = list(year_permutation_va[rd.sample(range(len(year_permutation_va)), 10)])  
     day_permutation = rd.sample(range(77*len(year_permutation)), 5) # There are 77 days in summer by default
 else: # avoid random permutation, just select minimum number of years allowed in fold

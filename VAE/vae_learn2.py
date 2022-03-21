@@ -40,6 +40,7 @@ tff = ln.tff # TF_Fields
 
 logger.info("==Checking GPU==")
 import tensorflow as tf
+from tensorflow.keras.callbacks import TerminateOnNaN
 tf.test.is_gpu_available(
     cuda_only=False, min_cuda_compute_capability=None
 )
@@ -271,7 +272,7 @@ def classify(X_tr, z_tr, Y_tr, X_va, z_va, Y_va, u=1):
 
 @ut.execution_time
 @ut.indent_logger(logger)   
-def k_fold_cross_val(folder, myinput, X, Y, year_permutation, create_or_load_vae_kwargs=None, train_vae_kwargs=None, nfolds=10, val_folds=1, range_nfolds=None, u=1, normalization_mode='pointwise', classification=True, evaluate_epoch='last'):
+def k_fold_cross_val(folder, myinput, X, Y, year_permutation, create_or_load_vae_kwargs=None, train_vae_kwargs=None, nfolds=10, val_folds=1, range_nfolds=None, u=1, normalization_mode='pointwise', classification=True, evaluate_epoch='last', repeat_nan=5):
     '''
     Performs k fold cross validation on a model architecture.
 
@@ -299,6 +300,8 @@ def k_fold_cross_val(folder, myinput, X, Y, year_permutation, create_or_load_vae
         whether to perform classification or not
     evaluate_epoch: str or int
         epoch at which we wish to perform dimensionality reduction for classification. if 'last' then last checkpoint of vae will be used
+    repeat_nan: int
+        tells do while to repeat the fold that many times if the successive outputs of history['loss'] are nan. Basically if the run has failed we repeat that many times
         
     Returns
     ----------
@@ -345,83 +348,96 @@ def k_fold_cross_val(folder, myinput, X, Y, year_permutation, create_or_load_vae
     my_memory = [] # monitor RAM storage
     score = [] # for classification if need be  
     for i in range_nfolds:
-        logger.info('=============')
-        logger.log(35, f'fold {i} ({i+1}/{nfolds})')
-        logger.info('=============')
-        fold_folder=folder # this allows us to work in a fold by default
-        if os.path.exists(f'{folder}/fold_num.npy'): # # we are inside of one of the folds (we are running the script in the reconstruction mode)
-            logger.log(35,f'{folder}/fold_num.npy exists')
-        else: # we are not inside of one of the folds, either this is a new run, or we need to iterate through the runs
-            logger.log(35,f'{folder}/fold_num.npy does not exist')
-            fold_folder = f'{folder}/fold_{i}'
-            if myinput != 'N': # if 'N' do not create a new folder (just loading) 
-                if myinput == 'Y': # If 'C' we don't need to change anything
-                    os.mkdir(fold_folder)
-                    np.save(f'{fold_folder}/fold_num',i) # the other option would be parsing the fold_N string to get i in future
+        repeat_nan_local = repeat_nan # create an integer copy
+        while repeat_nan_local > -1: # try to train the model
+            logger.info('=============')
+            logger.log(35, f'fold {i} ({i+1}/{nfolds})')
+            logger.info('=============')
+            logger.info(f'{repeat_nan_local = }')
+            fold_folder=folder # this allows us to work in a fold by default
+            if os.path.exists(f'{folder}/fold_num.npy'): # # we are inside of one of the folds (we are running the script in the reconstruction mode)
+                logger.info(f'{folder}/fold_num.npy exists')
+            else: # we are not inside of one of the folds, either this is a new run, or we need to iterate through the runs
+                logger.info(f'{folder}/fold_num.npy does not exist')
+                fold_folder = f'{folder}/fold_{i}'
+                if myinput != 'N': # if 'N' do not create a new folder (just loading) 
+                    if myinput == 'Y': # If 'C' we don't need to change anything
+                        if not os.path.exists(fold_folder):
+                            os.mkdir(fold_folder)
+                            np.save(f'{fold_folder}/fold_num',i) # the other option would be parsing the fold_N string to get i in future
 
-        # split data
-        logger.info(f"{Fore.RED}{i = }, {X.shape = }, {Y.shape = }, {nfolds=}, {val_folds=}{Style.RESET_ALL}")
-        logger.log(35,f"We are working in the mode {reconstruction = }")
-        if reconstruction: # in this case we have already specified the precise set of years
-            X_tr = []
-            Y_tr = []
-            X_va = X
-            Y_va = Y
-            classification=False # we will not do classification in this case (not compatible with current set-up of reconstruction)
-        else:
-            X_tr, Y_tr, X_va, Y_va = ln.k_fold_cross_val_split(i, X, Y, nfolds=nfolds, val_folds=val_folds)
-            if myinput == 'Y': # we also store the year permuation in individual folds so that we can easily access the appropriate years
-                _,_,_,year_permutation_va = ln.k_fold_cross_val_split(i, np.array(year_permutation), np.array(year_permutation)
-                                                                      , nfolds=nfolds, val_folds=val_folds) # we want years that correspond to validation
-                np.save(f'{fold_folder}/year_permutation_va',year_permutation_va)
-                logger.info(f'saved {fold_folder}/year_permutation_va.npy')
-                np.save(f'{fold_folder}/Y_va',Y_va)
-                logger.info(f'saved {fold_folder}/Y_va.npy')
-        INPUT_DIM = X_va.shape[1:]  # Image dimension
-        logger.info(f"{Fore.RED}{INPUT_DIM = }{Style.RESET_ALL}")
-        # perform undersampling
-        #X_tr, Y_tr = undersample(X_tr, Y_tr, u=u)
-        if not reconstruction: # either training or classification, in both cases we need training set
-            n_pos_tr = np.sum(Y_tr)
-            n_neg_tr = len(Y_tr) - n_pos_tr
-            logger.info(f'number of training data: {len(Y_tr)} of which {n_neg_tr} negative and {n_pos_tr} positive')
+            # split data
+            logger.info(f"{Fore.RED}{i = }, {X.shape = }, {Y.shape = }, {nfolds=}, {val_folds=}{Style.RESET_ALL}")
+            logger.info(f"We are working in the mode {reconstruction = }")
+            if reconstruction: # in this case we have already specified the precise set of years
+                X_tr = []
+                Y_tr = []
+                X_va = X
+                Y_va = Y
+                classification=False # we will not do classification in this case (not compatible with current set-up of reconstruction)
+            else:
+                X_tr, Y_tr, X_va, Y_va = ln.k_fold_cross_val_split(i, X, Y, nfolds=nfolds, val_folds=val_folds)
+                if myinput == 'Y': # we also store the year permuation in individual folds so that we can easily access the appropriate years
+                    _,_,_,year_permutation_va = ln.k_fold_cross_val_split(i, np.array(year_permutation), np.array(year_permutation)
+                                                                          , nfolds=nfolds, val_folds=val_folds) # we want years that correspond to validation
+                    np.save(f'{fold_folder}/year_permutation_va',year_permutation_va)
+                    logger.info(f'saved {fold_folder}/year_permutation_va.npy')
+                    np.save(f'{fold_folder}/Y_va',Y_va)
+                    logger.info(f'saved {fold_folder}/Y_va.npy')
+            INPUT_DIM = X_va.shape[1:]  # Image dimension
+            logger.info(f"{Fore.RED}{INPUT_DIM = }{Style.RESET_ALL}")
+            # perform undersampling
+            #X_tr, Y_tr = undersample(X_tr, Y_tr, u=u)
+            if not reconstruction: # either training or classification, in both cases we need training set
+                n_pos_tr = np.sum(Y_tr)
+                n_neg_tr = len(Y_tr) - n_pos_tr
+                logger.info(f'number of training data: {len(Y_tr)} of which {n_neg_tr} negative and {n_pos_tr} positive')
 
-    
-            X_tr = normalize_X(X_tr, fold_folder, myinput=myinput, mode=normalization_mode)
-            logger.info(f'{X_tr.shape = },{np.mean(X_tr[:,5,5,0]) = },{np.std(X_tr[:,5,5,0]) = }')
-        X_va = normalize_X(X_va, fold_folder, myinput='N', mode=normalization_mode) #validation is always normalized passively (based on already computed normalization)
-        
-        logger.info(f"{Fore.RED}{create_or_load_vae_kwargs = }{Style.RESET_ALL}")
-        vae, history_vae, N_EPOCHS, INITIAL_EPOCH, ckpt_path_callback = create_or_load_vae(fold_folder, INPUT_DIM, myinput,**create_or_load_vae_kwargs)
-        if myinput!='N': 
-            history_loss = train_vae(X_tr, vae, ckpt_path_callback, fold_folder, myinput, N_EPOCHS, INITIAL_EPOCH, history_vae, **train_vae_kwargs)
-        else: # myinput='N' is useful when loading this function in reconstruction.py or classification for instance
-            history_loss = np.load(f"{fold_folder}/history_vae", allow_pickle=True)['loss']
-    # Now we decide whether to use a different epoch for the projection
-        checkpoint_path = tf.train.latest_checkpoint(fold_folder)
-        logger.info(f"{checkpoint_path = }")
-        if myinput == 'N': # if running this code in passive mode we have to re-load the weights         
-            if evaluate_epoch != 'last': # we load a specific checkpoint
-                checkpoint_path = str(fold_folder)+f"/cp_vae-{evaluate_epoch:04d}.ckpt" # TODO: convert checkpoints to f-strings
-            logger.info(f"==loading the model: {checkpoint_path}")
-            vae = tf.keras.models.load_model(fold_folder, compile=False)
+
+                X_tr = normalize_X(X_tr, fold_folder, myinput=myinput, mode=normalization_mode)
+                logger.info(f'{X_tr.shape = },{np.mean(X_tr[:,5,5,0]) = },{np.std(X_tr[:,5,5,0]) = }')
+            X_va = normalize_X(X_va, fold_folder, myinput='N', mode=normalization_mode) #validation is always normalized passively (based on already computed normalization)
+
+            logger.info(f"{Fore.RED}{create_or_load_vae_kwargs = }{Style.RESET_ALL}")
+            vae, history_vae, N_EPOCHS, INITIAL_EPOCH, ckpt_path_callback = create_or_load_vae(fold_folder, INPUT_DIM, myinput,**create_or_load_vae_kwargs)
+            if myinput!='N': 
+                history_loss = train_vae(X_tr, vae, ckpt_path_callback, fold_folder, myinput, N_EPOCHS, INITIAL_EPOCH, history_vae, **train_vae_kwargs)
+            else: # myinput='N' is useful when loading this function in reconstruction.py or classification for instance
+                history_loss = np.load(f"{fold_folder}/history_vae", allow_pickle=True)['loss']
+        # Now we decide whether to use a different epoch for the projection
+            checkpoint_path = tf.train.latest_checkpoint(fold_folder)
+            logger.info(f"{checkpoint_path = }")
+            if myinput == 'N': # if running this code in passive mode we have to re-load the weights         
+                if evaluate_epoch != 'last': # we load a specific checkpoint
+                    checkpoint_path = str(fold_folder)+f"/cp_vae-{evaluate_epoch:04d}.ckpt" # TODO: convert checkpoints to f-strings
+                logger.info(f"==loading the model: {checkpoint_path}")
+                vae = tf.keras.models.load_model(fold_folder, compile=False)
+
+                vae.load_weights(f'{checkpoint_path}')
+                logger.info(f'{checkpoint_path} weights loaded')
+            if classification:
+                _,_,z_tr = vae.encoder.predict(X_tr)
+                _,_,z_va = vae.encoder.predict(X_va)
+                logger.info(f"{z_tr.shape = }, {z_va.shape = }" )
+                score.append(classify(X_tr, z_tr, Y_tr, X_va, z_va, Y_va, u)) 
+            else:
+                score=None
+            my_memory.append(psutil.virtual_memory())
+            logger.info(f'RAM memory: {my_memory[-1][3]:.3e}') # Getting % usage of virtual_memory ( 3rd field)
+
+            tf.keras.backend.clear_session()
+            gc.collect() # Garbage collector which removes some extra references to the objects. This is an attempt to micromanage the python handling of RAM
+            if np.isinf( np.array(history_loss)).any() or np.isnan( np.array(history_loss)).any(): # check if there was a 'nan' entry in the loss (it failed)
+                logger.log(35, f'fold {i} had loss = nan and/or inf')
+                repeat_nan_local = repeat_nan_local-1
+            else:
+                # sucessful fold, so terminating while
+                repeat_nan_local = -1
+                
+            if myinput == 'N': # In passive mode we don't need to run while multiple times
+                repeat_nan_local = -1
+            logger.info(f' fold to terminate with {repeat_nan_local = }')
             
-            vae.load_weights(f'{checkpoint_path}')
-            logger.info(f'{checkpoint_path} weights loaded')
-        if classification:
-            _,_,z_tr = vae.encoder.predict(X_tr)
-            _,_,z_va = vae.encoder.predict(X_va)
-            logger.info(f"{z_tr.shape = }, {z_va.shape = }" )
-            score.append(classify(X_tr, z_tr, Y_tr, X_va, z_va, Y_va, u)) 
-        else:
-            score=None
-        my_memory.append(psutil.virtual_memory())
-        logger.info(f'RAM memory: {my_memory[-1][3]:.3e}') # Getting % usage of virtual_memory ( 3rd field)
-
-        tf.keras.backend.clear_session()
-        gc.collect() # Garbage collector which removes some extra references to the objects. This is an attempt to micromanage the python handling of RAM
-
-
     return history_vae, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, vae, X_va, Y_va, X_tr, Y_tr, score 
 
 ########################################
@@ -438,7 +454,7 @@ def train_vae(X, vae, ckpt_path_callback, folder, myinput, N_EPOCHS, INITIAL_EPO
     ----------
     
     '''
-    
+    term = TerminateOnNaN()  # fail during training on NaN loss
     logger.info(f"{Fore.YELLOW}==train_vae=={Style.RESET_ALL}")
     logger.info(f"{np.max(X) = }, {np.min(X) = }")
     
@@ -450,7 +466,7 @@ def train_vae(X, vae, ckpt_path_callback, folder, myinput, N_EPOCHS, INITIAL_EPO
     logger.info(f'{ X.shape = }, {N_EPOCHS = }, {INITIAL_EPOCH = }, {batch_size = }')
     logger.info(f'{cp_callback = }')
     vae.summary()
-    my_history_vae = vae.fit(X, epochs=N_EPOCHS, initial_epoch=INITIAL_EPOCH, batch_size=batch_size, shuffle=True, callbacks=[cp_callback], verbose=2) # train on the last 9 folds
+    my_history_vae = vae.fit(X, epochs=N_EPOCHS, initial_epoch=INITIAL_EPOCH, batch_size=batch_size, shuffle=True, callbacks=[cp_callback,term], verbose=2) # train on the last 9 folds
     # Note that we need verbose=2 statement or else @ut.indent_logger(logger) causes errors
     if myinput == 'C':
         logger.info("we merge the history_vae dictionaries")
@@ -564,22 +580,22 @@ def run_vae(folder, myinput='N', XY_run_vae_keywargs=None, k_fold_cross_val_kwar
 ln.k_fold_cross_val = k_fold_cross_val # so that we can use functions such as ln.get_default_params without confusion with Learn2_new.py
 ln.normalize_X = normalize_X
 ln.move_to_folder = move_to_folder
-ln.create_or_load_vae = create_or_load_vae
+ln.create_or_load_vae = create_or_load_vae # We also need this for kwargator() to work
 ln.train_vae = train_vae
 ln.VAE = tff.VAE
 ln.build_encoder_skip = tff.build_encoder_skip
 ln.build_decoder_skip = tff.build_decoder_skip
 
-if __name__ == '__main__': # we do this so that we can then load this file as a module in reconstruction.py
-    
-    #folder = './models/test5'
-    folder = sys.argv[1]
-    
-    # Update the kwargs
-    run_vae_kwargs_default = ln.get_default_params(run_vae, recursive=True)
-    run_vae_kwargs_default = ut.set_values_recursive(run_vae_kwargs_default,
-                                              {'myinput':'Y', 'lat_end': 24,'fields': ['t2m_filtered','zg500','mrso_filtered'],'year_list': 'range(100)',
-                                               'print_summary' : False, 'k1': 0.9 , 'k2':0.1, 'field_weights': [2.0, 1.0, 2.0],'mask_area':'France', 'Z_DIM': 64, 'N_EPOCHS': 2, 'encoder_conv_filters':[16, 16, 16, 32, 32,  32,   64, 64],
+def kwargator(thefun):
+    '''
+    an option to write kwargs from __main__ to json
+    '''
+    thefun_kwargs_default = ln.get_default_params(thefun, recursive=True)
+    thefun_kwargs_default = ut.set_values_recursive(thefun_kwargs_default,
+                                              {'myinput':'Y', 'lat_end': 24,'fields': ['t2m_filtered','zg500','mrso_filtered'],'year_list': 'range(1000)',
+                                               'print_summary' : False, 'k1': 0.9 , 'k2':0.1, 'field_weights': [2.0, 1.0, 2.0],'mask_area':'France', 'usemask' : True,
+                                               'Z_DIM': 64, 'N_EPOCHS': 100,'batch_size': 128, 'lr': 1e-3,
+                                               'encoder_conv_filters':[16, 16, 16, 32, 32,  32,   64, 64],
                                                         'encoder_conv_kernel_size':[5,  5,  5,  5,   5,   5,   5,  3], 
                                                         'encoder_conv_strides'    :[2,  1,  1,  2,   1,   1,   2,  1],
                                                         'encoder_conv_padding':["same","same","same","same","same","same","same","valid"], 
@@ -594,10 +610,18 @@ if __name__ == '__main__': # we do this so that we can then load this file as a 
                                                          'decoder_conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","sigmoid"], 
                                                                'decoder_conv_skip':dict({(1,3),(4,6)}),
                                                             'decoder_use_batch_norm' : [True,True,True,True,True,True,True,True], 
-                                                            'decoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25], 'usemask' : True,'batch_size': 128, 'lr': 1e-3}) 
-    logger.info(ut.dict2str(run_vae_kwargs_default)) # a nice way of printing nested dictionaries
-    ut.dict2json(run_vae_kwargs_default,'config.json')
+                                                            'decoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25]}) 
+    logger.info(ut.dict2str(thefun_kwargs_default)) # a nice way of printing nested dictionaries
+    ut.dict2json(thefun_kwargs_default,'config.json')
     
+
+if __name__ == '__main__': # we do this so that we can then load this file as a module in reconstruction.py
+    
+    #folder = './models/test5'
+    folder = sys.argv[1]
+    
+    kwargator(run_vae) 
+
     # folder name where weights will be stored
     myinput='Y' # default value
     if os.path.exists(folder): 
@@ -612,7 +636,6 @@ if __name__ == '__main__': # we do this so that we can then load this file as a 
         logger.info(f'folder {folder} created') 
         os.mkdir(folder)
         move_to_folder(folder)
-    #run_vae(folder=folder,myinput=myinput)
     
-    
+    run_vae_kwargs_default = ut.json2dict('config.json')
     run_vae(folder, **run_vae_kwargs_default)

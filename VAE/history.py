@@ -10,37 +10,43 @@ nfolds = int(sys.argv[2])
 
 # we must now number of folds in advance
 
-def plot_metric(i,train_metrics, val_metrics, name_metrics,color_idx):
-    epochs = range(1, len(train_metrics) + 1)
-    if i == 9:
-        plt.plot(epochs, val_metrics, label='test '+str(i), color = plt.cm.Reds(color_idx))
-        plt.plot(epochs, train_metrics, label='train '+str(i), color = plt.cm.Blues(color_idx))
-    else:
-        plt.plot(epochs, val_metrics, color = plt.cm.Reds(color_idx))
-        plt.plot(epochs, train_metrics, color = plt.cm.Blues(color_idx))
-    plt.title('Training and validation '+name_metrics)
-    plt.xlabel("Epochs")
-    plt.ylabel('metrics')
-    return epochs
-
 folder = sys.argv[1]
 
-fig = plt.figure()
+fig, ax1 = plt.subplots()
+fig.subplots_adjust(right=0.75)
+color_idx = np.linspace(0, 1, nfolds)
+ax2 = ax1.twinx() 
+ax3 = ax1.twinx() 
+# Offset the right spine of twin2.  The ticks and label have already been
+# placed on the right by twinx above.
+ax3.spines.right.set_position(("axes", 1.2))
 for i in range(nfolds):
     history = np.load(f'{folder}/fold_{i}/history_vae', allow_pickle=True)#.item()
     print(history.keys())
-
+    
+    cmap = plt.cm.rainbow(color_idx[i])
     for key in history:
         epochs = range(1, len(history[key])+1)
         print(epochs)
-        plt.plot(epochs, history[key], label =f'{key}_{i}')
-    #loss.append(history[metric_name])
-    #val_loss.append(history['val_'+metric_name])
-     #   epochs = plot_metric(i,history[metric_name], history['val_'+metric_name], metric_name, color_idx[i])
+        if i ==nfolds-1:
+            label =f'{key}_{i}'
+        else:
+            label =''
+        if key=='loss':
+            ln1 = ax1.plot(epochs, history[key], label =label, linestyle='solid', marker='.', color = cmap)
+        elif key=='reconstruction_loss':
+            ln2 = ax2.plot(epochs, history[key], label =label, linestyle='dashed', marker='*',color = cmap)
+        elif key=='kl_loss':
+            ln3 = ax3.plot(epochs, history[key], label =label, linestyle='dotted', marker='o',color = cmap)
+        if i ==nfolds-1:
+            lns = ln1+ln2+ln3
+            
+        
+labs = [l.get_label() for l in lns]
+ax1.legend(lns, labs, loc=0)
 
-    #loss = np.array(loss)
-    #plt.plot(epochs, np.mean(loss,0), 'g--', linewidth = 2, label ='train average')
-    #plt.plot(epochs, np.mean(val_loss,0), 'g-.', linewidth = 2, label ='test average')
-
-plt.legend(loc='best')
+ax1.set_xlabel("Epochs")
+ax1.set_ylabel("loss")
+ax2.set_ylabel("reconstruction_loss")
+ax3.set_ylabel("kl_loss")
 plt.show()
