@@ -607,24 +607,25 @@ def kwargator(thefun):
     thefun_kwargs_default = ln.get_default_params(thefun, recursive=True)
     thefun_kwargs_default = ut.set_values_recursive(thefun_kwargs_default,
                                               {'myinput':'Y', 'lat_end': 24,'fields': ['t2m_filtered','zg500','mrso_filtered'],'year_list': 'range(100)',
-                                               'print_summary' : False, 'k1': 0.9 , 'k2':0.1, 'field_weights': [2.0, 1.0, 2.0],'mask_area':'France', 'usemask' : True,
-                                               'Z_DIM': 64, 'N_EPOCHS': 2,'batch_size': 128, 'lr': 5e-4,
-                                               'encoder_conv_filters':[16, 16, 16, 32, 32,  32,   64, 64],
-                                                        'encoder_conv_kernel_size':[5,  5,  5,  5,   5,   5,   5,  3], 
-                                                        'encoder_conv_strides'    :[2,  1,  1,  2,   1,   1,   2,  1],
-                                                        'encoder_conv_padding':["same","same","same","same","same","same","same","valid"], 
-                                                        'encoder_conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"], 
-                                                        'encoder_conv_skip': [[0,2],[3,5]], #None, #dict({(0,2),(3,5)}), 
-                                                        'encoder_use_batch_norm' : [True,True,True,True,True,True,True,True], 
-                                                        'encoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25], 
-                                               'decoder_conv_filters':[64,32,32,32,16,16,16,3], 
-                                                        'decoder_conv_kernel_size':[3, 5, 5, 5, 5, 5, 5, 5], 
-                                                            'decoder_conv_strides':[1, 2, 1, 1, 2, 1, 1, 2],
-                                                            'decoder_conv_padding':["valid","same","same","same","same","same","same","same"], 
-                                                         'decoder_conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","sigmoid"], 
-                                                               'decoder_conv_skip': [[1,3],[4,6]], #None, #dict({(1,3),(4,6)}),
-                                                            'decoder_use_batch_norm' : [True,True,True,True,True,True,True,True], 
-                                                            'decoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25]}) 
+                                               'print_summary' : False, 'k1': 0.5 , 'k2':0.5, 'field_weights': [2.0, 1.0, 2.0],'mask_area':'France', 'usemask' : True, 'Z_DIM': 64, #8,
+                                                'N_EPOCHS': 500,'batch_size': 128, 'lr': 5e-4,
+                                               #'encoder_conv_filters':[16, 16, 16, 32, 32,  32,   64, 64],
+                                               #         'encoder_conv_kernel_size':[5,  5,  5,  5,   5,   5,   5,  3], 
+                                               #         'encoder_conv_strides'    :[2,  1,  1,  2,   1,   1,   2,  1],
+                                               #         'encoder_conv_padding':["same","same","same","same","same","same","same","valid"], 
+                                               #         'encoder_conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"], 
+                                               #         'encoder_conv_skip': None, # [[0,2],[3,5]], #None, #
+                                               #         'encoder_use_batch_norm' : [True,True,True,True,True,True,True,True], 
+                                               #         'encoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25], 
+                                               #'decoder_conv_filters':[64,32,32,32,16,16,16,3], 
+                                               #         'decoder_conv_kernel_size':[3, 5, 5, 5, 5, 5, 5, 5], 
+                                               #             'decoder_conv_strides':[1, 2, 1, 1, 2, 1, 1, 2],
+                                               #             'decoder_conv_padding':["valid","same","same","same","same","same","same","same"], 
+                                               #          'decoder_conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","sigmoid"], 
+                                               #                'decoder_conv_skip':  None, # [[1,3],[4,6]]
+                                               #             'decoder_use_batch_norm' : [True,True,True,True,True,True,True,True], 
+                                               #             'decoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25]
+                                              }) 
     logger.info(ut.dict2str(thefun_kwargs_default)) # a nice way of printing nested dictionaries
     ut.dict2json(thefun_kwargs_default,'config.json')
     
@@ -634,7 +635,7 @@ if __name__ == '__main__': # we do this so that we can then load this file as a 
     #folder = './models/test5'
     folder = sys.argv[1]
     
-    kwargator(run_vae) 
+    
 
     # folder name where weights will be stored
     myinput='Y' # default value
@@ -643,14 +644,18 @@ if __name__ == '__main__': # we do this so that we can then load this file as a 
         myinput = input(" write Y to delete the contains of the folder and start from scratch, N to stop execution, C to continue the run: ")
         if myinput == "N": # cancel
             sys.exit("User has aborted the program")
+        if myinput != 'C': # if the run has been continued we want to uniquely use config.json already stored
+            kwargator(run_vae) 
         if myinput == "Y": # overwrite
             os.system("rm -rf "+folder+"/*")
             move_to_folder(folder) 
         
     else: # Create the directory
-        logger.info(f'folder {folder} created') 
-        os.mkdir(folder)
-        move_to_folder(folder)
+        if myinput != 'C': # if the run has been continued we want to uniquely use config.json already stored
+            kwargator(run_vae) 
+            logger.info(f'folder {folder} created') 
+            os.mkdir(folder)
+            move_to_folder(folder)
     run_vae_kwargs_default = ut.json2dict('config.json')
     if myinput=='C': # If the run is to be continued import the kwargs from there
         if folder != '.': 
