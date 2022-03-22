@@ -268,12 +268,15 @@ def check_config_dict(config_dict):
     try:
         config_dict_flat = ut.collapse_dict(config_dict) # in itself this checks for multiple values for the same key
         found = False
+        label_field = config_dict_flat['label_field']
         for field_name in config_dict_flat['fields']:
-            if field_name.startswith(config_dict_flat['label_field']):
+            if field_name.startswith(label_field):
                 found = True
                 break
         if not found:
-            raise KeyError(f"field {config_dict_flat['label_field']} is not a loaded field")
+            logger.warning(f"field {label_field} is not a loaded field: adding ghost field")
+            config_dict_flat['fields'].append(f'{label_field}_ghost')
+            ut.set_values_recursive(config_dict, {'fields': config_dict_flat['fields']}, inplace=True)
     except Exception as e:
         raise KeyError('Invalid config dictionary') from e
     return config_dict_flat
@@ -697,6 +700,8 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
         path the the data storage. For speed it is better if it is a local path.
     fields : list, optional
         list of field names to be loaded. Add '_filtered' to the name to have the values of the field outside `filter_area` set to zero.
+        Add '_ghost' to the name of the field to load it but not use it for learning.
+        This happens when you need to compute the labels on a field that won't be fed to the network.
 
     Returns
     -------
@@ -737,6 +742,10 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
     # load the fields
     _fields = {}
     for field_name in fields:
+        ghost = False
+        if field_name.endswith('_ghost'):
+            ghost = True
+        field_name = field_name.rsplit('_', 1)[0] # remove '_ghost'
         do_filter = False
         if field_name.endswith('_filtered'): # TO IMPROVE: if you have to filter the data load just the interesting part
             field_name = field_name.rsplit('_', 1)[0] # remove '_filtered'
@@ -756,6 +765,9 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
         if do_filter: # set to zero all values outside `filter_area`
             filter_mask = ef.create_mask(Model, filter_area, field.var, axes='last 2', return_full_mask=True) # potential BUG here
             field.var *= filter_mask
+
+        if ghost:
+            field_name += '_ghost'
 
         _fields[field_name] = field  
     
@@ -815,7 +827,7 @@ def make_X(fields, time_start=30, time_end=120, T=14, tau=0):
         with shape (years, days, lat, lon, field)
     '''
     # stack the fields
-    X = np.array([field.var[:, time_start+tau:time_end+tau-T+1, ...] for field in fields.values()]) # NOTE: maybe chenge to -tau
+    X = np.array([field.var[:, time_start+tau:time_end+tau-T+1, ...] for field_name,field in fields.items() if not field_name.endswith('_ghost')])
     # now transpose the array so the field index becomes the last
     X = X.transpose(*range(1,len(X.shape)), 0)
     return X
@@ -852,7 +864,14 @@ def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0,
         with shape (years, days)
     '''
     X = make_X(fields, time_start=time_start, time_end=time_end, T=T, tau=tau)
-    Y = assign_labels(fields[label_field], time_start=time_start, time_end=time_end, T=T, percent=percent, threshold=threshold)
+    try:
+        lf = fields[label_field]
+    except KeyError:
+        try:
+            lf = fields[f'{label_field}_ghost']
+        except KeyError:
+            raise KeyError(f'Unable to find label field {label_field} among the provided fields {list(fields.keys())}')
+    Y = assign_labels(lf, time_start=time_start, time_end=time_end, T=T, percent=percent, threshold=threshold)
     return X,Y
 
 @ut.execution_time
