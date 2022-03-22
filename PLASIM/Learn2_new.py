@@ -744,12 +744,14 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
     for field_name in fields:
         ghost = False
         if field_name.endswith('_ghost'):
+            field_name = field_name.rsplit('_', 1)[0] # remove '_ghost'
             ghost = True
-        field_name = field_name.rsplit('_', 1)[0] # remove '_ghost'
+
         do_filter = False
         if field_name.endswith('_filtered'): # TO IMPROVE: if you have to filter the data load just the interesting part
             field_name = field_name.rsplit('_', 1)[0] # remove '_filtered'
             do_filter = True
+            
         if field_name not in fields_infos:
             raise KeyError(f'Unknown field {field_name}')
         f_infos = fields_infos[field_name]
