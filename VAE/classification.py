@@ -18,7 +18,7 @@ if __name__ == '__main__':
 else:
     logger = logging.getLogger(__name__)
 logger.level = logging.INFO
-
+import pandas as pd 
 import importlib.util
 def module_from_file(module_name, file_path): #The code that imports the file which originated the training with all the instructions
             spec = importlib.util.spec_from_file_location(module_name, file_path)
@@ -65,7 +65,7 @@ def classify(X_tr, z_tr, Y_tr, X_va, z_va, Y_va, u=1):
     insert description
     '''
     u=1 #10
-    
+    percent = ut.extract_nested(run_vae_kwargs, 'percent')
     logger.info(f"{Fore.BLUE}")
     logger.info(f"==classify of classification.py==")
     logger.info(f"{X_va[23,15,65,0] = }, {z_va[23,14] = }, {Y_va[23] = }") # Just testing if data is processed properly (potentially remove this line)
@@ -76,11 +76,14 @@ def classify(X_tr, z_tr, Y_tr, X_va, z_va, Y_va, u=1):
     logreg = LogisticRegression(solver='liblinear',C=1e5)
     logreg.fit(z_tr, Y_tr)
     Y_pr = logreg.predict(z_va) 
-
+    Y_pr_prob = logreg.predict_proba(z_va)
+    
     TP, TN, FP, FN, MCC = ef.ComputeMCC(Y_va, Y_pr, 'True')
+    new_MCC, new_entropy, New_Skill, new_BS, new_WBS, new_freq = ef.ComputeMetrics(np.array(Y_va), Y_pr_prob, percent, reundersampling_factor=u) 
+    
     logger.info(f"{Y_pr[23] = }")
     logger.info(f"{Style.RESET_ALL}")
-    return TP, TN, FP, FN, MCC 
+    return TP, TN, FP, FN, MCC, new_entropy, New_Skill, new_BS, new_freq
 #z_tr[23,24], Y_tr[23], z_va[23,24], Y_va[23]#
 
 foo.classify = classify
@@ -91,4 +94,10 @@ logger.info(f"{Fore.BLUE}") #  indicates we are inside the routine
 # the rest of the code goes here
 logger.info(f"{Style.RESET_ALL}")
 # Construct 2D array for lon-lat:
-print(score)
+df = pd.DataFrame(score, columns =['TP', 'TN', 'FP', 'FN', 'MCC', 'entropy', 'skill','Brier','freq'])
+
+logger.info(f'{df}')
+logger.info('Computing mean: ')
+logger.info(f'{df.mean(axis = 0)}')
+logger.info('Computing std: ')
+logger.info(f'{df.std(axis = 0)}')

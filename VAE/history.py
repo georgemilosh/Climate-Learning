@@ -52,5 +52,5 @@ ax1.set_xlabel("Epochs")
 ax1.set_ylabel("loss")
 ax2.set_ylabel("reconstruction_loss")
 ax3.set_ylabel("kl_loss")
-
+fig.savefig(f"Images/history.png", bbox_inches='tight', dpi=200)
 plt.show()
