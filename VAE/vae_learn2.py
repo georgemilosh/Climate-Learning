@@ -70,7 +70,7 @@ def move_to_folder(folder):
         name of the folder that accepts the copies
         
     '''
-    logger.info(f"{Fore.YELLOW}==move_to_folder=={Style.RESET_ALL}")
+    logger.info(f"==move_to_folder==")
 
     sys.stdout = ef.Logger(folder)  # Keep a copy of print outputs there
     shutil.copy(__file__, folder+'/Funs.py') # Copy this file to the directory of the training
@@ -116,7 +116,6 @@ def normalize_X(X,folder, myinput='N',mode='pointwise'):
         maxX : field-wise maximum of X 
         minX : field-wise minimum of X 
     '''
-    logger.info(f"{Fore.YELLOW}==normalize_X=={Style.RESET_ALL}")
     if mode == 'pointwise':
         logger.info("===Normalizing X===")
         if myinput != 'N': # mean and std have to be computed
@@ -189,7 +188,6 @@ def create_or_load_vae(folder, INPUT_DIM, myinput, VAE_kwargs=None, build_encode
         contains the style of the checkpoint file
     '''
     
-    logger.info(f"{Fore.YELLOW}==create_or_load_vae=={Style.RESET_ALL}")
     ### preliminary operations
     ##########################
     if VAE_kwargs is None:
@@ -204,7 +202,7 @@ def create_or_load_vae(folder, INPUT_DIM, myinput, VAE_kwargs=None, build_encode
     N_EPOCHS = VAE_kwargs_local.pop('N_EPOCHS')
     print_summary = VAE_kwargs_local.pop('print_summary')
     
-    print(f"{Fore.GREEN}{INPUT_DIM[:-1] = }{Style.RESET_ALL}")
+    print(f"{INPUT_DIM[:-1] = }")
     
     ones_dim = np.ones(INPUT_DIM[:-1])
     
@@ -267,7 +265,6 @@ def classify(X_tr, z_tr, Y_tr, X_va, z_va, Y_va, u=1):
     '''
     At the moment is void
     '''
-    logger.info(f"{Fore.YELLOW}==classify=={Style.RESET_ALL}")
     return None
 
 @ut.execution_time
@@ -327,7 +324,6 @@ def k_fold_cross_val(folder, myinput, X, Y, year_permutation, create_or_load_vae
         intended for reporting classification score
     '''
     
-    logger.info(f"{Fore.YELLOW}==k_fold_cross_val=={Style.RESET_ALL}")
     if create_or_load_vae_kwargs is None:
         create_or_load_vae_kwargs = {}
     if train_vae_kwargs is None:
@@ -367,7 +363,7 @@ def k_fold_cross_val(folder, myinput, X, Y, year_permutation, create_or_load_vae
                             np.save(f'{fold_folder}/fold_num',i) # the other option would be parsing the fold_N string to get i in future
 
             # split data
-            logger.info(f"{Fore.RED}{i = }, {X.shape = }, {Y.shape = }, {nfolds=}, {val_folds=}{Style.RESET_ALL}")
+            logger.info(f"{i = }, {X.shape = }, {Y.shape = }, {nfolds=}, {val_folds=}")
             logger.info(f"We are working in the mode {reconstruction = }")
             if reconstruction: # in this case we have already specified the precise set of years
                 X_tr = []
@@ -385,7 +381,7 @@ def k_fold_cross_val(folder, myinput, X, Y, year_permutation, create_or_load_vae
                     np.save(f'{fold_folder}/Y_va',Y_va)
                     logger.info(f'saved {fold_folder}/Y_va.npy')
             INPUT_DIM = X_va.shape[1:]  # Image dimension
-            logger.info(f"{Fore.RED}{INPUT_DIM = }{Style.RESET_ALL}")
+            logger.info(f"{INPUT_DIM = }")
             # perform undersampling
             #X_tr, Y_tr = undersample(X_tr, Y_tr, u=u)
             if not reconstruction: # either training or classification, in both cases we need training set
@@ -398,7 +394,7 @@ def k_fold_cross_val(folder, myinput, X, Y, year_permutation, create_or_load_vae
                 logger.info(f'{X_tr.shape = },{np.mean(X_tr[:,5,5,0]) = },{np.std(X_tr[:,5,5,0]) = }')
             X_va = normalize_X(X_va, fold_folder, myinput='N', mode=normalization_mode) #validation is always normalized passively (based on already computed normalization)
 
-            logger.info(f"{Fore.RED}{create_or_load_vae_kwargs = }{Style.RESET_ALL}")
+            logger.info(f"{create_or_load_vae_kwargs = }")
             vae, history_vae, N_EPOCHS, INITIAL_EPOCH, ckpt_path_callback = create_or_load_vae(fold_folder, INPUT_DIM, myinput,**create_or_load_vae_kwargs)
             if myinput!='N': 
                 history_loss = train_vae(X_tr, vae, ckpt_path_callback, fold_folder, myinput, N_EPOCHS, INITIAL_EPOCH, history_vae, **train_vae_kwargs)
@@ -455,14 +451,13 @@ def train_vae(X, vae, ckpt_path_callback, folder, myinput, N_EPOCHS, INITIAL_EPO
     
     '''
     term = TerminateOnNaN()  # fail during training on NaN loss
-    logger.info(f"{Fore.YELLOW}==train_vae=={Style.RESET_ALL}")
     logger.info(f"{np.max(X) = }, {np.min(X) = }")
     
     cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=ckpt_path_callback,save_weights_only=True,verbose=1)
 
     vae.compile(optimizer=tf.keras.optimizers.Adam(lr = lr))
 
-    logger.info(f"{Fore.GREEN}== fit =={Style.RESET_ALL}")
+    logger.info(f"== fit ==")
     logger.info(f'{ X.shape = }, {N_EPOCHS = }, {INITIAL_EPOCH = }, {batch_size = }')
     logger.info(f'{cp_callback = }')
     vae.summary()
@@ -486,7 +481,7 @@ def train_vae(X, vae, ckpt_path_callback, folder, myinput, N_EPOCHS, INITIAL_EPO
 
 @ut.execution_time  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function
-def run_vae(folder, myinput='N', XY_run_vae_keywargs=None, k_fold_cross_val_kwargs = None, load_data_kwargs = None, prepare_XY_kwargs = None):# SET_YEARS=range(8000), XY_run_vae_kwargs=None):
+def run_vae(folder, myinput='N', XY_run_vae_keywargs=None, k_fold_cross_val_kwargs = None, load_data_kwargs = None, prepare_XY_kwargs = None, log_level=logging.INFO):# SET_YEARS=range(8000), XY_run_vae_kwargs=None):
     '''
     Loads the data and Creates a Variational AutoEncoder 
     
@@ -534,10 +529,14 @@ def run_vae(folder, myinput='N', XY_run_vae_keywargs=None, k_fold_cross_val_kwar
     LAT:
         Meshgridded latitude
     '''
+    # setup logger to file
+    folder = Path(folder) # converting string to path
     
-    logger.info(f"{Fore.YELLOW}==run_vae=={Style.RESET_ALL}")
-        
-    folder = Path(folder)
+    if myinput != 'N': # in passive mode we don't write to log.log
+        fh = logging.FileHandler(f'{folder}/log.log')
+        fh.setLevel(log_level)
+        logger.handlers.append(fh)
+    
     logger.info(f"{myinput = }")
     if k_fold_cross_val_kwargs is None:
         k_fold_cross_val_kwargs = {}
@@ -548,32 +547,47 @@ def run_vae(folder, myinput='N', XY_run_vae_keywargs=None, k_fold_cross_val_kwar
         
     nfolds = k_fold_cross_val_kwargs['nfolds']
     val_folds = k_fold_cross_val_kwargs['val_folds']
-    if XY_run_vae_keywargs is None: # we don't have X and Y yet, need to load them (may take a lot of time!)
-	# loading full X can be heavy and unnecessary for reconstruction.py so we choose to work with validation automatically provided that folder already involves a fold: 
-        X, Y, year_permutation, lat, lon = ln.prepare_data(load_data_kwargs = load_data_kwargs, prepare_XY_kwargs =prepare_XY_kwargs) # Here I follow the same structure as Alessandro has, otherwise we could use prepare_data_kwargs
-        LON, LAT = np.meshgrid(lon,lat)
-    else: # we already have X and Y yet, no need to load them
-        logger.info(f"loading from provided XY_run_vae_keywargs")
-        X = XY_run_vae_keywargs['X']
-        Y = XY_run_vae_keywargs['Y']
-        year_permutation = XY_run_vae_keywargs['year_permutation']
-        LAT = XY_run_vae_keywargs['LAT']
-        LON = XY_run_vae_keywargs['LON']
-        
-    print(f'{X.shape = }')
-    if myinput != 'N':
-        np.save(f'{folder}/year_permutation',year_permutation)
-        np.save(f'{folder}/Y',Y)
-    else:
-        if os.path.exists(f'{folder}/reconstruction.py'): # We are outside the folds
-            year_permutation_load = np.load(f'{folder}/year_permutation.npy')
-            Y_load = np.load(f'{folder}/Y.npy')
-        else: # We are likely inside the folds (reconstruction.py is indentended to be called like that)
-            year_permutation_load = np.load(f'{folder.parent}/year_permutation.npy')
-            Y_load = np.load(f'{folder.parent}/Y.npy')
-        # TODO: Check optionally that the files are consistent
     
-    history_vae, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, vae, X_va, Y_va, X_tr, Y_tr, score = k_fold_cross_val(folder, myinput, X, Y, year_permutation,**k_fold_cross_val_kwargs)
+    try:
+    
+        if XY_run_vae_keywargs is None: # we don't have X and Y yet, need to load them (may take a lot of time!)
+        # loading full X can be heavy and unnecessary for reconstruction.py so we choose to work with validation automatically provided that folder already involves a fold: 
+            X, Y, year_permutation, lat, lon = ln.prepare_data(load_data_kwargs = load_data_kwargs, prepare_XY_kwargs =prepare_XY_kwargs) # Here I follow the same structure as Alessandro has, otherwise we could use prepare_data_kwargs
+            LON, LAT = np.meshgrid(lon,lat)
+        else: # we already have X and Y yet, no need to load them
+            logger.info(f"loading from provided XY_run_vae_keywargs")
+            X = XY_run_vae_keywargs['X']
+            Y = XY_run_vae_keywargs['Y']
+            year_permutation = XY_run_vae_keywargs['year_permutation']
+            LAT = XY_run_vae_keywargs['LAT']
+            LON = XY_run_vae_keywargs['LON']
+
+        print(f'{X.shape = }')
+        if myinput != 'N':
+            np.save(f'{folder}/year_permutation',year_permutation)
+            np.save(f'{folder}/Y',Y)
+        else:
+            if os.path.exists(f'{folder}/reconstruction.py'): # We are outside the folds
+                year_permutation_load = np.load(f'{folder}/year_permutation.npy')
+                Y_load = np.load(f'{folder}/Y.npy')
+            else: # We are likely inside the folds (reconstruction.py is indentended to be called like that)
+                year_permutation_load = np.load(f'{folder.parent}/year_permutation.npy')
+                Y_load = np.load(f'{folder.parent}/Y.npy')
+            # TODO: Check optionally that the files are consistent
+
+        history_vae, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, vae, X_va, Y_va, X_tr, Y_tr, score = k_fold_cross_val(folder, myinput, X, Y, year_permutation,**k_fold_cross_val_kwargs)
+        
+    except Exception as e:
+            logger.critical(f'Run on {folder = } failed due to {repr(e)}')
+            tb = traceback.format_exc() # log the traceback to the log file
+            logger.error(tb)
+            raise RuntimeError('Run failed') from e
+            
+    finally:
+            if myinput != 'N': # in passive mode we don't write to log.log
+                logger.handlers.remove(fh) # stop writing to the log file
+
+    
     return history_vae, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, vae, X_va, Y_va, X_tr, Y_tr, score 
 
 
@@ -592,15 +606,15 @@ def kwargator(thefun):
     '''
     thefun_kwargs_default = ln.get_default_params(thefun, recursive=True)
     thefun_kwargs_default = ut.set_values_recursive(thefun_kwargs_default,
-                                              {'myinput':'Y', 'lat_end': 24,'fields': ['t2m_filtered','zg500','mrso_filtered'],'year_list': 'range(1000)',
+                                              {'myinput':'Y', 'lat_end': 24,'fields': ['t2m_filtered','zg500','mrso_filtered'],'year_list': 'range(100)',
                                                'print_summary' : False, 'k1': 0.9 , 'k2':0.1, 'field_weights': [2.0, 1.0, 2.0],'mask_area':'France', 'usemask' : True,
-                                               'Z_DIM': 64, 'N_EPOCHS': 100,'batch_size': 128, 'lr': 1e-3,
+                                               'Z_DIM': 64, 'N_EPOCHS': 2,'batch_size': 128, 'lr': 5e-4,
                                                'encoder_conv_filters':[16, 16, 16, 32, 32,  32,   64, 64],
                                                         'encoder_conv_kernel_size':[5,  5,  5,  5,   5,   5,   5,  3], 
                                                         'encoder_conv_strides'    :[2,  1,  1,  2,   1,   1,   2,  1],
                                                         'encoder_conv_padding':["same","same","same","same","same","same","same","valid"], 
                                                         'encoder_conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"], 
-                                                        'encoder_conv_skip':dict({(0,2),(3,5)}), 
+                                                        'encoder_conv_skip': [[0,2],[3,5]], #None, #dict({(0,2),(3,5)}), 
                                                         'encoder_use_batch_norm' : [True,True,True,True,True,True,True,True], 
                                                         'encoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25], 
                                                'decoder_conv_filters':[64,32,32,32,16,16,16,3], 
@@ -608,7 +622,7 @@ def kwargator(thefun):
                                                             'decoder_conv_strides':[1, 2, 1, 1, 2, 1, 1, 2],
                                                             'decoder_conv_padding':["valid","same","same","same","same","same","same","same"], 
                                                          'decoder_conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","sigmoid"], 
-                                                               'decoder_conv_skip':dict({(1,3),(4,6)}),
+                                                               'decoder_conv_skip': [[1,3],[4,6]], #None, #dict({(1,3),(4,6)}),
                                                             'decoder_use_batch_norm' : [True,True,True,True,True,True,True,True], 
                                                             'decoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25]}) 
     logger.info(ut.dict2str(thefun_kwargs_default)) # a nice way of printing nested dictionaries
@@ -632,10 +646,15 @@ if __name__ == '__main__': # we do this so that we can then load this file as a 
         if myinput == "Y": # overwrite
             os.system("rm -rf "+folder+"/*")
             move_to_folder(folder) 
+        
     else: # Create the directory
         logger.info(f'folder {folder} created') 
         os.mkdir(folder)
         move_to_folder(folder)
-    
     run_vae_kwargs_default = ut.json2dict('config.json')
+    if myinput=='C': # If the run is to be continued import the kwargs from there
+        if folder != '.': 
+            raise ValueError("Only continue the run inside the existing folder containing training with `Funs.py .`")
+        run_vae_kwargs_default = ut.set_values_recursive(run_vae_kwargs_default, {'myinput' : myinput})
+    
     run_vae(folder, **run_vae_kwargs_default)
