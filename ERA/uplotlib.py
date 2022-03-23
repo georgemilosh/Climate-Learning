@@ -411,6 +411,28 @@ def std_dev(x):
         return x.s
     return 0.
 
+def avg(x, mean_std=False):
+    '''
+    Returns the average value of an array-like with error accounting fro the dispersion.
+
+    Parameters
+    ----------
+    x : array-like
+        array of values
+    mean_std : bool, optional
+        Whether the error should be the dispersion of the sample (np.std(x)) or the error of the mean (np.std(x)/np.sqrt(len(x))), by default False
+
+    Returns
+    -------
+    unc.ufloat
+        mean +/- std
+    '''
+    m = np.mean(x)
+    s = np.std(x)
+    if mean_std:
+        s /= np.sqrt(len(x))
+    return unc.ufloat(m,s)
+
 
 def _safe_ufloat_fromstr(x):
     '''
