@@ -148,7 +148,7 @@ def normalize_X(X,folder, myinput='N',mode='pointwise'):
 
 @ut.execution_time  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function
-def create_or_load_vae(folder, INPUT_DIM, myinput, VAE_kwargs=None, build_encoder_skip_kwargs=None, build_decoder_skip_kwargs=None):
+def create_or_load_vae(folder, INPUT_DIM, myinput, VAE_kwargs=None, build_encoder_skip_kwargs=None, build_decoder_skip_kwargs=None, checkpoint_every=1):
     '''
     Creates a Variational AutoEncoder Model or loads the existing one 
         from the weights given in the model
@@ -181,10 +181,10 @@ def create_or_load_vae(folder, INPUT_DIM, myinput, VAE_kwargs=None, build_encode
     -------
     model : keras.models.Model
     N_EPOCHS: 
-        it may change if the myinput='C' thus the need to return
+        it used to change if the myinput='C' thus there used to be need to return
     INITIAL_EPOCH: int
         it may change as well because of myinput='C'
-    ckpt_path_callback: str
+    ckpt_path_callback: keras.callbacks.ModelCheckpoint
         contains the style of the checkpoint file
     '''
     
@@ -240,7 +240,7 @@ def create_or_load_vae(folder, INPUT_DIM, myinput, VAE_kwargs=None, build_encode
         history_vae = np.load(f'{folder}/history_vae', allow_pickle=True)
         INITIAL_EPOCH = len(history_vae['loss'])
         logger.info(f'==loading the model: {folder}')
-        N_EPOCHS = N_EPOCHS + INITIAL_EPOCH 
+        #N_EPOCHS = N_EPOCHS + INITIAL_EPOCH 
         checkpoint_path = tf.train.latest_checkpoint(folder)
         logger.info(f'loading weights {checkpoint_path = }')
         vae.load_weights(checkpoint_path)
@@ -254,8 +254,8 @@ def create_or_load_vae(folder, INPUT_DIM, myinput, VAE_kwargs=None, build_encode
     vae.compute_output_shape(tuple(INPUT_DIM_withnone))
     if print_summary:
         vae.summary()
-
-    ckpt_path_callback = str(folder)+"/cp_vae-{epoch:04d}.ckpt" # TODO: convert checkpoints to f-strings
+    ckpt_path_callback=ln.make_checkpoint_callback(str(folder)+"/cp_vae-{epoch:04d}.ckpt", checkpoint_every=checkpoint_every)
+    #ckpt_path_callback = tf.keras.callbacks.ModelCheckpoint(filepath=str(folder)+"/cp_vae-{epoch:04d}.ckpt",save_weights_only=True,verbose=1)# TODO: convert checkpoints to f-strings
     logger.info(f'{ckpt_path_callback = }') 
     return vae, history_vae, N_EPOCHS, INITIAL_EPOCH, ckpt_path_callback
 
@@ -442,7 +442,7 @@ def k_fold_cross_val(folder, myinput, X, Y, year_permutation, create_or_load_vae
 
 @ut.execution_time  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function: logger indent causes: IndexError: string index out of range
-def train_vae(X, vae, ckpt_path_callback, folder, myinput, N_EPOCHS, INITIAL_EPOCH, history_vae, batch_size=128, lr=1e-3):
+def train_vae(X, vae, cp_callback, folder, myinput, N_EPOCHS, INITIAL_EPOCH, history_vae, batch_size=128, lr=1e-3):
     '''
     Trains the model
 
@@ -453,7 +453,7 @@ def train_vae(X, vae, ckpt_path_callback, folder, myinput, N_EPOCHS, INITIAL_EPO
     term = TerminateOnNaN()  # fail during training on NaN loss
     logger.info(f"{np.max(X) = }, {np.min(X) = }")
     
-    cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=ckpt_path_callback,save_weights_only=True,verbose=1)
+    #cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=ckpt_path_callback,save_weights_only=True,verbose=1)
 
     vae.compile(optimizer=tf.keras.optimizers.Adam(lr = lr))
 
@@ -464,11 +464,12 @@ def train_vae(X, vae, ckpt_path_callback, folder, myinput, N_EPOCHS, INITIAL_EPO
     my_history_vae = vae.fit(X, epochs=N_EPOCHS, initial_epoch=INITIAL_EPOCH, batch_size=batch_size, shuffle=True, callbacks=[cp_callback,term], verbose=2) # train on the last 9 folds
     # Note that we need verbose=2 statement or else @ut.indent_logger(logger) causes errors
     if myinput == 'C':
-        logger.info("we merge the history_vae dictionaries")
-        logger.info(f" {len(history_vae['loss']) = }")
-        logger.info(f" {len(my_history_vae.history['loss']) = }")
-        for key in history_vae:
-            history_vae[key] = history_vae[key]+my_history_vae.history[key]
+        if ('loss' in my_history_vae.history.keys()): # problems if the fold already contains the checkpoint = N_EPOCHS
+            logger.info("we merge the history_vae dictionaries")
+            logger.info(f" {len(history_vae['loss']) = }")
+            logger.info(f" {len(my_history_vae.history['loss']) = }")
+            for key in history_vae:
+                history_vae[key] = history_vae[key]+my_history_vae.history[key]
     else:
         history_vae = my_history_vae.history
     logger.info(f" { len(history_vae['loss']) = }")
@@ -606,26 +607,27 @@ def kwargator(thefun):
     '''
     thefun_kwargs_default = ln.get_default_params(thefun, recursive=True)
     thefun_kwargs_default = ut.set_values_recursive(thefun_kwargs_default,
-                                              {'myinput':'Y', 'lat_end': 24,'fields': ['t2m_filtered','zg500','mrso_filtered'],'year_list': 'range(100)',
-                                               'print_summary' : False, 'k1': 0.5 , 'k2':0.5, 'field_weights': [2.0, 1.0, 2.0],'mask_area':'France', 'usemask' : True, 'Z_DIM': 64, #8,
-                                                'N_EPOCHS': 500,'batch_size': 128, 'lr': 5e-4,
-                                               #'encoder_conv_filters':[16, 16, 16, 32, 32,  32,   64, 64],
-                                               #         'encoder_conv_kernel_size':[5,  5,  5,  5,   5,   5,   5,  3], 
-                                               #         'encoder_conv_strides'    :[2,  1,  1,  2,   1,   1,   2,  1],
-                                               #         'encoder_conv_padding':["same","same","same","same","same","same","same","valid"], 
-                                               #         'encoder_conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"], 
-                                               #         'encoder_conv_skip': None, # [[0,2],[3,5]], #None, #
-                                               #         'encoder_use_batch_norm' : [True,True,True,True,True,True,True,True], 
-                                               #         'encoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25], 
-                                               #'decoder_conv_filters':[64,32,32,32,16,16,16,3], 
-                                               #         'decoder_conv_kernel_size':[3, 5, 5, 5, 5, 5, 5, 5], 
-                                               #             'decoder_conv_strides':[1, 2, 1, 1, 2, 1, 1, 2],
-                                               #             'decoder_conv_padding':["valid","same","same","same","same","same","same","same"], 
-                                               #          'decoder_conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","sigmoid"], 
-                                               #                'decoder_conv_skip':  None, # [[1,3],[4,6]]
-                                               #             'decoder_use_batch_norm' : [True,True,True,True,True,True,True,True], 
-                                               #             'decoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25]
-                                              }) 
+                                      {'myinput':'Y', 'lat_end': 24,'fields': ['t2m_filtered','zg500','mrso_filtered'],'year_list': 'range(100)',
+                                               'print_summary' : False, 'k1': 0.9 , 'k2':0.1, 'field_weights': [2.0, 0.01, 2.0],'mask_area':'France', 'usemask' : True, 'Z_DIM': 64, #8,
+                                                'N_EPOCHS': 2,'batch_size': 128, 'lr': 5e-4, 'checkpoint_every': 1,
+                                               'encoder_conv_filters':[16, 16, 16, 32, 32,  32,   64, 64],
+                                                        'encoder_conv_kernel_size':[5,  5,  5,  5,   5,   5,   5,  3],
+                                                        'encoder_conv_strides'    :[2,  1,  1,  2,   1,   1,   2,  1],
+                                                        'encoder_conv_padding':["same","same","same","same","same","same","same","valid"],
+                                                        'encoder_conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"],
+                                                        'encoder_conv_skip': None, # [[0,2],[3,5]], #None, #
+                                                        'encoder_use_batch_norm' : [True,True,True,True,True,True,True,True],
+                                                        'encoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25],
+                                               'decoder_conv_filters':[64,32,32,32,16,16,16,3],
+                                                        'decoder_conv_kernel_size':[3, 5, 5, 5, 5, 5, 5, 5],
+                                                            'decoder_conv_strides':[1, 2, 1, 1, 2, 1, 1, 2],
+                                                            'decoder_conv_padding':["valid","same","same","same","same","same","same","same"],
+                                                         'decoder_conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","sigmoid"],
+                                                               'decoder_conv_skip':  None, # [[1,3],[4,6]]
+                                                            'decoder_use_batch_norm' : [True,True,True,True,True,True,True,True],
+                                                            'decoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25]})
+
+
     logger.info(ut.dict2str(thefun_kwargs_default)) # a nice way of printing nested dictionaries
     ut.dict2json(thefun_kwargs_default,'config.json')
     
