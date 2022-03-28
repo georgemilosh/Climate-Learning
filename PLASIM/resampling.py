@@ -77,16 +77,20 @@ def select(*arrays, amount=0.1, p=None, if_not_enough_data='raise'):
         s = np.sum(p)
         selectable_data = np.sum(p > 0)
         if selectable_data < amount:
+            logger.warning(f'You are asking to select {amount} datapoints from a population of {selectable_data}.')
             if if_not_enough_data == 'warn and duplicate':
-                logger.warning(f'You are asking to select {amount} datapoints from a population of {selectable_data}. Allowing duplicates')
+                logger.warning('Allowing duplicates')
                 replace = True
             elif if_not_enough_data == 'warn and extend':
                 if amount > len(p):
-                    raise ValueError(f'You are asking to select {amount} datapoints but only {len(p)} are left in the reservoir.')
-                logger.warning(f'You are asking to select {amount} datapoints from a population of {selectable_data}. Including also data that had 0 probability of being selected')
+                    raise ValueError(f'Only {len(p)} are left in the reservoir!')
+                logger.warning('Including also data that had 0 probability of being selected')
                 p[p == 0] += s/(100*(len(p) - selectable_data + 1)) # we add to the population at p=0 1% of the probability mass of the population at p > 0
                                                                     # the +1 ensures we add something if `selectable_data` == 0
                 s = np.sum(p)
+            elif if_not_enough_data == 'warn and reduce amount':
+                logger.warning('Reducing the amount of selected data')
+                amount = selectable_data
             else:
                 raise ValueError(f'You are asking to select {amount} datapoints but only {selectable_data} are selectable in the reservoir.')
         
@@ -485,6 +489,10 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
         np.save(f'{eon_folder}/q_tr.npy', q_tr)
         np.save(f'{eon_folder}/Y_tr.npy', Y_tr)
         np.save(f'{eon_folder}/q_va.npy', q_va)
+
+        if len(Y0_remaining) == 0:
+            logger.log(42, f'After eon {eon} all the reservoir has been exhausted: stopping')
+            break
 
         # compute probability distribution for the next eon that would decide which data to add
         p0_func, p1_func = compute_p_func(q_tr, Y_tr, assume_label_knowledge=keep_proportions, **compute_p_func_kwargs)
