@@ -18,6 +18,7 @@ if __name__ == '__main__':
 else:
     logger = logging.getLogger(__name__)
 logger.level = logging.INFO
+
 import pandas as pd 
 import importlib.util
 def module_from_file(module_name, file_path): #The code that imports the file which originated the training with all the instructions
@@ -62,28 +63,50 @@ year_permutation = np.load(f'{folder}/year_permutation.npy')
 
 def classify(X_tr, z_tr, Y_tr, X_va, z_va, Y_va, u=1):
     '''
-    insert description
+    Parameters
+    -----------------
+    X_tr : np.ndarray
+        original train set
+    z_tr : np.ndarray
+        latent train set
+    Y_tr:  np.ndarray
+        train labels
+    X_va : np.ndarray
+        original validation set
+    z_tr : np.ndarray
+        latent validation set
+    Y_va:  np.ndarray
+        validation labels
+    u: float
+        prescribed undersampling rate for classification
     '''
     u=1 #10
     percent = ut.extract_nested(run_vae_kwargs, 'percent')
     logger.info(f"{Fore.BLUE}")
     logger.info(f"==classify of classification.py==")
-    logger.info(f"{X_va[23,15,65,0] = }, {z_va[23,14] = }, {Y_va[23] = }") # Just testing if data is processed properly (potentially remove this line)
-    logger.info(f"{X_tr[23,15,65,0] = }, {z_tr[23,14] = }, {Y_tr[23] = }") # Just testing if data is processed properly (potentially remove this line)
+    #logger.info(f"{X_va[23,15,65,0] = }, {z_va[23,14] = }, {Y_va[23] = }") # Just testing if data is processed properly (potentially remove this line)
+    #logger.info(f"{X_tr[23,15,65,0] = }, {z_tr[23,14] = }, {Y_tr[23] = }") # Just testing if data is processed properly (potentially remove this line)
     logger.info(f"Before undersampling: {len(Y_tr) = }, {len(Y_va) = }, {np.sum(Y_tr==1) = }, {np.sum(Y_va==1) = }")    
     z_tr, Y_tr = ln.undersample(z_tr, Y_tr, u=u)  
     logger.info(f"After undersampling: {len(Y_tr) = }, {len(Y_va) = }, {np.sum(Y_tr==1) = }, {np.sum(Y_va==1) = }")    
-    logreg = LogisticRegression(solver='liblinear',C=1e5)
-    logreg.fit(z_tr, Y_tr)
-    Y_pr = logreg.predict(z_va) 
-    Y_pr_prob = logreg.predict_proba(z_va)
-    
-    TP, TN, FP, FN, MCC = ef.ComputeMCC(Y_va, Y_pr, 'True')
-    new_MCC, new_entropy, New_Skill, new_BS, new_WBS, new_freq = ef.ComputeMetrics(np.array(Y_va), Y_pr_prob, percent, reundersampling_factor=u) 
-    
-    logger.info(f"{Y_pr[23] = }")
+    C_parameter = [1e-3, 1e-2, 5e-2, 1e-1, 5e-1, 1e0, 1e1, 1e2, 1e3, 1e5,1e7,1e9] # Different regularization coefficients (L2 by default)
+    classifier = [LogisticRegression(solver='liblinear',C=index_i) for index_i in C_parameter]
+    TP, TN, FP, FN, MCC, entropy, skill, BS, freq = [np.zeros(len(classifier),) for x in range(9)]
+    for i in range(len(classifier)):
+        classifier[i].fit(z_tr, Y_tr)
+        Y_pr = classifier[i].predict(z_va) 
+        Y_pr_prob = classifier[i].predict_proba(z_va)
+
+        TP[i], TN[i], FP[i], FN[i], MCC[i] = ef.ComputeMCC(Y_va, Y_pr, 'True')
+        _, entropy[i], skill[i], BS[i], _, freq[i] = ef.ComputeMetrics(np.array(Y_va), Y_pr_prob, percent, reundersampling_factor=u) 
+        
+        #logger.info(f"{Y_pr[23] = }") # Just testing if data is processed properly (potentially remove this line)
+    score = pd.DataFrame(np.array([C_parameter, TP, TN, FP, FN, MCC, entropy, skill, BS, freq]).transpose(), columns =['C','TP', 'TN', 'FP', 'FN', 'MCC', 'entropy', 'skill','Brier','freq']) 
+    logger.info('score:')
+    logger.info(f'{score}')
     logger.info(f"{Style.RESET_ALL}")
-    return TP, TN, FP, FN, MCC, new_entropy, New_Skill, new_BS, new_freq
+    return score
+
 #z_tr[23,24], Y_tr[23], z_va[23,24], Y_va[23]#
 
 foo.classify = classify
@@ -92,12 +115,14 @@ run_vae_kwargs = ut.set_values_recursive(run_vae_kwargs, {'myinput' : 'N', 'eval
 history, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, vae, X_va, Y_va, X_tr, Y_tr, score = foo.run_vae(folder, **run_vae_kwargs)
 logger.info(f"{Fore.BLUE}") #  indicates we are inside the routine 
 # the rest of the code goes here
+score = pd.concat(score, keys=range(len(score)),names=['fold', None])
+logger.info('score:')
+logger.info(f'{score}')
+score.to_csv('score.csv')
+logger.info('score mean:')
+logger.info(f'{score.groupby(level=1).mean()}')
+logger.info('score std:')
+logger.info(f'{score.groupby(level=1).std()}')
 logger.info(f"{Style.RESET_ALL}")
-# Construct 2D array for lon-lat:
-df = pd.DataFrame(score, columns =['TP', 'TN', 'FP', 'FN', 'MCC', 'entropy', 'skill','Brier','freq'])
 
-logger.info(f'{df}')
-logger.info('Computing mean: ')
-logger.info(f'{df.mean(axis = 0)}')
-logger.info('Computing std: ')
-logger.info(f'{df.std(axis = 0)}')
+# Construct 2D array for lon-lat:

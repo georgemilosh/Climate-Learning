@@ -440,9 +440,25 @@ def k_fold_cross_val(folder, myinput, X, Y, year_permutation, create_or_load_vae
 ###### TRAINING THE NETWORK ############
 ########################################
 
+def scheduler(epoch, epoch_tol=None, lr=1e-3, lr_min=5e-4):
+  '''
+  This function keeps the initial learning rate for the first ten epochs
+  and decreases it exponentially after that.
+  '''
+  if epoch_tol is None:
+    return lr
+  if epoch < epoch_tol:
+    return lr
+  else:
+    new_lr = lr*tf.math.exp(-0.1)
+    if new_lr < lr_min:
+      new_lr = lr_min
+    return new_lr
+
+
 @ut.execution_time  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function: logger indent causes: IndexError: string index out of range
-def train_vae(X, vae, cp_callback, folder, myinput, N_EPOCHS, INITIAL_EPOCH, history_vae, batch_size=128, lr=1e-3):
+def train_vae(X, vae, cp_callback, folder, myinput, N_EPOCHS, INITIAL_EPOCH, history_vae, batch_size=128, scheduler_kwargs=None):
     '''
     Trains the model
 
@@ -450,12 +466,14 @@ def train_vae(X, vae, cp_callback, folder, myinput, N_EPOCHS, INITIAL_EPOCH, his
     ----------
     
     '''
+    if scheduler_kwargs == None:
+    	scheduler_kwargs = {}
     term = TerminateOnNaN()  # fail during training on NaN loss
     logger.info(f"{np.max(X) = }, {np.min(X) = }")
     
     #cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=ckpt_path_callback,save_weights_only=True,verbose=1)
 
-    vae.compile(optimizer=tf.keras.optimizers.Adam(lr = lr))
+    vae.compile(optimizer=tf.keras.optimizers.Adam())
 
     logger.info(f"== fit ==")
     logger.info(f'{ X.shape = }, {N_EPOCHS = }, {INITIAL_EPOCH = }, {batch_size = }')
@@ -607,15 +625,15 @@ def kwargator(thefun):
     '''
     thefun_kwargs_default = ln.get_default_params(thefun, recursive=True)
     thefun_kwargs_default = ut.set_values_recursive(thefun_kwargs_default,
-                                      {'myinput':'Y', 'lat_end': 24,'fields': ['t2m_filtered','zg500','mrso_filtered'],'year_list': 'range(100)',
-                                               'print_summary' : False, 'k1': 0.9 , 'k2':0.1, 'field_weights': [2.0, 0.01, 2.0],'mask_area':'France', 'usemask' : True, 'Z_DIM': 64, #8,
-                                                'N_EPOCHS': 2,'batch_size': 128, 'lr': 5e-4, 'checkpoint_every': 1,
+	                                             {'myinput':'Y', 'lat_end': 24,'fields': ['t2m_filtered','zg500','mrso_filtered'],'year_list': 'range(100)',
+                                               'print_summary' : False, 'k1': 0.9 , 'k2':0.1, 'field_weights': [2.0, 1.0, 2.0],'mask_area':'France', 'usemask' : True, 'Z_DIM': 64, #2,
+                                                'N_EPOCHS': 100,'batch_size': 128, 'checkpoint_every': 1, 'lr': 2e-3, 'epoch_tol': 2, 'checkpoint_every': 100,
                                                'encoder_conv_filters':[16, 16, 16, 32, 32,  32,   64, 64],
                                                         'encoder_conv_kernel_size':[5,  5,  5,  5,   5,   5,   5,  3],
                                                         'encoder_conv_strides'    :[2,  1,  1,  2,   1,   1,   2,  1],
                                                         'encoder_conv_padding':["same","same","same","same","same","same","same","valid"],
                                                         'encoder_conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"],
-                                                        'encoder_conv_skip': None, # [[0,2],[3,5]], #None, #
+                                                        'encoder_conv_skip': None, #[[0,2],[3,5]]
                                                         'encoder_use_batch_norm' : [True,True,True,True,True,True,True,True],
                                                         'encoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25],
                                                'decoder_conv_filters':[64,32,32,32,16,16,16,3],
@@ -623,10 +641,11 @@ def kwargator(thefun):
                                                             'decoder_conv_strides':[1, 2, 1, 1, 2, 1, 1, 2],
                                                             'decoder_conv_padding':["valid","same","same","same","same","same","same","same"],
                                                          'decoder_conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","sigmoid"],
-                                                               'decoder_conv_skip':  None, # [[1,3],[4,6]]
+                                                               'decoder_conv_skip': None, #[[1,3],[4,6]]
                                                             'decoder_use_batch_norm' : [True,True,True,True,True,True,True,True],
-                                                            'decoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25]})
+                                                            'decoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25]
 
+                                              })
 
     logger.info(ut.dict2str(thefun_kwargs_default)) # a nice way of printing nested dictionaries
     ut.dict2json(thefun_kwargs_default,'config.json')
