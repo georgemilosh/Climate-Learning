@@ -1867,7 +1867,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
     for i,s in enumerate(scores):
         logger.info(f'\tfold {i}: {s}')
         info['scores'][f'fold_{i}'] = s
-    logger.log(41,f'Average score: {ufloat(score_mean, score_std)}')
+    logger.log(45,f'Average score: {ufloat(score_mean, score_std)}')
     info['scores']['mean'] = score_mean
     info['scores']['std'] = score_std
 
