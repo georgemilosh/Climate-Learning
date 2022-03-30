@@ -380,7 +380,7 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     i0_tr = i_tr[0:0]
     i1_tr = i_tr[0:0]
 
-    # brodcast `data_aomunt_per_eon` to the eons
+    # broadcast `data_aomunt_per_eon` to the eons
     if isinstance(data_amount_per_eon, tuple):
         if len(data_amount_per_eon) >= num_eons:
             data_amount_per_eon = list(data_amount_per_eon)[:num_eons] # take only the first `num_eons` elements
