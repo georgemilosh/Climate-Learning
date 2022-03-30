@@ -118,7 +118,7 @@ logger.info(f"{Fore.BLUE}") #  indicates we are inside the routine
 score = pd.concat(score, keys=range(len(score)),names=['fold', None])
 logger.info('score:')
 logger.info(f'{score}')
-score.to_csv('score.csv')
+score.to_csv(f'{folder}/score{checkpoint}.csv')
 logger.info('score mean:')
 logger.info(f'{score.groupby(level=1).mean()}')
 logger.info('score std:')
