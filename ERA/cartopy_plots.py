@@ -71,7 +71,11 @@ def draw_map(m, background='stock_img', **kwargs):
         m.coastlines()
     m.gridlines(**kwargs)
     
-def geo_contourf(m, lon, lat, values, levels=None, cmap='RdBu_r', title=None, put_colorbar=True, draw_coastlines=True, draw_gridlines=True, draw_labels=True, greenwich=False):
+def geo_contourf(m, lon, lat, values,
+                 levels=None, cmap='RdBu_r', title=None,
+                 put_colorbar=True, colorbar_label=None,
+                 draw_coastlines=True, draw_gridlines=True, draw_labels=True,
+                 greenwich=False, **kwargs):
     '''
     Contourf plot together with coastlines and meridians
     
@@ -96,13 +100,13 @@ def geo_contourf(m, lon, lat, values, levels=None, cmap='RdBu_r', title=None, pu
         _lon, _lat, _values = lon, lat, values
         
     im = m.contourf(_lon, _lat, _values, transform=data_proj,
-                    levels=levels, cmap=cmap, extend='both')
+                    levels=levels, cmap=cmap, extend='both', **kwargs)
     if draw_coastlines:
         m.coastlines()
     if draw_gridlines:
         m.gridlines(draw_labels=draw_labels)
     if put_colorbar:
-        plt.colorbar(im)
+        plt.colorbar(im, label=colorbar_label)
     if title is not None:
         m.set_title(title, fontsize=20)
         
