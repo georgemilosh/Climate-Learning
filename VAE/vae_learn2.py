@@ -626,6 +626,7 @@ ln.train_vae = train_vae
 ln.VAE = tff.VAE
 ln.build_encoder_skip = tff.build_encoder_skip
 ln.build_decoder_skip = tff.build_decoder_skip
+ln.scheduler = scheduler
 
 def kwargator(thefun):
     '''
