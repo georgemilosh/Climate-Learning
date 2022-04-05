@@ -5,6 +5,9 @@
 *.nc
 *nohup*
 *__test__*
+*log.log
+*.npy
+*.csv
 **/Data_CESM/**
 **/CESM/H2SOI/**
 **/CESM/Hayashi/**
@@ -13,6 +16,7 @@
 **/Climate/Plasim_tas/**
 **/CESM/Images/**
 **/CESM/Postproc/**
+**/Climate/image/**
 **/Climate/Image/**
 **/Climate/movies/**
 **/ERA/Images/**
@@ -21,6 +25,8 @@
 **/PLASIM/Images/**
 *.ckpt.index
 *.ckpt.data*
+**/ERA/Postproc/**
+**/PLASIM/Logistic/**
 **/PLASIM/Postproc/**
 **/PLASIM/Postproc.old/**
 **/PLASIM/Postproc.old.old/**
