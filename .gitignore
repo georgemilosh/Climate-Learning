@@ -3,3 +3,7 @@
 *.vscode*
 *nohup*
 *__test__*
+**/Data_CESM/**
+**/CESM/H2SOI/**
+**/CESM/Hayashi/**
+**/Climate/Data_Plasim/**
