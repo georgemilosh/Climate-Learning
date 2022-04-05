@@ -2,6 +2,10 @@
 **/fidle-datasets/**
 *.ipynb_checkpoints*
 *.vscode*
+*.pb
+*variables.index
+*checkpoint
+*variables.data*
 *.nc
 *nohup*
 *__test__*
