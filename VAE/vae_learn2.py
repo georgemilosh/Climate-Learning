@@ -261,7 +261,7 @@ def create_or_load_vae(folder, INPUT_DIM, myinput, VAE_kwargs=None, build_encode
 
 @ut.execution_time
 @ut.indent_logger(logger)
-def classify(X_tr, z_tr, Y_tr, X_va, z_va, Y_va, u=1):
+def classify(fold_folder, evaluate_epoch, vae, X_tr, z_tr, Y_tr, X_va, z_va, Y_va, u=1):
     '''
     At the moment is void
     '''
@@ -415,7 +415,7 @@ def k_fold_cross_val(folder, myinput, X, Y, year_permutation, create_or_load_vae
                 _,_,z_tr = vae.encoder.predict(X_tr)
                 _,_,z_va = vae.encoder.predict(X_va)
                 logger.info(f"{z_tr.shape = }, {z_va.shape = }" )
-                score.append(classify(X_tr, z_tr, Y_tr, X_va, z_va, Y_va, u)) 
+                score.append(classify(fold_folder, evaluate_epoch, vae, X_tr, z_tr, Y_tr, X_va, z_va, Y_va, u)) 
             else:
                 score=None
             my_memory.append(psutil.virtual_memory())
@@ -576,7 +576,6 @@ def run_vae(folder, myinput='N', XY_run_vae_keywargs=None, k_fold_cross_val_kwar
     val_folds = k_fold_cross_val_kwargs['val_folds']
     
     try:
-    
         if XY_run_vae_keywargs is None: # we don't have X and Y yet, need to load them (may take a lot of time!)
         # loading full X can be heavy and unnecessary for reconstruction.py so we choose to work with validation automatically provided that folder already involves a fold: 
             X, Y, year_permutation, lat, lon = ln.prepare_data(load_data_kwargs = load_data_kwargs, prepare_XY_kwargs =prepare_XY_kwargs) # Here I follow the same structure as Alessandro has, otherwise we could use prepare_data_kwargs
@@ -634,27 +633,26 @@ def kwargator(thefun):
     '''
     thefun_kwargs_default = ln.get_default_params(thefun, recursive=True)
     thefun_kwargs_default = ut.set_values_recursive(thefun_kwargs_default,
-	                                             {'myinput':'Y', 'lat_end': 24,'fields': ['t2m_filtered','zg500','mrso_filtered'],'year_list': 'range(100)'
-                                                ,'print_summary' : False, 'k1': 0.9 , 'k2':0.1, 'field_weights': [2.0, 0.1, 2.0],'mask_area':'France', 'usemask' : True, 'Z_DIM': 64 #2,
-                                                ,'N_EPOCHS': 100,'batch_size': 128, 'checkpoint_every': 1, 'lr': 5e-4, 'epoch_tol': None, 'checkpoint_every': 1
-                                                ,'encoder_conv_filters':[16, 16, 16, 32, 32,  32,   64, 64]
-                                                        ,'encoder_conv_kernel_size':[5,  5,  5,  5,   5,   5,   5,  3]
-                                                        ,'encoder_conv_strides'    :[2,  1,  1,  2,   1,   1,   2,  1]
-                                                        ,'encoder_conv_padding':["same","same","same","same","same","same","same","valid"]
-                                                        ,'encoder_conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"]
-                                                        ,'encoder_conv_skip': None # [[0,2],[3,5]] #
-                                                        ,'encoder_use_batch_norm' : [True,True,True,True,True,True,True,True] # [False,False,False,False,False,False,False,False]
-                                                        ,'encoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25] #[0,0,0,0,0,0,0,0] #
-                                                        ,'decoder_conv_filters':[64,32,32,32,16,16,16,3]
-                                                        ,'decoder_conv_kernel_size':[3, 5, 5, 5, 5, 5, 5, 5]
-                                                            ,'decoder_conv_strides':[1, 2, 1, 1, 2, 1, 1, 2]
-                                                            ,'decoder_conv_padding':["valid","same","same","same","same","same","same","same"]
-                                                         ,'decoder_conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","sigmoid"]
-                                                               ,'decoder_conv_skip': None # [[1,3],[4,6]] #
-                                                            ,'decoder_use_batch_norm' : [True,True,True,True,True,True,True,True] #[False,False,False,False,False,False,False,False] 
-                                                            ,'decoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25] #[0,0,0,0,0,0,0,0] #
+                                            {'myinput':'Y', 'lat_end': 24,'fields': ['t2m_filtered','zg500','mrso_filtered'],'year_list': 'range(100)',
+                                               'print_summary' : False, 'k1': 0.99 , 'k2':0.01, 'field_weights': [2.0, 1.0, 2.0],'mask_area':'France', 'usemask' : True, 'Z_DIM': 64, #2,
+                                                'N_EPOCHS': 100,'batch_size': 128, 'checkpoint_every': 1, 'lr': 5e-4, 'epoch_tol': None, #,
+                                               'encoder_conv_filters':[16, 16, 16, 32, 32,  32,   64, 64],
+                                                        'encoder_conv_kernel_size':[5,  5,  5,  5,   5,   5,   5,  3],
+                                                        'encoder_conv_strides'    :[2,  1,  1,  2,   1,   1,   2,  1],
+                                                        'encoder_conv_padding':["same","same","same","same","same","same","same","valid"],
+                                                        'encoder_conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"],
+                                                        'encoder_conv_skip': None, #[[0,2],[3,5]]
+                                                        'encoder_use_batch_norm' : [True,True,True,True,True,True,True,True],
+                                                        'encoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25],
+                                               'decoder_conv_filters':[64,32,32,32,16,16,16,3],
+                                                        'decoder_conv_kernel_size':[3, 5, 5, 5, 5, 5, 5, 5],
+                                                            'decoder_conv_strides':[1, 2, 1, 1, 2, 1, 1, 2],
+                                                            'decoder_conv_padding':["valid","same","same","same","same","same","same","same"],
+                                                         'decoder_conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","sigmoid"],
+                                                               'decoder_conv_skip': None, #[[1,3],[4,6]]
+                                                            'decoder_use_batch_norm' : [True,True,True,True,True,True,True,True],
+                                                            'decoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25]
                                               })
-
     logger.info(ut.dict2str(thefun_kwargs_default)) # a nice way of printing nested dictionaries
     ut.dict2json(thefun_kwargs_default,'config.json')
     
