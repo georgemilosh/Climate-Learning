@@ -20,6 +20,7 @@
 **/Climate/Plasim_tas/**
 **/CESM/Images/**
 **/CESM/Postproc/**
+**/CESM/Data_CESM/**
 **/Climate/image/**
 **/Climate/Image/**
 **/Climate/movies/**
@@ -36,3 +37,9 @@
 **/PLASIM/Postproc/**
 **/PLASIM/Postproc.old/**
 **/PLASIM/Postproc.old.old/**
+**/VAE/VAE_weights/**
+**/VAE/tests/**
+**/VAE/tests.old/**
+**/VAE/tests.old.old/**
+**/VAE/Images/**
+**/VAE/models/**
