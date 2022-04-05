@@ -1,6 +1,8 @@
 *__pycache__*
+**/fidle-datasets/**
 *.ipynb_checkpoints*
 *.vscode*
+*.nc*
 *nohup*
 *__test__*
 **/Data_CESM/**
