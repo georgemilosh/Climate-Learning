@@ -1,2 +1,6 @@
 *__pycache__*
 **/fidle-datasets/**
+*.ipynb_checkpoints*
+*.vscode*
+*nohup*
+*__test__*
