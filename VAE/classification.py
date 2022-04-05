@@ -35,7 +35,7 @@ foo = module_from_file("foo", f'{folder}/Funs.py')
 ef = foo.ef # Inherit ERA_Fields_New from the file we are calling
 ut = foo.ut
 
-run_vae_kwargs = ut.json2dict(f"{folder}/config.json")
+
 print("==Importing tensorflow packages===")
 import random as rd  
 from scipy.stats import norm
@@ -108,6 +108,7 @@ def classify(X_tr, z_tr, Y_tr, X_va, z_va, Y_va, u=1):
     return score
 
 #z_tr[23,24], Y_tr[23], z_va[23,24], Y_va[23]#
+run_vae_kwargs = ut.json2dict(f"{folder}/config.json")
 
 foo.classify = classify
 logger.info(f"{Style.RESET_ALL}")
@@ -119,10 +120,7 @@ score = pd.concat(score, keys=range(len(score)),names=['fold', None])
 logger.info('score:')
 logger.info(f'{score}')
 score.to_csv(f'{folder}/score{checkpoint}.csv')
-logger.info('score mean:')
-logger.info(f'{score.groupby(level=1).mean()}')
-logger.info('score std:')
-logger.info(f'{score.groupby(level=1).std()}')
+
 logger.info(f"{Style.RESET_ALL}")
 
 # Construct 2D array for lon-lat:
