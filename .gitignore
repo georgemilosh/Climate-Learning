@@ -2,7 +2,7 @@
 **/fidle-datasets/**
 *.ipynb_checkpoints*
 *.vscode*
-*.nc*
+*.nc
 *nohup*
 *__test__*
 **/Data_CESM/**
@@ -13,3 +13,14 @@
 **/Climate/Plasim_tas/**
 **/CESM/Images/**
 **/CESM/Postproc/**
+**/Climate/Image/**
+**/Climate/movies/**
+**/ERA/Images/**
+**/Gyro/**
+**/PINNS/Utilities/IRK_weights/**
+**/PLASIM/Images/**
+*.ckpt.index
+*.ckpt.data*
+**/PLASIM/Postproc/**
+**/PLASIM/Postproc.old/**
+**/PLASIM/Postproc.old.old/**
