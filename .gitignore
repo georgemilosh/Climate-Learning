@@ -31,6 +31,7 @@
 *.ckpt.data*
 **/ERA/Postproc/**
 **/PLASIM/training.old/**
+**/PLASIM/training/**
 **/PLASIM/Logistic/**
 **/PLASIM/Postproc/**
 **/PLASIM/Postproc.old/**
