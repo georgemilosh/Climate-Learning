@@ -97,7 +97,7 @@ def classify(fold_folder, evaluate_epoch, vae, X_tr, z_tr, Y_tr, X_va, z_va, Y_v
         checkpoint_path = str(fold_folder)+f"/cp_vae-{checkpoint:04d}.ckpt" # TODO: convert checkpoints to f-strings
         logger.info(f"==loading the model: {checkpoint_path}")
         vae = tf.keras.models.load_model(fold_folder, compile=False)
-        vae.load_weights(f'{checkpoint_path}')
+        vae.load_weights(f'{checkpoint_path}').expect_partial()
         logger.info(f'{checkpoint_path} weights loaded')
         _,_,z_tr = vae.encoder.predict(X_tr)
         _,_,z_va = vae.encoder.predict(X_va)
@@ -115,7 +115,7 @@ def classify(fold_folder, evaluate_epoch, vae, X_tr, z_tr, Y_tr, X_va, z_va, Y_v
             Y_pr_prob = classifier[i].predict_proba(z_va)
 
             TP[i], TN[i], FP[i], FN[i], MCC[i] = ef.ComputeMCC(Y_va, Y_pr, 'True')
-            _, entropy[i], skill[i], BS[i], _, freq[i] = ef.ComputeMetrics(np.array(Y_va), Y_pr_prob, percent, reundersampling_factor=u) 
+            _, entropy[i], skill[i], BS[i], _, freq[i] = ef.ComputeMetrics(np.array(Y_va), Y_pr_prob, percent, reundersampling_factor=u, print_output=False) 
             
             #logger.info(f"{Y_pr[23] = }") # Just testing if data is processed properly (potentially remove this line)
         score.append(pd.DataFrame(np.array([C_parameter, TP, TN, FP, FN, MCC, entropy, skill, BS, freq]).transpose(), columns =['C','TP', 'TN', 'FP', 'FN', 'MCC', 'entropy', 'skill','Brier','freq'])) 
