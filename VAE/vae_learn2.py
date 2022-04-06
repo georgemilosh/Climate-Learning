@@ -243,7 +243,7 @@ def create_or_load_vae(folder, INPUT_DIM, myinput, VAE_kwargs=None, build_encode
         #N_EPOCHS = N_EPOCHS + INITIAL_EPOCH 
         checkpoint_path = tf.train.latest_checkpoint(folder)
         logger.info(f'loading weights {checkpoint_path = }')
-        vae.load_weights(checkpoint_path)
+        vae.load_weights(checkpoint_path).expect_partial()
         
     logger.info(f'{INITIAL_EPOCH = }')
 
@@ -409,7 +409,7 @@ def k_fold_cross_val(folder, myinput, X, Y, year_permutation, create_or_load_vae
                 logger.info(f"==loading the model: {checkpoint_path}")
                 vae = tf.keras.models.load_model(fold_folder, compile=False)
 
-                vae.load_weights(f'{checkpoint_path}')
+                vae.load_weights(f'{checkpoint_path}').expect_partial()
                 logger.info(f'{checkpoint_path} weights loaded')
             if classification:
                 _,_,z_tr = vae.encoder.predict(X_tr)
@@ -634,7 +634,7 @@ def kwargator(thefun):
     thefun_kwargs_default = ln.get_default_params(thefun, recursive=True)
     thefun_kwargs_default = ut.set_values_recursive(thefun_kwargs_default,
                                             {'myinput':'Y', 'lat_end': 24,'fields': ['t2m_filtered','zg500','mrso_filtered'],'year_list': 'range(100)',
-                                               'print_summary' : False, 'k1': 0.99 , 'k2':0.01, 'field_weights': [2.0, 1.0, 2.0],'mask_area':'France', 'usemask' : True, 'Z_DIM': 64, #2,
+                                               'print_summary' : False, 'k1': 0.9 , 'k2':0.1, 'field_weights': [2.0, 1.0, 2.0],'mask_area':'France', 'usemask' : True, 'Z_DIM': 64, #2,
                                                 'N_EPOCHS': 100,'batch_size': 128, 'checkpoint_every': 1, 'lr': 5e-4, 'epoch_tol': None, #,
                                                'encoder_conv_filters':[16, 16, 16, 32, 32,  32,   64, 64],
                                                         'encoder_conv_kernel_size':[5,  5,  5,  5,   5,   5,   5,  3],
