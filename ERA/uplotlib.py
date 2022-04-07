@@ -30,25 +30,16 @@ def plot(*args, ax=None, **kwargs):
     else:
         ys = args[0]
         xs = np.arange(len(ys))
+
+    x_val = nominal_value(xs)
+    x_err = std_dev(xs)
+    y_val = nominal_value(ys)
+    y_err = std_dev(ys)
+
+    if ax is None:
+        ax = plt
     
-    if isinstance(xs[0], unc.core.AffineScalarFunc):
-        x_d = np.array([[x.n, x.s] for x in xs])
-        x_val = x_d[:,0]
-        x_err = x_d[:,1]
-    else:
-        x_val = xs
-        x_err = None
-    if isinstance(ys[0], unc.core.AffineScalarFunc):
-        y_d = np.array([[y.n, y.s] for y in ys])
-        y_val = y_d[:,0]
-        y_err = y_d[:,1]
-    else:
-        y_val = ys
-        y_err = None
-    
-    if ax is not None:
-        return ax.errorbar(x_val, y_val, xerr=x_err, yerr=y_err, **kwargs)
-    return plt.errorbar(x_val, y_val, xerr=x_err, yerr=y_err, **kwargs)
+    return ax.errorbar(x_val, y_val, xerr=x_err, yerr=y_err, **kwargs)
 
 def errorband(x, y, ax=None, band_alpha=0.5, **kwargs):
     '''
@@ -392,7 +383,7 @@ def nominal_value(x):
         return unc.ufloat_fromstr(x).n
     if isinstance(x, unc.core.AffineScalarFunc):
         return x.n
-    return x
+    return float(x)
 
 @np.vectorize
 def std_dev(x):
