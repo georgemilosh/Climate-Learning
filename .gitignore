@@ -46,7 +46,8 @@
 **/VAE/Images/**
 **/VAE/models/**
 **/gmiloshe/MachineLearning/**
-**/gmiloshe/PINNS/**
+**/PINNS/**
 **/PLASIM/Images_Linear/**
 **/PLASIM/Postproc.daily/**
-
+**/CESM/image/**
+**/Climate/archive/**
