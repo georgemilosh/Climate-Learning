@@ -2157,7 +2157,7 @@ def ReNormProbability(Y_pred_prob_input, reundersampling_factor=1):
     return Y_pred_prob
 
 
-def ComputeMetrics(Y_test, Y_pred_prob_input, percent, reundersampling_factor=1):  # Compute the metrics given the probabilities and the outcome
+def ComputeMetrics(Y_test, Y_pred_prob_input, percent, reundersampling_factor=1, print_output=True):  # Compute the metrics given the probabilities and the outcome
     """
     Denominator = 1 - (1 - reundersampling_factor)*Y_pred_prob[:,0]
     Y_pred_prob = np.c_[reundersampling_factor*Y_pred_prob[:,0]/Denominator, Y_pred_prob[:,1]/Denominator]
@@ -2178,8 +2178,8 @@ def ComputeMetrics(Y_test, Y_pred_prob_input, percent, reundersampling_factor=1)
     new_BS = np.sum((Y_test-Y_pred_prob[:,1])**2)/Y_test.shape[0]
     new_WBS =  np.sum((100./(100.-percent-(100.-2*percent)*Y_test))*(Y_test-Y_pred_prob[:,1])**2)/np.sum((100./(100.-percent-(100.-2*percent)*Y_test)))
     new_freq = np.sum(label_assignment)/Y_test.shape[0]
-
-    print("renorm = ", reundersampling_factor,", MCC = " , new_MCC," ,entropy = ", new_entropy, " ,entropy = ", -np.sum(np.c_[1-Y_test,Y_test]*np.log(Y_pred_prob))/Y_test.shape[0], " , skill = ", new_skill," ,BS = ", new_BS, " , WBS = ", new_WBS, " , freq = ", new_freq)
+    if print_output:
+        logger.info("renorm = ", reundersampling_factor,", MCC = " , new_MCC," ,entropy = ", new_entropy, " ,entropy = ", -np.sum(np.c_[1-Y_test,Y_test]*np.log(Y_pred_prob))/Y_test.shape[0], " , skill = ", new_skill," ,BS = ", new_BS, " , WBS = ", new_WBS, " , freq = ", new_freq)
     
     return new_MCC, new_entropy, new_skill, new_BS, new_WBS, new_freq
 
