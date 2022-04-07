@@ -354,7 +354,7 @@ def build_decoder_skip(mask,input_dim, shape_before_flattening, decoder_conv_fil
         
         x.append(actv)
         
-    if usemask is not None: # a tensorflow array that will typically contain 
+    if usemask: # a tensorflow array that will typically contain 
         decoder_outputs = ConstMul(mask,(~mask)*0.5)(x[-1])  # This will multiply the input by mask consisting of 0's (False) and 1's (True). Because the decoder is expected to reconstruct sigmoid function we add 0.5 where there were 0's
     else:
         decoder_outputs = x[-1]
