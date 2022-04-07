@@ -18,6 +18,7 @@
 **/Climate/Data_Plasim/**
 **/Climate/Plasim/**
 **/Climate/Plasim_tas/**
+**/Climate/Images/**
 **/CESM/Images/**
 **/CESM/Postproc/**
 **/CESM/Data_CESM/**
@@ -31,6 +32,7 @@
 *.ckpt.index
 *.ckpt.data*
 **/ERA/Postproc/**
+**/ERA/Hayashi/**
 **/PLASIM/training.old/**
 **/PLASIM/training/**
 **/PLASIM/Logistic/**
@@ -43,3 +45,8 @@
 **/VAE/tests.old.old/**
 **/VAE/Images/**
 **/VAE/models/**
+**/gmiloshe/MachineLearning/**
+**/gmiloshe/PINNS/**
+**/PLASIM/Images_Linear/**
+**/PLASIM/Postproc.daily/**
+
