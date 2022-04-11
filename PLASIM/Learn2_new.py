@@ -490,6 +490,31 @@ def group_by_varying(run_args, variable='tau', config_dict_flat=None):
         groups.append({'args': group_args[i], 'runs': group_runs[i], variable:[variable_dict[k] for k in group_runs[i]]})
     return groups
 
+def make_groups(runs, variable='tau', config_dict_flat=None):
+    '''
+    A wrapper of `group by varying` that allows to use directly the runs dictionary rather then needing to extract the run arguments
+
+    Parameters
+    ----------
+    runs : dict
+        dictionary with the runs
+    variable : str, optional
+        argument that varies inside each group, by default 'tau'
+    config_dict_flat : dict, optional
+        flattened config dictionary with the default values, by default None
+
+    Returns
+    -------
+    list
+        list of groups. 
+        Each group is a dictionary with the same structure as the output of `group_by_varying` but the argument 'runs' contains the full run dictionary instead of just the run numbers
+    '''
+    run_args = {k:v['args'] for k,v in runs.items()}
+    groups = group_by_varying(run_args, variable=variable, config_dict_flat=config_dict_flat)
+    for g in groups:
+        g['runs'] = [runs[k] for k in g['runs']]
+    return groups
+
 def get_run(load_from, current_run_name=None, runs_path='./runs.json'):
     '''
     Parameters
