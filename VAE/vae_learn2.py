@@ -17,6 +17,7 @@ import shutil
 import psutil
 import gc
 import pickle
+import traceback
 from pathlib import Path
 from colorama import Fore # support colored output in terminal
 from colorama import Style
@@ -634,7 +635,7 @@ def kwargator(thefun):
     thefun_kwargs_default = ln.get_default_params(thefun, recursive=True)
     thefun_kwargs_default = ut.set_values_recursive(thefun_kwargs_default,
                                             {'myinput':'Y', 'lat_end': 24,'fields': ['t2m_filtered','zg500','mrso_filtered'],'year_list': 'range(100)',
-                                               'print_summary' : False, 'k1': 0.9 , 'k2':0.1, 'field_weights': [2.0, 1.0, 2.0],'mask_area':'France', 'usemask' : True, 'Z_DIM': 64, #2,
+                                               'print_summary' : False, 'k1': 0.9 , 'k2':0.1, 'field_weights': [2.0, 0.0, 2.0],'mask_area':'France', 'usemask' : True, 'Z_DIM': 64, #2,
                                                 'N_EPOCHS': 100,'batch_size': 128, 'checkpoint_every': 1, 'lr': 5e-4, 'epoch_tol': None, #,
                                                'encoder_conv_filters':[16, 16, 16, 32, 32,  32,   64, 64],
                                                         'encoder_conv_kernel_size':[5,  5,  5,  5,   5,   5,   5,  3],
@@ -653,6 +654,7 @@ def kwargator(thefun):
                                                             'decoder_use_batch_norm' : [True,True,True,True,True,True,True,True],
                                                             'decoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25]
                                               })
+
     logger.info(ut.dict2str(thefun_kwargs_default)) # a nice way of printing nested dictionaries
     ut.dict2json(thefun_kwargs_default,'config.json')
     
