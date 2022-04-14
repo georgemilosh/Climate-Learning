@@ -51,3 +51,8 @@
 **/PLASIM/Postproc.daily/**
 **/CESM/image/**
 **/Climate/archive/**
+**/PLASIM/test_19_03/**
+**/PLASIM/test_resampling/**
+**/PLASIM/test_resampling2/**
+**/PLASIM/test_resampling3/**
+**/PLASIM/models/**
