@@ -21,6 +21,7 @@ import traceback
 from pathlib import Path
 from colorama import Fore # support colored output in terminal
 from colorama import Style
+from functools import partial # this one we use for the scheduler
 if __name__ == '__main__':
     logger = logging.getLogger()
     logger.handlers = [logging.StreamHandler(sys.stdout)]
@@ -441,7 +442,7 @@ def k_fold_cross_val(folder, myinput, X, Y, year_permutation, create_or_load_vae
 ###### TRAINING THE NETWORK ############
 ########################################
 
-def scheduler(epoch, epoch_tol=None, lr=5e-4, lr_min=5e-4):
+def scheduler(epoch, lr=5e-4, epoch_tol=None, lr_min=5e-4):
   '''
   This function keeps the initial learning rate for the first ten epochs
   and decreases it exponentially after that.
@@ -456,14 +457,54 @@ def scheduler(epoch, epoch_tol=None, lr=5e-4, lr_min=5e-4):
   '''
   if epoch_tol is None:
     return lr
-  if epoch < epoch_tol:
+  elif epoch < epoch_tol:
     return lr
   else:
-    new_lr = lr*tf.math.exp(-0.1)
+    new_lr = lr*tf.math.exp(-0.1*(epoch-epoch_tol+1))
     if new_lr < lr_min:
       new_lr = lr_min
     return new_lr
 
+
+class PrintLR(tf.keras.callbacks.Callback):
+    '''
+        Prints learning rate given the input model
+    '''
+    def __init__(self, model):
+        self.model = model
+    def on_epoch_end(self, epoch, logs=None):
+        logger.info('\nLearning rate for epoch {} is {}'.format(        epoch + 1, self.model.optimizer.lr.numpy()))
+"""
+class scheduler(tf.keras.optimizers.schedules.LearningRateSchedule):
+    '''
+    This function keeps the initial learning rate for the first ten epochs
+    and decreases it exponentially after that.
+    Parameters
+    ----------
+    epoch_tol: int
+        epoch until which we apply flat lr learning rate, if None learning rate will be fixed
+    lr: float
+        learning rate
+    lr_min: float
+        minimal learning rate
+    '''
+    def __init__(self, lr=5e-4, epoch_tol=None, lr_min=5e-4):
+        super(scheduler, self).__init__()
+        self.lr = lr
+        self.epoch_tol = epoch_tol
+        self.lr_min = lr_min
+
+    def __call__(self, step):
+        if self.epoch_tol is None:
+            return self.lr
+        if step < self.epoch_tol:
+            return self.lr
+        else:
+            new_lr = self.lr*tf.math.exp(-0.1)
+            if new_lr < self.lr_min:
+                new_lr = self.lr_min
+            return new_lr
+"""
 
 @ut.execution_time  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function: logger indent causes: IndexError: string index out of range
@@ -479,16 +520,16 @@ def train_vae(X, vae, cp_callback, folder, myinput, N_EPOCHS, INITIAL_EPOCH, his
     if scheduler_kwargs == None:
         scheduler_kwargs = {}
     logger.info(f"{np.max(X) = }, {np.min(X) = }")
-    
+    logger.info(f"{scheduler_kwargs = }")
     #cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=ckpt_path_callback,save_weights_only=True,verbose=1)
-    scheduler_callback = tf.keras.callbacks.LearningRateScheduler(scheduler)
+    scheduler_callback = tf.keras.callbacks.LearningRateScheduler(partial(scheduler, **scheduler_kwargs))
     vae.compile(optimizer=tf.keras.optimizers.Adam())
 
     logger.info(f"== fit ==")
     logger.info(f'{ X.shape = }, {N_EPOCHS = }, {INITIAL_EPOCH = }, {batch_size = }')
     logger.info(f'{cp_callback = }')
     vae.summary()
-    my_history_vae = vae.fit(X, epochs=N_EPOCHS, initial_epoch=INITIAL_EPOCH, batch_size=batch_size, shuffle=True, callbacks=[cp_callback,scheduler_callback,term], verbose=2) # train on the last 9 folds
+    my_history_vae = vae.fit(X, epochs=N_EPOCHS, initial_epoch=INITIAL_EPOCH, batch_size=batch_size, shuffle=True, callbacks=[cp_callback,scheduler_callback, PrintLR(**dict(model=vae)),term], verbose=2) # train on the last 9 folds
     # Note that we need verbose=2 statement or else @ut.indent_logger(logger) causes errors
     if myinput == 'C':
         if ('loss' in my_history_vae.history.keys()): # problems if the fold already contains the checkpoint = N_EPOCHS
@@ -635,8 +676,8 @@ def kwargator(thefun):
     thefun_kwargs_default = ln.get_default_params(thefun, recursive=True)
     thefun_kwargs_default = ut.set_values_recursive(thefun_kwargs_default,
                                             {'myinput':'Y', 'lat_end': 24,'fields': ['t2m_filtered','zg500','mrso_filtered'],'year_list': 'range(100)',
-                                               'print_summary' : False, 'k1': 0.9 , 'k2':0.1, 'field_weights': [2.0, 0.0, 2.0],'mask_area':'France', 'usemask' : True, 'Z_DIM': 64, #2,
-                                                'N_EPOCHS': 100,'batch_size': 128, 'checkpoint_every': 1, 'lr': 5e-4, 'epoch_tol': None, #,
+                                               'print_summary' : False, 'k1': 0.9 , 'k2':0.1, 'field_weights': [20.0, 1.0, 20.0],'mask_area':'France', 'usemask' : True, 'Z_DIM': 8, #2,
+                                                'N_EPOCHS': 100,'batch_size': 128, 'checkpoint_every': 1, 'lr': 5e-4, 'epoch_tol': None, 'lr_min' : 5e-4, #None, #,
                                                'encoder_conv_filters':[16, 16, 16, 32, 32,  32,   64, 64],
                                                         'encoder_conv_kernel_size':[5,  5,  5,  5,   5,   5,   5,  3],
                                                         'encoder_conv_strides'    :[2,  1,  1,  2,   1,   1,   2,  1],
