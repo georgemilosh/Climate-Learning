@@ -88,11 +88,15 @@ def classify(fold_folder, evaluate_epoch, vae, X_tr, z_tr, Y_tr, X_va, z_va, Y_v
     logger.info(f"==classify of classification.py==")
     #logger.info(f"{X_va[23,15,65,0] = }, {z_va[23,14] = }, {Y_va[23] = }") # Just testing if data is processed properly (potentially remove this line)
     #logger.info(f"{X_tr[23,15,65,0] = }, {z_tr[23,14] = }, {Y_tr[23] = }") # Just testing if data is processed properly (potentially remove this line)
-    if evaluate_epoch>99: # because we want range to reach the last evaluate_epoch
-        checkpoints = list(range(0,100,10))+list(range(100,evaluate_epoch+1,100)) 
+    if evaluate_epoch>999:
+        checkpoints = list(range(0,10,1))+list(range(10,100,10))+list(range(100,1000,100))+list(range(1000,evaluate_epoch+1,1000))
+    elif evaluate_epoch>99: # because we want range to reach the last evaluate_epoch
+        checkpoints = list(range(0,10,1))+list(range(10,100,10))+list(range(100,evaluate_epoch+1,100))
+    elif evaluate_epoch>9: # because we want range to reach the last evaluate_epoch
+        checkpoints = list(range(0,10,1))+list(range(10,evaluate_epoch+1,10))
     else:
-        checkpoints = list(range(0,evaluate_epoch+1,10))
-    checkpoints[0] = 1
+        checkpoints = list(range(0,evaluate_epoch+1,1))
+    checkpoints = checkpoints[1:]
     score = []
     labels = ['Log_L2','kNN_uni','kNN_dst']
     L_parameter = [1e-3, 1e-2, 5e-2, 1e-1, 5e-1, 1e0, 1e1, 1e2, 1e3, 1e5,1e7,1e9] # Logistic regularization coefficients (L2 by default)
