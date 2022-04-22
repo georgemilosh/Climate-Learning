@@ -1376,35 +1376,55 @@ def __weighted_average_with_mask(dim, mask, weights, xa, xa_copy):
         
     
 class Plasim_Field:
-    def __init__(self, name, filename, label, Model, years=1000, **kwargs):
+    def __init__(self, name, filename, label, Model, years=1000, mylocal='/local/gmiloshe/PLASIM/', **kwargs):
         self.name = name    # Name inside the .nc file
-        self.filename = filename # Name of the .nc file 
+        self.filename = filename # path to the .nc file starting from `mylocal`
         self.label = label  # Label to be displayed on the graph
-
-        self.field = xr.open_dataset(filename)[name]
+        self.Model = Model
         self.years = years
+        self.mylocal = mylocal
 
+        self.mask = None
+
+        self.field = xr.open_dataset(Path(self.mylocal) / self.filename, )[name]
         self.field = monotonize_years(self.field)
+
+        self.land_area_weights = get_lsm(self.mylocal,self.Model)
+        cell_area = get_cell_area(self.mylocal, self.Model)
+        self.land_area_weights.data *= cell_area.data
+        self.land_area_weights.data /= np.sum(self.land_area_weights)
+
+        self._area_integral = None
 
     def select_years(self, year_list=None):
         if year_list:
             self.field, self.years = self.field.sel(time=self.field.time.dt.year.isin(year_list))
 
-    def select_lat(self, lat_start=None, lat_end=None, lon_start=None, lon_end=None):
+    def select_lonlat(self, lat_start=None, lat_end=None, lon_start=None, lon_end=None):
         if lat_start or lat_end:
             self.field = self.field.isel(lat=slice(lat_start, lat_end))
-        concatenation = False
-        if lon_start and lon_end:
-            lon_start = lon_start % len(self.field.lon)
-            lon_end = lon_end % len(self.field.lon)
-            if lon_start > lon_end:
-                concatenation = True
+            self.land_area_weights = self.land_area_weights.sel(lat=self.field.lat)
+            if self.mask is not None:
+                self.mask = self.mask.sel(lat=self.field.lat)
+                
+        if lon_start or lon_end:
+            concatenation = False
+            if lon_start and lon_end:
+                lon_start = lon_start % len(self.field.lon)
+                lon_end = lon_end % len(self.field.lon)
+                if lon_start > lon_end:
+                    concatenation = True
 
-        if concatenation:
-            self.field = xr.concat([self.field.isel(lon=slice(lon_start,None)),self.field.isel(lon=slice(None,lon_end))], dim='lon') # this loads the field in memory
-            self.field.assign_coords({'lon': (self.field.lon + 180) % 360 - 180})
-        else:
-            self.field = self.field.isel(lon=slice(lon_start, lon_end))
+            if concatenation:
+                self.field = xr.concat([self.field.isel(lon=slice(lon_start,None)),self.field.isel(lon=slice(None,lon_end))], dim='lon') # this loads the field in memory
+                # self.field.assign_coords({'lon': (self.field.lon + 180) % 360 - 180})
+            else:
+                self.field = self.field.isel(lon=slice(lon_start, lon_end))
+
+            self.land_area_weights = self.land_area_weights.sel(lon=self.field.lon)
+            if self.mask is not None:
+                self.mask = self.mask.sel(lon=self.field.lon)
+                
 
     def to_numpy(self):
         data_shape = self.field.shape
@@ -1414,8 +1434,33 @@ class Plasim_Field:
         return self.field.data.reshape((self.years, data_shape[0]//self.years, *data_shape[1:]))
 
     @execution_time
-    def set_area_integral(self):
-        pass
+    def compute_area_integral(self, weights=None):
+        if weights is None:
+            weights = self.land_area_weights
+        self._area_integral = masked_average(self.field, dim=['lat', 'lon'], weights=weights, mask=self.mask)
+        return self._area_integral
+
+    @property
+    def area_integral(self):
+        if self._area_integral is None:
+            self.compute_area_integral()
+        return self._area_integral
+
+    def set_mask(self, area):
+        self._area_integral = None
+        self.mask = get_lsm(self.mylocal,self.Model)
+        self.mask.data = create_mask(self.Model,area,self.mask.data, axes='last 2', return_full_mask=True)
+
+        self.mask = self.mask.sel(lat=self.field.lat, lon=self.field.lon)
+        
+
+    def filter(self, keep_inside_mask=True):
+        if self.mask is None or self.field.shape[1:] != self.mask.shape:
+            raise ValueError('Mask not set or with mismatched shape: cannot filter')
+        if keep_inside_mask:
+            self.field.data *= self.mask
+        else:
+            self.field.data *= np.logical_not(self.mask)
 
         
 
@@ -1871,6 +1916,16 @@ def PermuteFullrange(fullrange, randrange1, randrange2):# Create a permuted sequ
     returnfullrange = fullrange.copy()
     returnfullrange[randrange1], returnfullrange[randrange2] = returnfullrange[randrange2], returnfullrange[randrange1]
     return returnfullrange
+
+def get_lsm(mylocal,Model):
+    if Model != 'Plasim':
+        raise NotImplementedError()
+    return xr.open_dataset(mylocal+'Data_Plasim_inter/CONTROL_lsmask.nc').lsm
+
+def get_cell_area(mylocal,Model):
+    if Model != 'Plasim':
+        raise NotImplementedError()
+    return xr.open_dataset(mylocal+'Data_Plasim_inter/CONTROL_gparea.nc').cell_area
 
 def ExtractAreaWithMask(mylocal,Model,area): # extract land sea mask and multiply it by cell area
     # Load the land area mask

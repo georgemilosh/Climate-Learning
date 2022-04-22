@@ -781,22 +781,26 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
             raise KeyError(f'Unknown field {field_name}')
         f_infos = fields_infos[field_name]
         # create the field object
-        field = ef.Plasim_Field(f_infos['name'], prefix+f_infos['filename_suffix'], f_infos['label'],
-                                Model=Model, lat_start=lat_start, lat_end=lat_end, lon_start=lon_start, lon_end=lon_end,
-                                myprecision='single', mysampling=sampling, years=dataset_years)
-        # load the data
-        field.load_field(mylocal+file_suffix, year_list=year_list)
-        # Set area integral
-        field.abs_area_int, field.ano_area_int = field.Set_area_integral(area,mask,containing_folder=None) # don't save area integrals in order to avoid conflicts between different runs. Also potential BUG here
+        field = ef.Plasim_Field(f_infos['name'], f"{file_suffix}{prefix}{f_infos['filename_suffix']}.nc", f_infos['label'], Model,
+                                years=dataset_years, mylocal=mylocal)
+        # select years
+        field.select_years(year_list)
+        # select longitude and latitude
+        field.select_lonlat(lat_start,lat_end,lon_start,lon_end)
+
         # filter
         if do_filter: # set to zero all values outside `filter_area`
-            filter_mask = ef.create_mask(Model, filter_area, field.var, axes='last 2', return_full_mask=True) # potential BUG here
-            field.var *= filter_mask
+            field.set_mask(filter_area)
+            field.filter()
+
+
+        # prepare to compute area integral when needed
+        field.set_mask(area)
 
         if ghost:
             field_name += '_ghost'
 
-        _fields[field_name] = field  
+        _fields[field_name] = field
     
     return _fields
 
