@@ -2,6 +2,7 @@
 # Importation des librairies
 from pathlib import Path
 from netCDF4 import Dataset
+import xarray as xr
 import numpy as np
 import warnings
 
@@ -1284,10 +1285,142 @@ class Field:
         self.ano_mask = self.detr_mask - np.mean(self.detr_mask,0)    # Evaluate detrended grid-point climatological mean 
         anomaly_series = self.ano_mask.copy()
         return series, anomaly_series
-    
-    
+
+def monotonize_years(da:xr.DataArray):
+    @np.vectorize
+    def change(a, y):
+        return a.replace(year = y)
+
+    old_y = np.array(da.time.dt.year)
+    y = None
+    new_y = 0
+
+    new_ys = np.zeros_like(old_y, dtype=int)
+    for i, _y in enumerate(old_y):
+        if y is None:
+            y = _y
+        if _y != y:
+            y = _y
+            new_y += 1
+        new_ys[i] = new_y
+
+    new_ys = change(da.time, new_ys)
+    return da.assign_coords({'time': new_ys}), new_y + 1
+
+#### masked average of a field ####
+
+def masked_average(xa:xr.DataArray,
+                   dim=None,
+                   weights:xr.DataArray=None,
+                   mask:xr.DataArray=None) -> xr.DataArray:
+    '''
+    Computes the average of `xa` over given dimensions `dim`, weighting with `weights` and masking with `mask`
+
+    Parameters
+    ----------
+    xa : xr.DataArray
+        data
+    dim : str or list of str, optional
+        dimensions over which to perform the average, by default None
+    weights : xr.DataArray, optional
+        weights for the average, for example the cell, by default None
+    mask : xr.DataArray, optional
+        True over the data to keep, False over the data to ignore, by default None
+
+    Returns
+    -------
+    xr.DataArray
+        masked and averaged array
+    '''
+    #lest make a copy of the xa
+    xa_copy = xa.copy()
+
+    if mask is not None:
+        xa_weighted_average = __weighted_average_with_mask(
+            dim, mask, weights, xa, xa_copy
+        )
+    elif weights is not None:
+        xa_weighted_average = __weighted_average(
+            dim, weights, xa, xa_copy
+        )
+    else:
+        xa_weighted_average =  xa.mean(dim)
+
+    return xa_weighted_average
+
+
+def __weighted_average(dim, weights, xa, xa_copy):
+    '''helper function for masked_average'''
+    _, weights_all_dims = xr.broadcast(xa, weights)  # broadcast to all dims
+    x_times_w = xa_copy * weights_all_dims
+    xw_sum = x_times_w.sum(dim)
+    x_tot = weights_all_dims.where(xa_copy.notnull()).sum(dim=dim)
+    xa_weighted_average = xw_sum / x_tot
+    return xa_weighted_average
+
+
+def __weighted_average_with_mask(dim, mask, weights, xa, xa_copy):
+    '''helper function for masked_average'''
+    _, mask_all_dims = xr.broadcast(xa, mask)  # broadcast to all dims
+    xa_copy = xa_copy.where(mask)
+    if weights is not None:
+        _, weights_all_dims = xr.broadcast(xa, weights)  # broadcast to all dims
+        weights_all_dims = weights_all_dims.where(mask_all_dims)
+        x_times_w = xa_copy * weights_all_dims
+        xw_sum = x_times_w.sum(dim=dim)
+        x_tot = weights_all_dims.where(xa_copy.notnull()).sum(dim=dim)
+        xa_weighted_average = xw_sum / x_tot
+    else:
+        xa_weighted_average = xa_copy.mean(dim)
+    return xa_weighted_average
+        
     
 class Plasim_Field:
+    def __init__(self, name, filename, label, Model, years=1000, **kwargs):
+        self.name = name    # Name inside the .nc file
+        self.filename = filename # Name of the .nc file 
+        self.label = label  # Label to be displayed on the graph
+
+        self.field = xr.open_dataset(filename)[name]
+        self.years = years
+
+        self.field = monotonize_years(self.field)
+
+    def select_years(self, year_list=None):
+        if year_list:
+            self.field, self.years = self.field.sel(time=self.field.time.dt.year.isin(year_list))
+
+    def select_lat(self, lat_start=None, lat_end=None, lon_start=None, lon_end=None):
+        if lat_start or lat_end:
+            self.field = self.field.isel(lat=slice(lat_start, lat_end))
+        concatenation = False
+        if lon_start and lon_end:
+            lon_start = lon_start % len(self.field.lon)
+            lon_end = lon_end % len(self.field.lon)
+            if lon_start > lon_end:
+                concatenation = True
+
+        if concatenation:
+            self.field = xr.concat([self.field.isel(lon=slice(lon_start,None)),self.field.isel(lon=slice(None,lon_end))], dim='lon') # this loads the field in memory
+            self.field.assign_coords({'lon': (self.field.lon + 180) % 360 - 180})
+        else:
+            self.field = self.field.isel(lon=slice(lon_start, lon_end))
+
+    def to_numpy(self):
+        data_shape = self.field.shape
+        if data_shape[0] % self.years:
+            logger.warning(f'Cannot reshape time axis of field {self.name}')
+            return self.field.data
+        return self.field.data.reshape((self.years, data_shape[0]//self.years, *data_shape[1:]))
+
+    @execution_time
+    def set_area_integral(self):
+        pass
+
+        
+
+    
+class Plasim_Field_Old:
     def __init__(self, name, filename, label, Model, lat_start=0, lat_end=64, lon_start=0, lon_end=128,
                  myprecision='double', mysampling='', years=1000):
         self.name = name    # Name inside the .nc file
@@ -1356,7 +1489,7 @@ class Plasim_Field:
                 self.var = self.var.reshape(self.years, self.var.shape[0]//self.years, *self.var.shape[1:])
             else:
                 self.var = self.var.reshape(len(year_list), units_per_year, *self.var.shape[1:])
-                
+
             self.lon = dataset.variables["lon"][self.lon_start:self.lon_end]
             self.lat = dataset.variables["lat"][self.lat_start:self.lat_end]
             self.LON, self.LAT = np.meshgrid(self.lon, self.lat)
