@@ -88,12 +88,19 @@ class VAE(tf.keras.Model): # Class of variational autoencoder
         The idea is to prioritize some fields, for instance the fields that will be filtered (masked) in the decoder
         so that they contribute more. We know that soil moisture matters a lot for the heat waves, yet it is highly local
     '''
-    def __init__(self, encoder, decoder, k1=1, k2=1, from_logits=False, field_weights=None, mask_area=None, Z_DIM=2, N_EPOCHS=2, print_summary=True, **kwargs):
+    def __init__(self, encoder, decoder, k1=1, k2=1, from_logits=False, field_weights=None, 
+            lat_0=None, lat_1=None, lon_0=None, lon_1=None, coef_out=1, coef_in=0, mask_area=None, Z_DIM=2, N_EPOCHS=2, print_summary=True, **kwargs):
         super(VAE, self).__init__(**kwargs)
         self.encoder = encoder
         self.decoder = decoder
         self.k1 = k1 # Reconstruction weight
         self.k2 = k2 # K-L divergence weight
+        self.lat_0 = lat_0 # parameters for weighting the reconstruction loss geographically
+        self.lat_1 = lat_1 # parameters for weighting the reconstruction loss geographically
+        self.lon_0 = lon_0 # parameters for weighting the reconstruction loss geographically
+        self.lon_1 = lon_1 
+        self.coef_out = coef_out # The full grid coefficient for reconstruction loss
+        self.coef_in = coef_in # The inner grid coefficient (lat_0:lat_1, lon_0:lon_1) for reconstruction loss
         self.total_loss_tracker = tf.keras.metrics.Mean(name="total_loss")
         self.reconstruction_loss_tracker = tf.keras.metrics.Mean(
             name="reconstruction_loss"
@@ -125,24 +132,10 @@ class VAE(tf.keras.Model): # Class of variational autoencoder
             factor = self.k1*self.encoder_input_shape[1]*self.encoder_input_shape[2] # this factor is designed for consistency with the previous defintion of the loss (see commented section below)
             # We should try tf.reduce_mean([0.1,0.1,0.4]*tf.cast([bce(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis],sample_weight=np.ones((2,4,3))) for i in range(3)], dtype=np.float32))
             if self.field_weights is None: # I am forced to use this awkward way of apply field weights since I cannot use the new version of tensorflow where axis parameter can be given
-                reconstruction_loss = factor*tf.reduce_mean([tf.reduce_mean(self.bce(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis])) for i in range(reconstruction.shape[3])] )
+                reconstruction_loss = self.coef_out*factor*tf.reduce_mean([tf.reduce_mean(self.bce(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis])) for i in range(reconstruction.shape[3])] ) + self.coef_in*factor*tf.reduce_mean([tf.reduce_mean(self.bce(data[...,self.lat_0:self.lat_1,self.lon_0:self.lon_1,i][..., np.newaxis], reconstruction[...,self.lat_0:self.lat_1,self.lon_0:self.lon_1,i][..., np.newaxis])) for i in range(reconstruction.shape[3])] )
             else:  # The idea behind adding [..., np.newaxis] is to be able to use sample_weight in self.bce on three dimensional input
-                reconstruction_loss = factor*tf.reduce_mean([self.field_weights[i]*tf.reduce_mean(self.bce(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis])) for i in range(reconstruction.shape[3])])
-                
-            """#The following idea didn't work: (I think the reason is that during training the batch size somehow changes. Normally it should be 128 as specified, but the error message read that the input shape was 32. I tried that as input for the mask but this also lead to a shape mismatch. Another alternative is to write a custom binary cross entropy loss, which I will postpone for now
-            
-            # We should try tf.reduce_mean([0.1,0.1,0.4]*tf.cast([bce(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis],sample_weight=np.ones((2,4,3))) for i in range(3)], dtype=np.float32))
-            if self.field_weights is None: # I am forced to use this awkward way of apply field weights since I cannot use the new version of tensorflow where axis parameter can be given
-                if self.mask_weights is None:
-                    reconstruction_loss = factor*tf.reduce_mean([tf.reduce_mean(self.bce(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis])) for i in range(reconstruction.shape[3])] )
-                else:
-                    reconstruction_loss = factor*tf.reduce_mean([tf.reduce_mean(self.bce(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis], sample_weight=self.mask_weights[...,i])) for i in range(reconstruction.shape[3])] )
-            else:  # The idea behind adding [..., np.newaxis] is to be able to use sample_weight in self.bce on three dimensional input
-                if self.mask_weights is None:
-                    reconstruction_loss = factor*tf.reduce_mean([self.field_weights[i]*tf.reduce_mean(self.bce(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis])) for i in range(reconstruction.shape[3])])
-                else:
-                    reconstruction_loss = factor*tf.reduce_mean([self.field_weights[i]*tf.reduce_mean(self.bce(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis], sample_weight=self.mask_weights[...,i])) for i in range(reconstruction.shape[3])])
-            """
+                reconstruction_loss = self.coef_out*factor*tf.reduce_mean([self.field_weights[i]*tf.reduce_mean(self.bce(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis])) for i in range(reconstruction.shape[3])]) + self.coef_in*factor*tf.reduce_mean([self.field_weights[i]*tf.reduce_mean(self.bce(data[...,self.lat_0:self.lat_1,self.lon_0:self.lon_1,i][..., np.newaxis], reconstruction[...,self.lat_0:self.lat_1,self.lon_0:self.lon_1,i][..., np.newaxis])) for i in range(reconstruction.shape[3])])
+            # there is probably a more efficient way to do the line above: we are adding the full region plus a sub region.
             kl_loss = -0.5 * (1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var))
             kl_loss = self.k2*tf.reduce_mean(tf.reduce_sum(kl_loss, axis=1))
             total_loss = reconstruction_loss + kl_loss
