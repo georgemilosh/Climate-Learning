@@ -1020,7 +1020,7 @@ def create_mask(model,area, data, axes='first 2', return_full_mask=False): # car
                 mask[...,13:17, -1:] = True
                 mask[...,13:17, :3] = True
                 return mask
-            return np.concatenate((data[...,13:17, -1:], data[...,13:17, :3]), axis=-1)  # give by valerian
+            return np.concatenate((data[...,13:17, -1:], data[...,13:17, :3]), axis=-1)  # give by Valerian
         elif area == "Quebec":  # lat[i]<60 and lat[i]>50:      index: 10-13
             if return_full_mask:
                 mask[...,10:16, 98:110] = True
@@ -1288,7 +1288,7 @@ class Field:
     
     
 class Plasim_Field:
-    def __init__(self, name, filename, label, Model, lat_start=0, lat_end=241, lon_start=0, lon_end=480,
+    def __init__(self, name, filename, label, Model, lat_start=0, lat_end=64, lon_start=0, lon_end=128,
                  myprecision='double', mysampling='', years=1000):
         self.name = name    # Name inside the .nc file
         self.filename = filename # Name of the .nc file 
@@ -1356,6 +1356,7 @@ class Plasim_Field:
                 self.var = self.var.reshape(self.years, self.var.shape[0]//self.years, *self.var.shape[1:])
             else:
                 self.var = self.var.reshape(len(year_list), units_per_year, *self.var.shape[1:])
+                
             self.lon = dataset.variables["lon"][self.lon_start:self.lon_end]
             self.lat = dataset.variables["lat"][self.lat_start:self.lat_end]
             self.LON, self.LAT = np.meshgrid(self.lon, self.lat)
