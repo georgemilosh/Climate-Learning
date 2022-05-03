@@ -1421,9 +1421,14 @@ class Plasim_Field:
         self.years = years
         self.mylocal = mylocal
 
+        self.mask_area = None
         self.mask = None
 
+        logger.info(f'Opening field {self.name}')
+
         self.field = xr.open_dataset(Path(self.mylocal) / self.filename)[name]
+
+        self.field = discard_all_dimensions_but(self.field, dims_to_keep=['time', 'lon', 'lat'])
         
         self.field, yrs = monotonize_years(self.field)
         if yrs != self.years:
@@ -1437,11 +1442,13 @@ class Plasim_Field:
 
         self._area_integral = None
 
+    @execution_time
     def select_years(self, year_list=None):
         if year_list:
             self.field = self.field.sel(time=self.field.time.dt.year.isin(year_list))
             self.years = len(year_list)
 
+    @execution_time
     def select_lonlat(self, lat_start=None, lat_end=None, lon_start=None, lon_end=None):
         if lat_start or lat_end:
             self.field = self.field.isel(lat=slice(lat_start, lat_end))
@@ -1480,6 +1487,7 @@ class Plasim_Field:
         return da.data.reshape((self.years, data_shape[0]//self.years, *data_shape[1:]))
 
     def set_mask(self, area):
+        self.mask_area = area
         self._area_integral = None
         self.mask = get_lsm(self.mylocal,self.Model)
         self.mask.data = create_mask(self.Model,area,self.mask.data, axes='last 2', return_full_mask=True)

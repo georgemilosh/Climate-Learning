@@ -1960,8 +1960,8 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
 
     # get lat and lon
     f = list(fields.values())[0] # take the first field
-    lat = f.lat # 1d array
-    lon = f.lon # 1d array
+    lat = np.copy(f.field.lat.data) # 1d array
+    lon = np.copy(f.field.lon.data) # 1d array
 
     X,Y = make_XY(fields, **make_XY_kwargs)
     
