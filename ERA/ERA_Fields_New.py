@@ -1286,6 +1286,7 @@ class Field:
         anomaly_series = self.ano_mask.copy()
         return series, anomaly_series
 
+@execution_time
 def monotonize_years(da:xr.DataArray):
     @np.vectorize
     def change(a, y):
@@ -1418,7 +1419,8 @@ class Plasim_Field:
 
     def select_years(self, year_list=None):
         if year_list:
-            self.field, self.years = self.field.sel(time=self.field.time.dt.year.isin(year_list))
+            self.field = self.field.sel(time=self.field.time.dt.year.isin(year_list))
+            self.years = len(year_list)
 
     def select_lonlat(self, lat_start=None, lat_end=None, lon_start=None, lon_end=None):
         if lat_start or lat_end:
@@ -1432,7 +1434,7 @@ class Plasim_Field:
             if lon_start and lon_end:
                 lon_start = lon_start % len(self.field.lon)
                 lon_end = lon_end % len(self.field.lon)
-                if lon_start > lon_end:
+                if lon_start >= lon_end:
                     concatenation = True
 
             if concatenation:
@@ -1466,12 +1468,14 @@ class Plasim_Field:
         
 
     def filter(self, keep_inside_mask=True):
-        if self.mask is None or self.field.shape[1:] != self.mask.shape:
-            raise ValueError('Mask not set or with mismatched shape: cannot filter')
+        if self.mask is None:
+            raise ValueError('Mask not set: cannot filter')
+        if self.field.shape[1:] != self.mask.shape:
+            raise ValueError(f'Mismatched shapes: {self.field.shape[1:] = }, {self.mask.shape = }')
         if keep_inside_mask:
-            self.field.data *= self.mask
+            self.field.data *= self.mask.data
         else:
-            self.field.data *= np.logical_not(self.mask)
+            self.field.data *= np.logical_not(self.mask.data)
     
 
     @execution_time
@@ -1944,15 +1948,25 @@ def PermuteFullrange(fullrange, randrange1, randrange2):# Create a permuted sequ
     returnfullrange[randrange1], returnfullrange[randrange2] = returnfullrange[randrange2], returnfullrange[randrange1]
     return returnfullrange
 
+def discard_all_dimensions_but(xa:xr.DataArray, dims_to_keep:list):
+    dims_to_drop = [dim for dim in xa.dims if dim not in dims_to_keep]
+    xa = xa.isel({dim: 0 for dim in dims_to_drop})
+    xa = xa.drop(dims_to_drop)
+    return xa
+
 def get_lsm(mylocal,Model):
     if Model != 'Plasim':
         raise NotImplementedError()
-    return xr.open_dataset(mylocal+'Data_Plasim_inter/CONTROL_lsmask.nc').lsm
+    lsm = xr.open_dataset(mylocal+'Data_Plasim_inter/CONTROL_lsmask.nc').lsm
+    lsm = discard_all_dimensions_but(lsm, ['lon', 'lat'])
+    return lsm
 
 def get_cell_area(mylocal,Model):
     if Model != 'Plasim':
         raise NotImplementedError()
-    return xr.open_dataset(mylocal+'Data_Plasim_inter/CONTROL_gparea.nc').cell_area
+    cell_area = xr.open_dataset(mylocal+'Data_Plasim_inter/CONTROL_gparea.nc').cell_area
+    cell_area = discard_all_dimensions_but(cell_area, ['lon', 'lat'])
+    return cell_area
 
 def ExtractAreaWithMask(mylocal,Model,area): # extract land sea mask and multiply it by cell area
     # Load the land area mask
