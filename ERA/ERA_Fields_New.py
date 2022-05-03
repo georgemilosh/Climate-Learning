@@ -1373,6 +1373,22 @@ def __weighted_average_with_mask(dim, mask, weights, xa, xa_copy):
     else:
         xa_weighted_average = xa_copy.mean(dim)
     return xa_weighted_average
+
+def running_mean(xa:xr.DataArray, T, mode='forward', separate_years=True):
+    if mode == 'backward':
+        t_avg = lambda a: a.rolling(time=T, center=False).mean().dropna('time')
+        #                                                        ^ this removes nan values
+    elif mode == 'forward':
+        t_avg = lambda a: a[::-1].rolling(time=T, center=False).mean().dropna('time')[::-1]
+        # we work on the reversed array so we have the forward T day rolling mean, since xarray by default computes the backward rolling mean
+    elif mode == 'center':
+        t_avg = lambda a: a.rolling(time=T, center=True).mean().dropna('time')
+    else:
+        raise ValueError(f"Unrecognized {mode = }. Possible options are 'forward', 'backward' or 'center'")
+
+    if separate_years:
+        return xa.groupby('time.year').apply(t_avg) # apply to each year individually
+    return t_avg(xa)
         
     
 class Plasim_Field:
@@ -1386,13 +1402,17 @@ class Plasim_Field:
 
         self.mask = None
 
-        self.field = xr.open_dataset(Path(self.mylocal) / self.filename, )[name]
-        self.field = monotonize_years(self.field)
+        self.field = xr.open_dataset(Path(self.mylocal) / self.filename)[name]
+        
+        self.field, yrs = monotonize_years(self.field)
+        if yrs != self.years:
+            self.years = yrs
+            logger.error(f'The loaded field has {yrs} years, not {years} as provided. Setting {self.years = }')
 
         self.land_area_weights = get_lsm(self.mylocal,self.Model)
         cell_area = get_cell_area(self.mylocal, self.Model)
         self.land_area_weights.data *= cell_area.data
-        self.land_area_weights.data /= np.sum(self.land_area_weights)
+        self.land_area_weights.data /= np.sum(self.land_area_weights.data)
 
         self._area_integral = None
 
@@ -1424,7 +1444,11 @@ class Plasim_Field:
             self.land_area_weights = self.land_area_weights.sel(lon=self.field.lon)
             if self.mask is not None:
                 self.mask = self.mask.sel(lon=self.field.lon)
-                
+    
+    @property
+    def var(self):
+        '''For compatibility with the old version'''
+        return self.to_numpy()
 
     def to_numpy(self):
         data_shape = self.field.shape
@@ -1432,19 +1456,6 @@ class Plasim_Field:
             logger.warning(f'Cannot reshape time axis of field {self.name}')
             return self.field.data
         return self.field.data.reshape((self.years, data_shape[0]//self.years, *data_shape[1:]))
-
-    @execution_time
-    def compute_area_integral(self, weights=None):
-        if weights is None:
-            weights = self.land_area_weights
-        self._area_integral = masked_average(self.field, dim=['lat', 'lon'], weights=weights, mask=self.mask)
-        return self._area_integral
-
-    @property
-    def area_integral(self):
-        if self._area_integral is None:
-            self.compute_area_integral()
-        return self._area_integral
 
     def set_mask(self, area):
         self._area_integral = None
@@ -1461,6 +1472,22 @@ class Plasim_Field:
             self.field.data *= self.mask
         else:
             self.field.data *= np.logical_not(self.mask)
+    
+
+    @execution_time
+    def compute_area_integral(self, weights=None):
+        if weights is None:
+            weights = self.land_area_weights
+        self._area_integral = masked_average(self.field, dim=['lat', 'lon'], weights=weights, mask=self.mask)
+        return self._area_integral
+
+    @property
+    def area_integral(self):
+        if self._area_integral is None:
+            self.compute_area_integral()
+        return self._area_integral
+
+       
 
         
 

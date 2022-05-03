@@ -735,7 +735,7 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
     '''
 
     if area != filter_area:
-        warnings.warn(f'Fields will be filtered on a different area ({filter_area}) than the region of interest ({area})')
+        warnings.warn(f'Fields will be filtered on a different area ({filter_area}) than the region of interest ({area}). If {area} is not a subset of {filter_area} the area integral will be different with and without filtering.')
 
     if dataset_years == 1000:
         dataset_suffix = ''
@@ -754,8 +754,6 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
         year_list = np.arange(year_list)
     elif isinstance(year_list, tuple):
         year_list = np.arange(*year_list) # unpack the arguments of the tuple
-    
-    mask, cell_area, lsm = ef.ExtractAreaWithMask(mylocal,Model,area) # extract land-sea mask and multiply it by cell area (normalized as to sum to 1 )
 
     if sampling == '3hrs': 
         prefix = ''
