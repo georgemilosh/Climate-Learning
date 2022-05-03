@@ -1308,6 +1308,17 @@ def monotonize_years(da:xr.DataArray):
     new_ys = change(da.time, new_ys)
     return da.assign_coords({'time': new_ys}), new_y + 1
 
+@execution_time
+def monotonize_longitude(da:xr.DataArray):
+    slon = np.sign(da.lon.data[1:] - da.lon.data[:-1])
+    if len(set(list(slon))) == 1: # no sign change
+        return da
+    
+    new_zero = 360 - da.lon.data[0]
+    return da.assign_coords({'lon': (da.lon + new_zero) % 360 - new_zero})
+
+
+
 #### masked average of a field ####
 
 def masked_average(xa:xr.DataArray,
@@ -1390,6 +1401,15 @@ def running_mean(xa:xr.DataArray, T, mode='forward', separate_years=True):
     if separate_years:
         return xa.groupby('time.year').apply(t_avg) # apply to each year individually
     return t_avg(xa)
+
+def is_over_threshold(a:np.ndarray, threshold=None, percent=None):
+    if threshold is None:
+        if percent:
+            a_flat = a.flatten()
+            threshold = np.sort(a_flat)[np.ceil(a_flat.shape[0]*(1-percent/100)).astype('int')]
+        else:
+            raise ValueError('Please provide threshold or percent')
+    return a >= threshold, threshold
         
     
 class Plasim_Field:
@@ -1450,14 +1470,14 @@ class Plasim_Field:
     @property
     def var(self):
         '''For compatibility with the old version'''
-        return self.to_numpy()
+        return self.to_numpy(self.field)
 
-    def to_numpy(self):
-        data_shape = self.field.shape
+    def to_numpy(self, da:xr.DataArray):
+        data_shape = da.shape
         if data_shape[0] % self.years:
-            logger.warning(f'Cannot reshape time axis of field {self.name}')
-            return self.field.data
-        return self.field.data.reshape((self.years, data_shape[0]//self.years, *data_shape[1:]))
+            logger.warning(f'Cannot reshape time axis of field {da.name}')
+            return da.data
+        return da.data.reshape((self.years, data_shape[0]//self.years, *data_shape[1:]))
 
     def set_mask(self, area):
         self._area_integral = None
@@ -1477,7 +1497,6 @@ class Plasim_Field:
         else:
             self.field.data *= np.logical_not(self.mask.data)
     
-
     @execution_time
     def compute_area_integral(self, weights=None):
         if weights is None:
@@ -1491,7 +1510,10 @@ class Plasim_Field:
             self.compute_area_integral()
         return self._area_integral
 
-       
+    @execution_time
+    def compute_time_average(self, day_start, day_end, T):
+        cut_area_integral = self.area_integral.sel(time=self.area_integral.time.dt.dayofyear.isin(np.arange(day_start, day_end)))
+        return running_mean(cut_area_integral, T, mode='forward')
 
         
 
