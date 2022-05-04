@@ -721,6 +721,8 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
         area over which to keep filtered fields, usually the same of `area`. `filter` implies a mask
     lon_start, lon_end, lat_start, lat_end : int
         longitude and latitude extremes of the data expressed in indices (model specific)
+        If `lon_start` >= `lon_end` the selection will start from `lon_start`, go over the end of the array and then continue from the beginning up to `lon_end`.
+        Providing `lon_start` = `lon_end` will result in the longitude being rolled by `lon_start` steps
     mylocal : str or Path, optional
         path the the data storage. For speed it is better if it is a local path.
     fields : list, optional
@@ -813,7 +815,7 @@ def assign_labels(field, time_start=30, time_end=120, T=14, percent=5, threshold
     ----------
     field : Plasim_Field object
     time_start : int, optional
-        first day of the period of interest
+        first day of the period of interest (0 is the means the first datapoint of each year, so time_start is an index, not the day of the year)
     time_end : int, optional
         first day after the end of the period of interst
     T : int, optional
