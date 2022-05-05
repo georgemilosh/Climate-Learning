@@ -4,6 +4,7 @@
 # @author: Alessandro Lovo
 # '''
 
+from asyncio.log import logger
 import numpy as np
 import warnings
 from collections import deque
@@ -70,6 +71,69 @@ def draw_map(m, background='stock_img', **kwargs):
             warnings.warn(f"Unrecognized option {background = }, using 'coastlines' instead")
         m.coastlines()
     m.gridlines(**kwargs)
+
+def geo_plotter(m, lon, lat, values, mode='contourf',
+                 levels=None, cmap='RdBu_r', title=None,
+                 put_colorbar=True, colorbar_label=None,
+                 draw_coastlines=True, draw_gridlines=True, draw_labels=True,
+                 greenwich=False, **kwargs):
+    '''
+    Contourf plot together with coastlines and meridians
+    
+    Parameters:
+    -----------
+        m: cartopy axis
+        lon: 2D longidute array
+        lat: 2D latitude array
+        values: 2D field array
+        mode : 'contour', 'contourf', 'scatter', 'pcolormesh'. By default 'contourf'
+        levels: contour levels for the field values
+        cmap: colormap
+        title: plot title
+        put_colorbar: whether to show a colorbar
+        draw_coastlines: whether to draw the coastlines
+        draw_gridlines: whether to draw the gridlines
+        
+        greenwich: if True automatically adds the Greenwich meridian to avoid gaps in the plot
+    '''
+    if greenwich and mode in ['scatter', 'pcolormesh']:
+        logger.warning('Ignoring greenwich kwarg')
+        greenwich = False
+    if greenwich:
+        _lon, _lat, _values = Greenwich(lon, lat, values)
+    else:
+        _lon, _lat, _values = lon, lat, values
+
+    if mode == 'contourf':        
+        im = m.contourf(_lon, _lat, _values, transform=data_proj,
+                        levels=levels, cmap=cmap, extend='both', **kwargs)
+    elif mode == 'contour':
+        im = m.contour(_lon, _lat, _values, transform=data_proj,
+                       levels=levels, cmap=cmap, extend='both', **kwargs)
+    elif mode == 'pcolormesh':
+        if levels is not None:
+            logger.warning('Ignoring levels kwarg')
+        im = m.pcolormesh(_lon, _lat, _values, transform=data_proj,
+                          cmap=cmap, **kwargs)
+    elif mode == 'scatter':
+        if levels is not None:
+            logger.warning('Ignoring levels kwarg')
+        im = m.scatter(_lon.flatten(), _lat.flatten(), c=_values.flatten(), transform=data_proj,
+                       cmap=cmap, **kwargs)
+    else:
+        raise ValueError(f'Unknown {mode = }')
+
+    if draw_coastlines:
+        m.coastlines()
+    if draw_gridlines:
+        m.gridlines(draw_labels=draw_labels)
+    if put_colorbar:
+        plt.colorbar(im, label=colorbar_label, extend='both')
+    if title is not None:
+        m.set_title(title, fontsize=20)
+        
+    return im
+    
     
 def geo_contourf(m, lon, lat, values,
                  levels=None, cmap='RdBu_r', title=None,
@@ -94,23 +158,11 @@ def geo_contourf(m, lon, lat, values,
         
         greenwich: if True automatically adds the Greenwich meridian to avoid gaps in the plot
     '''
-    if greenwich:
-        _lon, _lat, _values = Greenwich(lon, lat, values)
-    else:
-        _lon, _lat, _values = lon, lat, values
-        
-    im = m.contourf(_lon, _lat, _values, transform=data_proj,
-                    levels=levels, cmap=cmap, extend='both', **kwargs)
-    if draw_coastlines:
-        m.coastlines()
-    if draw_gridlines:
-        m.gridlines(draw_labels=draw_labels)
-    if put_colorbar:
-        plt.colorbar(im, label=colorbar_label)
-    if title is not None:
-        m.set_title(title, fontsize=20)
-        
-    return im
+    return geo_plotter(m, lon, lat, values, mode='contourf',
+                       levels=levels, cmap=cmap, title=title,
+                       put_colorbar=put_colorbar, colorbar_label=colorbar_label,
+                       draw_coastlines=draw_coastlines, draw_gridlines=draw_gridlines, draw_labels=draw_labels,
+                       greenwich=greenwich, **kwargs)
         
 def geo_contour(m, lon, lat, values, levels=None, cmap1='PuRd', cmap2=None, greenwich=False):
     '''
