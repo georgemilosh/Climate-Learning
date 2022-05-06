@@ -17,9 +17,11 @@ fig.subplots_adjust(right=0.75)
 color_idx = np.linspace(0, 1, nfolds)
 ax2 = ax1.twinx() 
 ax3 = ax1.twinx() 
+ax4 = ax1.twinx()
 # Offset the right spine of twin2.  The ticks and label have already been
 # placed on the right by twinx above.
 ax3.spines.right.set_position(("axes", 1.2))
+ax4.spines.right.set_position(("axes", 2.2))
 for i in range(nfolds):
     history = np.load(f'{folder}/fold_{i}/history_vae', allow_pickle=True)#.item()
     print(history.keys())
@@ -41,12 +43,16 @@ for i in range(nfolds):
         elif key=='kl_loss':
             cmap = plt.cm.Greens(color_idx[i])
             ln3 = ax3.plot(epochs, history[key], label =label, linestyle='dotted', marker='o',color = cmap)
+            ln4 = ln3.copy()
+        elif key=='class_loss':
+            cmap = plt.cm.Greys(color_idx[i]) 
+            ln4 = ax4.plot(epochs, history[key], label =label, linestyle='dashdot', marker='o',color = cmap)
         if i ==nfolds-1:
-            lns = ln1+ln2+ln3
+            lns = ln1+ln2+ln3+ln4
             
         
 labs = [l.get_label() for l in lns]
-ax3.legend(lns, labs, loc=0)
+ax4.legend(lns, labs, loc=0)
 
 ax1.set_xlabel("Epochs")
 ax1.set_ylabel("loss")

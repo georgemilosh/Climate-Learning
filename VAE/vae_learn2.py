@@ -219,17 +219,18 @@ def create_or_load_vae(folder, INPUT_DIM, myinput, VAE_kwargs=None, build_encode
     
     
     logger.info("==Building encoder==")
-    encoder_inputs, encoder_outputs, shape_before_flattening, encoder  = tff.build_encoder_skip(input_dim = INPUT_DIM, output_dim = Z_DIM, **build_encoder_skip_kwargs)
+    _, _, shape_before_flattening, encoder  = tff.build_encoder_skip(input_dim = INPUT_DIM, output_dim = Z_DIM, **build_encoder_skip_kwargs)
+    classifier = tff.create_classifier(Z_DIM)
     if print_summary:
         encoder.summary()
     logger.info("==Building decoder==") 
-    decoder_input, decoder_output, decoder = tff.build_decoder_skip(mask=filter_mask, input_dim = Z_DIM, shape_before_flattening = shape_before_flattening, **build_decoder_skip_kwargs)
+    _, _, decoder = tff.build_decoder_skip(mask=filter_mask, input_dim = Z_DIM, shape_before_flattening = shape_before_flattening, **build_decoder_skip_kwargs)
     if print_summary:
         decoder.summary()
 
 
     logger.info("==Attaching decoder and encoder and compiling==")
-    vae = tff.VAE(encoder, decoder, **VAE_kwargs) #, mask_weights=mask_weights)
+    vae = tff.VAE(encoder, decoder, classifier, **VAE_kwargs) #, mask_weights=mask_weights)
     if print_summary:
         logger.info(f'{vae.k1 = },{vae.k2 = } ')
     
@@ -399,7 +400,7 @@ def k_fold_cross_val(folder, myinput, X, Y, year_permutation, create_or_load_vae
             logger.info(f"{create_or_load_vae_kwargs = }")
             vae, history_vae, N_EPOCHS, INITIAL_EPOCH, ckpt_path_callback = create_or_load_vae(fold_folder, INPUT_DIM, myinput,**create_or_load_vae_kwargs)
             if myinput!='N': 
-                history_loss = train_vae(X_tr, vae, ckpt_path_callback, fold_folder, myinput, N_EPOCHS, INITIAL_EPOCH, history_vae, **train_vae_kwargs)
+                history_loss = train_vae(X_tr, Y_tr, vae, ckpt_path_callback, fold_folder, myinput, N_EPOCHS, INITIAL_EPOCH, history_vae, **train_vae_kwargs)
             else: # myinput='N' is useful when loading this function in reconstruction.py or classification for instance
                 history_loss = np.load(f"{fold_folder}/history_vae", allow_pickle=True)['loss']
         # Now we decide whether to use a different epoch for the projection
@@ -443,10 +444,10 @@ def k_fold_cross_val(folder, myinput, X, Y, year_permutation, create_or_load_vae
 ########################################
 
 def scheduler(epoch, lr=5e-4, epoch_tol=None, lr_min=5e-4):
-  '''
-  This function keeps the initial learning rate for the first ten epochs
-  and decreases it exponentially after that.
-   Parameters
+    '''
+    This function keeps the initial learning rate for the first ten epochs
+      and decreases it exponentially after that.
+    Parameters
     ----------
     epoch_tol: int
         epoch until which we apply flat lr learning rate, if None learning rate will be fixed
@@ -455,15 +456,15 @@ def scheduler(epoch, lr=5e-4, epoch_tol=None, lr_min=5e-4):
     lr_min: float
         minimal learning rate
   '''
-  if epoch_tol is None:
-    return lr
-  elif epoch < epoch_tol:
-    return lr
-  else:
-    new_lr = lr*tf.math.exp(-0.1*(epoch-epoch_tol+1))
-    if new_lr < lr_min:
-      new_lr = lr_min
-    return new_lr
+    if epoch_tol is None:
+        return lr
+    elif epoch < epoch_tol:
+        return lr
+    else:
+        new_lr = lr*tf.math.exp(-0.1*(epoch-epoch_tol+1))
+        if new_lr < lr_min:
+            new_lr = lr_min
+        return new_lr
 
 
 class PrintLR(tf.keras.callbacks.Callback):
@@ -508,7 +509,7 @@ class scheduler(tf.keras.optimizers.schedules.LearningRateSchedule):
 
 @ut.execution_time  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function: logger indent causes: IndexError: string index out of range
-def train_vae(X, vae, cp_callback, folder, myinput, N_EPOCHS, INITIAL_EPOCH, history_vae, batch_size=128, scheduler_kwargs=None):
+def train_vae(X, Y, vae, cp_callback, folder, myinput, N_EPOCHS, INITIAL_EPOCH, history_vae, batch_size=128, scheduler_kwargs=None):
     '''
     Trains the model
 
@@ -529,7 +530,7 @@ def train_vae(X, vae, cp_callback, folder, myinput, N_EPOCHS, INITIAL_EPOCH, his
     logger.info(f'{ X.shape = }, {N_EPOCHS = }, {INITIAL_EPOCH = }, {batch_size = }')
     logger.info(f'{cp_callback = }')
     vae.summary()
-    my_history_vae = vae.fit(X, epochs=N_EPOCHS, initial_epoch=INITIAL_EPOCH, batch_size=batch_size, shuffle=True, callbacks=[cp_callback,scheduler_callback, PrintLR(**dict(model=vae)),term], verbose=2) # train on the last 9 folds
+    my_history_vae = vae.fit(X, Y, epochs=N_EPOCHS, initial_epoch=INITIAL_EPOCH, batch_size=batch_size, shuffle=True, callbacks=[cp_callback,scheduler_callback, PrintLR(**dict(model=vae)),term], verbose=2) # train on the last 9 folds
     # Note that we need verbose=2 statement or else @ut.indent_logger(logger) causes errors
     if myinput == 'C':
         if ('loss' in my_history_vae.history.keys()): # problems if the fold already contains the checkpoint = N_EPOCHS
@@ -676,25 +677,26 @@ def kwargator(thefun):
     thefun_kwargs_default = ln.get_default_params(thefun, recursive=True)
     thefun_kwargs_default = ut.set_values_recursive(thefun_kwargs_default,
                                             {'myinput':'Y', 'lat_end': 24,'fields': ['t2m_filtered','zg500','mrso_filtered'],'year_list': 'range(500)',
-                                               'print_summary' : False, 'k1': 0.9 , 'k2':0.1, 'field_weights': [0, 1, 0],'mask_area':'France', 'usemask' : True, 'Z_DIM': 8, #8,
-                                                'N_EPOCHS': 100,'batch_size': 256, 'checkpoint_every': 1, 'lr': 5e-4, 'epoch_tol': None, 'lr_min' : 5e-4, 
-                                                'lat_0' : 4, 'lat_1' : 22, 'lon_0' : (64-28), 'lon_1' : (64+15), 'coef_out' : 0, 'coef_in' : 1,
-                                               'encoder_conv_filters':[16, 16, 16, 32, 32,  32,   64, 64],
-                                                        'encoder_conv_kernel_size':[5,  5,  5,  5,   5,   5,   5,  3],
-                                                        'encoder_conv_strides'    :[2,  1,  1,  2,   1,   1,   2,  1],
-                                                        'encoder_conv_padding':["same","same","same","same","same","same","same","valid"],
-                                                        'encoder_conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"],
-                                                        'encoder_conv_skip': None,#[[0,2],[3,5]], # None,
-                                                        'encoder_use_batch_norm' : [True,True,True,True,True,True,True,True],
-                                                        'encoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25],
-                                               'decoder_conv_filters':[64,32,32,32,16,16,16,3],
-                                                        'decoder_conv_kernel_size':[3, 5, 5, 5, 5, 5, 5, 5],
-                                                            'decoder_conv_strides':[1, 2, 1, 1, 2, 1, 1, 2],
-                                                            'decoder_conv_padding':["valid","same","same","same","same","same","same","same"],
-                                                         'decoder_conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","sigmoid"],
-                                                               'decoder_conv_skip': None, #[[1,3],[4,6]], # None,
-                                                            'decoder_use_batch_norm' : [True,True,True,True,True,True,True,True],
-                                                            'decoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25]
+                                               'print_summary' : False, 'k1': 0.9 , 'k2':0.1, 'field_weights': [5., 1, 5.],'mask_area':'France', 'usemask' : True, 'Z_DIM': 8, #8, #64,
+                                                'N_EPOCHS': 10,'batch_size': 128, 'checkpoint_every': 1, 'lr': 5e-4, 'epoch_tol': None, 'lr_min' : 5e-4, 
+                                                'lat_0' : 0, 'lat_1' : 24, 'lon_0' : (64-28), 'lon_1' : (64+15), 'coef_out' : 0.001, 'coef_in' : 1, 
+                                                'coef_class' : 0.1#,
+                                               #'encoder_conv_filters':[16, 16, 16, 32, 32,  32,   64, 64],
+                                               #         'encoder_conv_kernel_size':[5,  5,  5,  5,   5,   5,   5,  3],
+                                               #         'encoder_conv_strides'    :[2,  1,  1,  2,   1,   1,   2,  1],
+                                               #         'encoder_conv_padding':["same","same","same","same","same","same","same","valid"],
+                                               #         'encoder_conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"],
+                                               #         'encoder_conv_skip': [[0,2],[3,5]], # None,
+                                               #         'encoder_use_batch_norm' : [True,True,True,True,True,True,True,True],
+                                               #         'encoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25],
+                                               #'decoder_conv_filters':[64,32,32,32,16,16,16,3],
+                                               #         'decoder_conv_kernel_size':[3, 5, 5, 5, 5, 5, 5, 5],
+                                               #             'decoder_conv_strides':[1, 2, 1, 1, 2, 1, 1, 2],
+                                               #             'decoder_conv_padding':["valid","same","same","same","same","same","same","same"],
+                                               #          'decoder_conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","sigmoid"],
+                                               #                'decoder_conv_skip': [[1,3],[4,6]], # None,
+                                               #             'decoder_use_batch_norm' : [True,True,True,True,True,True,True,True],
+                                               #             'decoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25]
                                               })
 
     logger.info(ut.dict2str(thefun_kwargs_default)) # a nice way of printing nested dictionaries

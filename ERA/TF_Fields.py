@@ -87,12 +87,32 @@ class VAE(tf.keras.Model): # Class of variational autoencoder
         if not None weights will be applied to the reconstructed field (last axis) when computing cross-entropy. 
         The idea is to prioritize some fields, for instance the fields that will be filtered (masked) in the decoder
         so that they contribute more. We know that soil moisture matters a lot for the heat waves, yet it is highly local
+    lat_0: int
+        latitude from which the loss is conditioned with coefficient coef_in
+    lat_1: int
+        latitude up to which the loss is conditioned  with coefficient coef_in
+    lon_0: int
+        longitude from which the loss is conditioned with coefficient coef_in
+    lon_1: int
+        longitude up to which the loss is conditioned  with coefficient coef_in
+    coef_in: float
+        coefficient of the reconstruction loss in the box (lat_0:lat1,lon0:lon1)
+    coef_in: float
+        coefficient of the reconstruction loss of the full box
+    coef_class 
+        coefficient of the classifier which compares the labels to the first component of the latent space
     '''
-    def __init__(self, encoder, decoder, k1=1, k2=1, from_logits=False, field_weights=None, 
-            lat_0=None, lat_1=None, lon_0=None, lon_1=None, coef_out=1, coef_in=0, mask_area=None, Z_DIM=2, N_EPOCHS=2, print_summary=True, **kwargs):
+    def __init__(self, *args, k1=1, k2=1, from_logits=False, field_weights=None, 
+            lat_0=None, lat_1=None, lon_0=None, lon_1=None, coef_out=1, coef_in=0, coef_class=0, mask_area=None, Z_DIM=2, N_EPOCHS=2, print_summary=True, **kwargs):
         super(VAE, self).__init__(**kwargs)
-        self.encoder = encoder
-        self.decoder = decoder
+        self.encoder = args[0]
+        self.decoder = args[1]
+        if len(args) > 2:
+            self.classifier = args[2]
+        else:
+            self.classifier = None
+        print(f"{self.classifier = }")
+        
         self.k1 = k1 # Reconstruction weight
         self.k2 = k2 # K-L divergence weight
         self.lat_0 = lat_0 # parameters for weighting the reconstruction loss geographically
@@ -101,13 +121,13 @@ class VAE(tf.keras.Model): # Class of variational autoencoder
         self.lon_1 = lon_1 
         self.coef_out = coef_out # The full grid coefficient for reconstruction loss
         self.coef_in = coef_in # The inner grid coefficient (lat_0:lat_1, lon_0:lon_1) for reconstruction loss
+        self.coef_class = coef_class # Coefficient which sets the importance of classification comparison between the data[1] - assumed to be a label and z[0] output 
         self.total_loss_tracker = tf.keras.metrics.Mean(name="total_loss")
-        self.reconstruction_loss_tracker = tf.keras.metrics.Mean(
-            name="reconstruction_loss"
-        )
+        self.reconstruction_loss_tracker = tf.keras.metrics.Mean(name="reconstruction_loss")
         self.kl_loss_tracker = tf.keras.metrics.Mean(name="kl_loss")
+        self.class_loss_tracker = tf.keras.metrics.Mean(name="class_loss")
         self.from_logits = from_logits
-        self.encoder_input_shape = encoder.input.shape   # i.e. TensorShape([None, 24, 128, 3])
+        self.encoder_input_shape = self.encoder.input.shape   # i.e. TensorShape([None, 24, 128, 3])
         self.field_weights = field_weights # Choose which fields the reconstruction loss cares about
         #self.mask_weights = mask_weights # Choose which grid points the reconstruction loss cares about  # This idea didn't work due to some errors
         self.bce = tf.keras.losses.BinaryCrossentropy(from_logits=from_logits)
@@ -120,6 +140,7 @@ class VAE(tf.keras.Model): # Class of variational autoencoder
             self.total_loss_tracker,
             self.reconstruction_loss_tracker,
             self.kl_loss_tracker,
+            self.class_loss_tracker
         ]
     def call(self, inputs):
         _, _, z =  self.encoder(inputs)
@@ -127,7 +148,18 @@ class VAE(tf.keras.Model): # Class of variational autoencoder
 
     def train_step(self, data):
         with tf.GradientTape() as tape:
+            if isinstance(data, tuple): # If model.fit receives both X and Y
+                print('both X and Y are provided')
+                label = data[1]
+                data = data[0]
+            else:
+                print('only X is provided')
             z_mean, z_log_var, z = self.encoder(data)
+            if self.classifier is not None:
+                zz = self.classifier(z)
+            else:
+                zz = z
+
             reconstruction = self.decoder(z)
             factor = self.k1*self.encoder_input_shape[1]*self.encoder_input_shape[2] # this factor is designed for consistency with the previous defintion of the loss (see commented section below)
             # We should try tf.reduce_mean([0.1,0.1,0.4]*tf.cast([bce(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis],sample_weight=np.ones((2,4,3))) for i in range(3)], dtype=np.float32))
@@ -138,17 +170,31 @@ class VAE(tf.keras.Model): # Class of variational autoencoder
             # there is probably a more efficient way to do the line above: we are adding the full region plus a sub region.
             kl_loss = -0.5 * (1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var))
             kl_loss = self.k2*tf.reduce_mean(tf.reduce_sum(kl_loss, axis=1))
-            total_loss = reconstruction_loss + kl_loss
+            if self.classifier is not None: # the idea is to have the first coordinate approximate the committor
+                class_loss = self.coef_class*self.bce(label,zz)
+            else: # without labels we cannot say what is the class error
+                class_loss = 0
+            total_loss = reconstruction_loss + kl_loss + class_loss
         grads = tape.gradient(total_loss, self.trainable_weights)
         self.optimizer.apply_gradients(zip(grads, self.trainable_weights))
         self.total_loss_tracker.update_state(total_loss)
         self.reconstruction_loss_tracker.update_state(reconstruction_loss)
         self.kl_loss_tracker.update_state(kl_loss)
+        self.class_loss_tracker.update_state(class_loss)
         return {
             "loss": self.total_loss_tracker.result(),
             "reconstruction_loss": self.reconstruction_loss_tracker.result(),
             "kl_loss": self.kl_loss_tracker.result(),
+            "class_loss" : self.class_loss_tracker.result()
         }
+
+def create_classifier(mysize): # Logistic regression
+    model = tf.keras.models.Sequential([
+        #tf.keras.layers.Flatten(input_shape=(8, 8)),     # if the model has a tensor input
+        tf.keras.layers.Input(shape=(mysize,)),                 # if the model has a flat input
+        tf.keras.layers.Dense(1) #, kernel_regularizer=l2(factor))
+    ])
+    return model
 
 def build_encoder_skip(input_dim, output_dim, encoder_conv_filters = [32,64,64,64],
                                                 encoder_conv_kernel_size = [3,3,3,3],
