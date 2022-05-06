@@ -42,6 +42,7 @@ from scipy.stats import norm
 import numpy as np
 from sklearn.linear_model import LogisticRegression
 from sklearn import neighbors
+from sklearn.metrics import log_loss
 
 tff = foo.tff # tensorflow routines 
 ut = foo.ut # utilities
@@ -99,40 +100,53 @@ def classify(fold_folder, evaluate_epoch, vae, X_tr, z_tr, Y_tr, X_va, z_va, Y_v
     checkpoints = checkpoints[1:]
     score = []
     labels = ['Log_L2','kNN_uni','kNN_dst']
-    L_parameter = [1e-3, 1e-2, 5e-2, 1e-1, 5e-1, 1e0, 1e1, 1e2, 1e3, 1e5,1e7,1e9] # Logistic regularization coefficients (L2 by default)
-    K_parameter = [1, 2, 3, 5, 10, 15, 20, 40, 75, 100, 150, 200, 400, 800, 1600, 3000] # Number of KNN
+    L_parameter = [1e-1, 5e-1, 1e0, 1e1, 1e2, 1e3, 1e5] # Logistic regularization coefficients (L2 by default)
+    K_parameter = [40, 75, 100, 150, 200, 400, 800, 1600] # Number of KNN
     #K_parameter2 = [1, 2, 3, 5, 10, 15, 20, 40, 100] # Number of KNN
 
     for checkpoint in checkpoints:
-        score_method = []
-        checkpoint_path = str(fold_folder)+f"/cp_vae-{checkpoint:04d}.ckpt" # TODO: convert checkpoints to f-strings
-        logger.info(f"==loading the model: {checkpoint_path}")
-        vae = tf.keras.models.load_model(fold_folder, compile=False)
-        vae.load_weights(f'{checkpoint_path}').expect_partial()
-        logger.info(f'{checkpoint_path} weights loaded')
-        _,_,z_tr = vae.encoder.predict(X_tr)
-        _,_,z_va = vae.encoder.predict(X_va)
-        logger.info(f"{z_tr.shape = }, {z_va.shape = }" )
+        found = 0
+        while found == 0:
+            score_method = []
+            checkpoint_path = str(fold_folder)+f"/cp_vae-{checkpoint:04d}.ckpt" # TODO: convert checkpoints to f-strings
+            checkpoint_path_check = checkpoint_path+".index" 
+            if not os.path.exists(checkpoint_path_check): # it could be that the training was unstable and we have to look for a checkpoint just before:
+                found = 0
+                logger.info(f"there is no {checkpoint_path_check}")
+                checkpoint = checkpoint - 1
+            else:
+                found = 1
+                logger.info(f"==loading the model: {checkpoint_path}")
+                vae = tf.keras.models.load_model(fold_folder, compile=False)
+                vae.load_weights(f'{checkpoint_path}').expect_partial()
+                logger.info(f'{checkpoint_path} weights loaded')
+                _,_,z_tr = vae.encoder.predict(X_tr)
+                _,_,z_va = vae.encoder.predict(X_va)
+                logger.info(f"{z_tr.shape = }, {z_va.shape = }" )
 
-        logger.info(f"Before undersampling: {len(Y_tr) = }, {len(Y_va) = }, {np.sum(Y_tr==1) = }, {np.sum(Y_va==1) = }")    
-        z_tr, Y_tr = ln.undersample(z_tr, Y_tr, u=u)  
-        logger.info(f"After undersampling: {len(Y_tr) = }, {len(Y_va) = }, {np.sum(Y_tr==1) = }, {np.sum(Y_va==1) = }")    
-        
-        logisticclassifier = [LogisticRegression(solver='liblinear',C=index_i) for index_i in L_parameter]
-        kNNclassifier = [neighbors.KNeighborsClassifier(n_neighbors, weights="uniform") for n_neighbors in K_parameter]
-        kNNclassifier2 = [neighbors.KNeighborsClassifier(n_neighbors, weights="distance") for n_neighbors in K_parameter]
-        for classifier, C_parameter in zip([logisticclassifier, kNNclassifier,kNNclassifier2], [L_parameter,K_parameter,K_parameter]):
-            logger.info(f"{classifier = }")
-            TP, TN, FP, FN, MCC, entropy, skill, BS, freq = [np.zeros(len(classifier),) for x in range(9)]
-            for i in range(len(classifier)):
-                classifier[i].fit(z_tr, Y_tr)
-                Y_pr = classifier[i].predict(z_va) 
-                Y_pr_prob = classifier[i].predict_proba(z_va)
+                logger.info(f"Before undersampling: {len(Y_tr) = }, {len(Y_va) = }, {np.sum(Y_tr==1) = }, {np.sum(Y_va==1) = }")    
+                z_tr, Y_tr = ln.undersample(z_tr, Y_tr, u=u)  
+                logger.info(f"After undersampling: {len(Y_tr) = }, {len(Y_va) = }, {np.sum(Y_tr==1) = }, {np.sum(Y_va==1) = }")    
+                maxskill = -(percent/100.)*np.log(percent/100.)-(1-percent/100.)*np.log(1-percent/100.)
+                logisticclassifier = [LogisticRegression(solver='liblinear',C=index_i, n_jobs=len(L_parameter)) for index_i in L_parameter]
+                kNNclassifier = [neighbors.KNeighborsClassifier(n_neighbors, weights="uniform",n_jobs=32) for n_neighbors in K_parameter]
+                # kNNclassifier2 = [neighbors.KNeighborsClassifier(n_neighbors, weights="distance") for n_neighbors in K_parameter]
+                for classifier, C_parameter in zip([logisticclassifier, kNNclassifier], [L_parameter,K_parameter]):
+                    logger.info(f"{classifier = }")
+                    entropy, skill= [np.zeros(len(classifier),) for x in range(2)]
+                    for i in range(len(classifier)):
+                        classifier[i].fit(z_tr, Y_tr)
+                        logger.info("model fit")
+                        # Y_pr = classifier[i].predict(z_va) 
+                        Y_pr_prob = classifier[i].predict_proba(z_va)
+                        logger.info("model predict")
+                        entropy[i] = log_loss(Y_va, Y_pr_prob[:, 1])
+                        skill[i] = (maxskill-entropy[i])/maxskill
+                        logger.info(f"{skill.shape = }")
+                        # TP[i], TN[i], FP[i], FN[i], MCC[i] = ef.ComputeMCC(Y_va, Y_pr, 'True')
+                        # _, entropy[i], skill[i], BS[i], _, freq[i] = ef.ComputeMetrics(np.array(Y_va), Y_pr_prob, percent, reundersampling_factor=u, print_output=False) 
 
-                TP[i], TN[i], FP[i], FN[i], MCC[i] = ef.ComputeMCC(Y_va, Y_pr, 'True')
-                _, entropy[i], skill[i], BS[i], _, freq[i] = ef.ComputeMetrics(np.array(Y_va), Y_pr_prob, percent, reundersampling_factor=u, print_output=False) 
-                logger.info(f"{skill.shape = }")
-            score_method.append(pd.DataFrame(np.array([C_parameter, TP, TN, FP, FN, MCC, entropy, skill, BS, freq]).transpose(), columns =['C','TP', 'TN', 'FP', 'FN', 'MCC', 'entropy', 'skill','Brier','freq'])) 
+                    score_method.append(pd.DataFrame(np.array([C_parameter, entropy, skill]).transpose(), columns =['C', 'entropy', 'skill'])) 
         score.append(pd.concat(score_method, keys=labels,names=['method', None]))
 
     score = pd.concat(score, keys=checkpoints,names=['checkpoint','method', None])
