@@ -1539,7 +1539,7 @@ class Plasim_Field:
         year_list : array-like, optional
             list of the years to keep, by default None
         '''
-        if year_list:
+        if year_list is not None:
             self.field = self.field.sel(time=self.field.time.dt.year.isin(year_list))
             self.years = len(year_list)
 
