@@ -677,7 +677,7 @@ def kwargator(thefun):
     thefun_kwargs_default = ut.set_values_recursive(thefun_kwargs_default,
                                             {'myinput':'Y', 'lat_end': 24,'fields': ['t2m_filtered','zg500','mrso_filtered'],'year_list': 'range(100)',
                                                'print_summary' : False, 'k1': 0.9 , 'k2':0.1, 'field_weights': [20.0, 1.0, 20.0],'mask_area':'France', 'usemask' : True, 'Z_DIM': 64, #2,
-                                                'N_EPOCHS': 100,'batch_size': 128, 'checkpoint_every': 1, 'lr': 5e-4, 'epoch_tol': None, 'lr_min' : 5e-4, #None, #,
+                                                'N_EPOCHS': 10,'batch_size': 128, 'checkpoint_every': 1, 'lr': 5e-4, 'epoch_tol': None, 'lr_min' : 5e-4, #None, #,
                                                'encoder_conv_filters':[16, 16, 16, 32, 32,  32,   64, 64],
                                                         'encoder_conv_kernel_size':[5,  5,  5,  5,   5,   5,   5,  3],
                                                         'encoder_conv_strides'    :[2,  1,  1,  2,   1,   1,   2,  1],
