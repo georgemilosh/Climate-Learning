@@ -99,8 +99,8 @@ def classify(fold_folder, evaluate_epoch, vae, X_tr, z_tr, Y_tr, X_va, z_va, Y_v
         checkpoints = list(range(0,evaluate_epoch+1,1))
     checkpoints = checkpoints[1:]
     score = []
-    labels = ['Log_L2','kNN_uni','kNN_dst']
-    L_parameter = [1e-1, 5e-1, 1e0, 1e1, 1e2, 1e3, 1e5] # Logistic regularization coefficients (L2 by default)
+    labels = ['Log_L2','kNN_uni','vae.class']
+    L_parameter = [1e-5,1e-3, 1e-2, 1e-1, 5e-1, 1e0, 1e1, 1e2, 1e3, 1e5] # Logistic regularization coefficients (L2 by default)
     K_parameter = [40, 75, 100, 150, 200, 400, 800, 1600] # Number of KNN
     #K_parameter2 = [1, 2, 3, 5, 10, 15, 20, 40, 100] # Number of KNN
 
@@ -128,19 +128,27 @@ def classify(fold_folder, evaluate_epoch, vae, X_tr, z_tr, Y_tr, X_va, z_va, Y_v
                 z_tr, Y_tr = ln.undersample(z_tr, Y_tr, u=u)  
                 logger.info(f"After undersampling: {len(Y_tr) = }, {len(Y_va) = }, {np.sum(Y_tr==1) = }, {np.sum(Y_va==1) = }")    
                 maxskill = -(percent/100.)*np.log(percent/100.)-(1-percent/100.)*np.log(1-percent/100.)
-                logisticclassifier = [LogisticRegression(solver='liblinear',C=index_i, n_jobs=len(L_parameter)) for index_i in L_parameter]
+                logisticclassifier = [LogisticRegression(solver='liblinear',C=index_i) for index_i in L_parameter]
                 kNNclassifier = [neighbors.KNeighborsClassifier(n_neighbors, weights="uniform",n_jobs=32) for n_neighbors in K_parameter]
-                # kNNclassifier2 = [neighbors.KNeighborsClassifier(n_neighbors, weights="distance") for n_neighbors in K_parameter]
-                for classifier, C_parameter in zip([logisticclassifier, kNNclassifier], [L_parameter,K_parameter]):
+                vaeclassifier = ['vae.classifier']
+                for classifier, C_parameter in zip([logisticclassifier, kNNclassifier,vaeclassifier], [L_parameter,K_parameter,[0]]):
                     logger.info(f"{classifier = }")
                     entropy, skill= [np.zeros(len(classifier),) for x in range(2)]
                     for i in range(len(classifier)):
-                        classifier[i].fit(z_tr, Y_tr)
-                        logger.info("model fit")
-                        # Y_pr = classifier[i].predict(z_va) 
-                        Y_pr_prob = classifier[i].predict_proba(z_va)
+                        if (classifier[i] == 'vae.classifier'):
+                            if hasattr(vae, 'classifier'):
+                                logger.info("vae.classifier fit")
+                                Y_pr_prob = vae.classifier.predict(z_va)
+                            else:
+                                Y_pr_prob = np.zeros(z_va.shape)
+                        else: # we are running sklearn classifiers
+                            classifier[i].fit(z_tr, Y_tr)
+                            logger.info("model fit")
+                            # Y_pr = classifier[i].predict(z_va) 
+                            Y_pr_prob = (classifier[i].predict_proba(z_va))[:, 1]
+                        
                         logger.info("model predict")
-                        entropy[i] = log_loss(Y_va, Y_pr_prob[:, 1])
+                        entropy[i] = log_loss(Y_va, Y_pr_prob)
                         skill[i] = (maxskill-entropy[i])/maxskill
                         logger.info(f"{skill.shape = }")
                         # TP[i], TN[i], FP[i], FN[i], MCC[i] = ef.ComputeMCC(Y_va, Y_pr, 'True')

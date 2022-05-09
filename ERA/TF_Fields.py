@@ -103,7 +103,7 @@ class VAE(tf.keras.Model): # Class of variational autoencoder
         coefficient of the classifier which compares the labels to the first component of the latent space
     '''
     def __init__(self, *args, k1=1, k2=1, from_logits=False, field_weights=None, 
-            lat_0=None, lat_1=None, lon_0=None, lon_1=None, coef_out=1, coef_in=0, coef_class=0, mask_area=None, Z_DIM=2, N_EPOCHS=2, print_summary=True, **kwargs):
+            lat_0=None, lat_1=None, lon_0=None, lon_1=None, coef_out=1, coef_in=0, coef_class=0, class_type='stochastic', mask_area=None, Z_DIM=2, N_EPOCHS=2, print_summary=True, **kwargs):
         super(VAE, self).__init__(**kwargs)
         self.encoder = args[0]
         self.decoder = args[1]
@@ -127,6 +127,7 @@ class VAE(tf.keras.Model): # Class of variational autoencoder
         self.kl_loss_tracker = tf.keras.metrics.Mean(name="kl_loss")
         self.class_loss_tracker = tf.keras.metrics.Mean(name="class_loss")
         self.from_logits = from_logits
+        self.class_type = class_type  # Decided if mean or the stochastic term is used for zz to condition based on classification
         self.encoder_input_shape = self.encoder.input.shape   # i.e. TensorShape([None, 24, 128, 3])
         self.field_weights = field_weights # Choose which fields the reconstruction loss cares about
         #self.mask_weights = mask_weights # Choose which grid points the reconstruction loss cares about  # This idea didn't work due to some errors
@@ -156,7 +157,10 @@ class VAE(tf.keras.Model): # Class of variational autoencoder
                 print('only X is provided')
             z_mean, z_log_var, z = self.encoder(data)
             if self.classifier is not None:
-                zz = self.classifier(z)
+                if self.class_type == 'stochastic':
+                    zz = self.classifier(z)
+                else:
+                    zz = self.classifier(z_mean)
             else:
                 zz = z
 
