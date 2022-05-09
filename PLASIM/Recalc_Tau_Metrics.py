@@ -40,6 +40,10 @@ markerstyles=['1','2','3','4']
 markerstylescycle = cycle(markerstyles)
 markerstylesnext = next(markerstylescycle)
 
+widthstyles=[4,3,2,1]
+widthstylescycle = cycle(widthstyles)
+widthstylesnext = next(widthstylescycle)
+
 print('Number of curves to output ',len(sys.argv) - 2)
 
 if '[' in sys.argv[-1]: #checking for multiple inputs
@@ -250,7 +254,7 @@ for check_num1, checkpoint_name1 in enumerate(sys.argv[1:-2]):
     ax1.errorbar(-np.array(tau), mean_new_MCC, yerr = std_new_MCC, capsize = 3, elinewidth = 1, capthick = 1, linestyle=linestylesnext, marker=markerstylesnext)
     #ax1.plot(-np.array(tau), mean_new_MCC, linestyle=linestylesnext, marker=markerstylesnext)
     ax1.fill_between(-np.array(tau), np.array(mean_new_MCC) - np.array(std_new_MCC), np.array(mean_new_MCC) + np.array(std_new_MCC), alpha=0.1)
-    ax2.errorbar(-np.array(tau), mean_skill, yerr = std_skill, capsize = 3,  elinewidth = 1, capthick = 1, linestyle=linestylesnext, marker=markerstylesnext)
+    ax2.errorbar(-np.array(tau), mean_skill, yerr = std_skill, capsize = 3*widthstylesnext,  elinewidth = widthstylesnext, capthick = int(markerstylesnext), linestyle=linestylesnext, marker=markerstylesnext)
     #ax2.plot(-np.array(tau), mean_skill, linestyle=linestylesnext, marker=markerstylesnext)
     ax2.fill_between(-np.array(tau), np.array(mean_skill) - np.array(std_skill), np.array(mean_skill) + np.array(std_skill), alpha=0.1)
     #ax3.plot(-np.array(tau), mean_BS, linestyle=linestylesnext, marker=markerstylesnext)
@@ -259,6 +263,7 @@ for check_num1, checkpoint_name1 in enumerate(sys.argv[1:-2]):
     #ax4.fill_between(-np.array(tau), np.array(mean_entropy) - np.array(std_entropy), np.array(mean_entropy) + np.array(std_entropy), alpha=0.1)
     linestylesnext = next(linestylescycle)
     markerstylesnext = next(markerstylescycle)
+    widthstylesnext = next(widthstylescycle)
    
 
 ax1.set_title('MCC')
