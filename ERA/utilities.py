@@ -452,6 +452,16 @@ def extract_nested(d_nested, key):
                     continue
         raise KeyError(f'{key} is not a valid key')
 
+def keys_exists(d_nested, key):
+    '''
+    Check if *keys (nested) exists in `element` (dict). This is basically like extract_nested() but does not raise the KeyError as the output
+    '''
+    try: 
+        _element = extract_nested(d_nested, key)
+        return True
+    except KeyError:
+        return False
+
 
 def set_values_recursive(d_nested, d_flat, inplace=False):
     '''
