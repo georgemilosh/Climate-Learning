@@ -150,7 +150,7 @@ def normalize_X(X,folder, myinput='N',mode='pointwise'):
 
 @ut.execution_time  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function
-def create_or_load_vae(folder, INPUT_DIM, myinput, VAE_kwargs=None, build_encoder_skip_kwargs=None, build_decoder_skip_kwargs=None, checkpoint_every=1):
+def create_or_load_vae(folder, INPUT_DIM, myinput, VAE_kwargs=None, build_encoder_skip_kwargs=None, build_decoder_skip_kwargs=None, create_classifier_kwargs=None, checkpoint_every=1):
     '''
     Creates a Variational AutoEncoder Model or loads the existing one 
         from the weights given in the model
@@ -177,6 +177,7 @@ def create_or_load_vae(folder, INPUT_DIM, myinput, VAE_kwargs=None, build_encode
         see tff.build_encoder_skip kwargs (TF_Fields.py)
     build_decoder_skip_kwargs: dictionary (optional)
         see tff.build_decoder_skip kwargs (TF_Fields.py)
+    create_classifier_kwargs: dictionary (optional)
     
 
     Returns
@@ -198,6 +199,8 @@ def create_or_load_vae(folder, INPUT_DIM, myinput, VAE_kwargs=None, build_encode
         build_encoder_skip_kwargs = {}
     if build_decoder_skip_kwargs is None:
         build_decoder_skip_kwargs = {}
+    if create_classifier_kwargs is None:
+        create_classifier_kwargs = {}
     VAE_kwargs_local = VAE_kwargs.copy()
     mask_area = VAE_kwargs_local.pop('mask_area') # because vae_kwargs_local must be passed to tff.VAE constructor and we still need vae_kwargs for other folds
     Z_DIM = VAE_kwargs_local.pop('Z_DIM')
@@ -220,7 +223,7 @@ def create_or_load_vae(folder, INPUT_DIM, myinput, VAE_kwargs=None, build_encode
     
     logger.info("==Building encoder==")
     _, _, shape_before_flattening, encoder  = tff.build_encoder_skip(input_dim = INPUT_DIM, output_dim = Z_DIM, **build_encoder_skip_kwargs)
-    classifier = tff.create_classifier(Z_DIM)
+    classifier = tff.create_classifier(Z_DIM, **create_classifier_kwargs)
     if print_summary:
         encoder.summary()
     logger.info("==Building decoder==") 
@@ -359,11 +362,10 @@ def k_fold_cross_val(folder, myinput, X, Y, year_permutation, create_or_load_vae
             else: # we are not inside of one of the folds, either this is a new run, or we need to iterate through the runs
                 logger.info(f'{folder}/fold_num.npy does not exist')
                 fold_folder = f'{folder}/fold_{i}'
-                if myinput != 'N': # if 'N' do not create a new folder (just loading) 
-                    if myinput == 'Y': # If 'C' we don't need to change anything
-                        if not os.path.exists(fold_folder):
-                            os.mkdir(fold_folder)
-                            np.save(f'{fold_folder}/fold_num',i) # the other option would be parsing the fold_N string to get i in future
+                if myinput == 'Y': # If 'C' we don't need to change anything
+                    if not os.path.exists(fold_folder):
+                        os.mkdir(fold_folder)
+                        np.save(f'{fold_folder}/fold_num',i) # the other option would be parsing the fold_N string to get i in future
 
             # split data
             logger.info(f"{i = }, {X.shape = }, {Y.shape = }, {nfolds=}, {val_folds=}")
@@ -396,7 +398,7 @@ def k_fold_cross_val(folder, myinput, X, Y, year_permutation, create_or_load_vae
                 X_tr = normalize_X(X_tr, fold_folder, myinput=myinput, mode=normalization_mode)
                 logger.info(f'{X_tr.shape = },{np.mean(X_tr[:,5,5,0]) = },{np.std(X_tr[:,5,5,0]) = }')
             X_va = normalize_X(X_va, fold_folder, myinput='N', mode=normalization_mode) #validation is always normalized passively (based on already computed normalization)
-
+            logger.info(f"{X_va[5,5,5,1] = }, {Y_va[5] = }, {X_tr[5,5,5,1] = }, {Y_tr[5] = }")
             logger.info(f"{create_or_load_vae_kwargs = }")
             vae, history_vae, N_EPOCHS, INITIAL_EPOCH, ckpt_path_callback = create_or_load_vae(fold_folder, INPUT_DIM, myinput,**create_or_load_vae_kwargs)
             if myinput!='N': 
@@ -410,7 +412,7 @@ def k_fold_cross_val(folder, myinput, X, Y, year_permutation, create_or_load_vae
                 if evaluate_epoch != 'last': # we load a specific checkpoint
                     checkpoint_path = str(fold_folder)+f"/cp_vae-{evaluate_epoch:04d}.ckpt" # TODO: convert checkpoints to f-strings
                 logger.info(f"==loading the model: {checkpoint_path}")
-                vae = tf.keras.models.load_model(fold_folder, compile=False)
+                # vae = tf.keras.models.load_model(fold_folder, compile=False)
 
                 vae.load_weights(f'{checkpoint_path}').expect_partial()
                 logger.info(f'{checkpoint_path} weights loaded')
@@ -668,6 +670,7 @@ ln.train_vae = train_vae
 ln.VAE = tff.VAE
 ln.build_encoder_skip = tff.build_encoder_skip
 ln.build_decoder_skip = tff.build_decoder_skip
+ln.create_classifier = tff.create_classifier
 ln.scheduler = scheduler
 
 def kwargator(thefun):
@@ -676,11 +679,11 @@ def kwargator(thefun):
     '''
     thefun_kwargs_default = ln.get_default_params(thefun, recursive=True)
     thefun_kwargs_default = ut.set_values_recursive(thefun_kwargs_default,
-                                            {'myinput':'Y', 'lat_end': 24,'fields': ['t2m_filtered','zg500','mrso_filtered'],'year_list': 'range(500)',
-                                               'print_summary' : False, 'k1': 0.9 , 'k2':0.1, 'field_weights': [20., 1, 20.],'mask_area':'France', 'usemask' : True, 'Z_DIM': 64, #8, #64,
-                                                'N_EPOCHS': 10,'batch_size': 128, 'checkpoint_every': 1, 'lr': 5e-4, 'epoch_tol': None, 'lr_min' : 5e-4, 
+                                            {'myinput':'Y', 'lat_end': 24,'fields': ['t2m_filtered','zg500','mrso_filtered'],'year_list': 'range(100)',
+                                               'print_summary' : False, 'k1': 0.9 , 'k2':0.1, 'field_weights': [20., 1, 20.],'mask_area':'France', 'usemask' : True, 'Z_DIM': 8, #8, #64,
+                                                'N_EPOCHS': 10,'batch_size': 1024, 'checkpoint_every': 1, 'lr': 5e-4, 'epoch_tol': None, 'lr_min' : 5e-4, 
                                                 'lat_0' : 0, 'lat_1' : 24, 'lon_0' : (64-28), 'lon_1' : (64+15), 'coef_out' : 0.1, 'coef_in' : 1, 
-                                                'coef_class' : 1, 'class_type' : 'mean',
+                                                'coef_class' : 1, 'class_type' : 'mean', 'L2factor' : 1e-2,
                                                'encoder_conv_filters':[16, 16, 16, 32, 32,  32,   64, 64],
                                                         'encoder_conv_kernel_size':[5,  5,  5,  5,   5,   5,   5,  3],
                                                         'encoder_conv_strides'    :[2,  1,  1,  2,   1,   1,   2,  1],

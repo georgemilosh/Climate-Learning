@@ -166,7 +166,8 @@ def classify(fold_folder, evaluate_epoch, vae, X_tr, z_tr, Y_tr, X_va, z_va, Y_v
                         
                         logger.info("model predict")
                         if classifier[i] == 'vae.classifier':
-                            entropy[i] = tf.keras.losses.BinaryCrossentropy(from_logits=from_logits)(Y_va,Y_pr_prob)  # Here we rely on tensorflow binary cross entropy that was used to compute probabilities
+                            entropy[i] = vae.bce(Y_va,Y_pr_prob)
+                            #entropy[i] = tf.keras.losses.BinaryCrossentropy(from_logits=from_logits)(Y_va,Y_pr_prob)  # Here we rely on tensorflow binary cross entropy that was used to compute probabilities
                         else:
                             entropy[i] = log_loss(Y_va, Y_pr_prob) # Here we rely on sklearn
                         skill[i] = (maxskill-entropy[i])/maxskill

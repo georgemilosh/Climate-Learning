@@ -96,7 +96,7 @@ def PrepareData(creation = []):  # if we do not specify creation it automacially
     else:
         T = 14
 
-    tau = -15 #-5  # lag
+    tau = -10 #-5  # lag
     usepipelines = False # if True => Dataset.from_tensor_slices will be used. This is a more advanced method but it takes more RAM and there is a possiblity for memory leaks when repeating training for cross-validation
     fullmetrics = True # If True MCC and confusion matrix will be evaluated during training. This makes training slower!
 

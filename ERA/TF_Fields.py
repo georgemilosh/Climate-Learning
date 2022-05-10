@@ -8,6 +8,7 @@ from tensorflow import keras
 from tensorflow.keras import regularizers
 from tensorflow.keras.layers import Dense, Activation, Flatten, Conv2D, SeparableConv2D, MaxPooling2D, BatchNormalization, Dropout, SpatialDropout2D, Input, concatenate, Softmax, Reshape, Add, Conv2DTranspose, LeakyReLU # Vallerian's approach
 from tensorflow.keras.models import Sequential, Model
+from tensorflow.keras.regularizers import l2
 from tensorflow.keras import datasets, layers, models # from https://www.tensorflow.org/tutorials/images/cnn
 from tensorflow.keras import backend as K
 import matplotlib.pyplot as plt
@@ -192,13 +193,19 @@ class VAE(tf.keras.Model): # Class of variational autoencoder
             "class_loss" : self.class_loss_tracker.result()
         }
 
-def create_classifier(mysize): # Logistic regression
-    model = tf.keras.models.Sequential([
-        #tf.keras.layers.Flatten(input_shape=(8, 8)),     # if the model has a tensor input
-        tf.keras.layers.Input(shape=(mysize,)),                 # if the model has a flat input
-        tf.keras.layers.Dense(1) #, kernel_regularizer=l2(factor))
-    ])
-    return model
+def create_classifier(mysize, L2factor=None): # Logistic regression
+    if L2factor is None:
+        return tf.keras.models.Sequential([
+            #tf.keras.layers.Flatten(input_shape=(8, 8)),     # if the model has a tensor input
+            tf.keras.layers.Input(shape=(mysize,)),                 # if the model has a flat input
+            tf.keras.layers.Dense(1) 
+        ])
+    else:
+       return tf.keras.models.Sequential([
+            #tf.keras.layers.Flatten(input_shape=(8, 8)),     # if the model has a tensor input
+            tf.keras.layers.Input(shape=(mysize,)),                 # if the model has a flat input
+            tf.keras.layers.Dense(1, kernel_regularizer=l2(L2factor))
+        ])
 
 def build_encoder_skip(input_dim, output_dim, encoder_conv_filters = [32,64,64,64],
                                                 encoder_conv_kernel_size = [3,3,3,3],
