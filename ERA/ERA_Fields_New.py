@@ -1406,6 +1406,7 @@ def __weighted_average(dim, weights, xa, xa_copy):
 
 def __weighted_average_with_mask(dim, mask, weights, xa, xa_copy):
     '''helper function for masked_average'''
+    # TODO: this is slow as hell and stresses the RAM
     _, mask_all_dims = xr.broadcast(xa, mask)  # broadcast to all dims
     xa_copy = xa_copy.where(mask)
     if weights is not None:
