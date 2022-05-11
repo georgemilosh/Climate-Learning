@@ -2593,15 +2593,27 @@ CONFIG_DICT = build_config_dict([Trainer.run, Trainer.telegram]) # module level 
 # config file will be built from the default parameters of the functions given here and of the functions they call in a recursive manner
         
 
-        
-def main():
+def deal_with_lock():
+    '''
+    Checks if there is a lock and performs the necessary operations. 
+
+    Returns
+    -------
+    b : bool
+        True if there is a lock, False otherwise
+
+    Raises
+    ------
+    ValueError
+        If invalid command line
+    '''
     # check if there is a lock:
     lock = Path(__file__).resolve().parent / 'lock.txt'
     if os.path.exists(lock): # there is a lock
         # check for folder argument
         if len(sys.argv) < 2: 
             print(usage())
-            return
+            return True
         if len(sys.argv) == 2:
             folder = sys.argv[1]
             print(f'moving code to {folder = }')
@@ -2612,13 +2624,15 @@ def main():
             # runs file (which will keep track of various runs performed in newly created folder)
             ut.dict2json({},f'{folder}/runs.json')
 
-            return
+            return True
         else:
             with open(lock) as l:
                 raise ValueError(l.read())
     
-    # if there is a lock, the previous block of code would have ended the run, so the code below is executed only if there is no lock
-    
+    return False
+
+def parse_command_line():
+    '''Parses command line arguments into a dictionary'''
     #parse command line arguments
     cl_args = sys.argv[1:]
     i = 0
@@ -2637,6 +2651,17 @@ def main():
         except:
             logger.warning(f'Could not evaluate {value}. Keeping string type')
         arg_dict[key] = value
+
+        return arg_dict
+
+        
+def main():
+    if deal_with_lock():
+        return
+    
+    # the code below is executed only if there is no lock
+    
+    arg_dict = parse_command_line()
 
     logger.info(f'{arg_dict = }')
 
