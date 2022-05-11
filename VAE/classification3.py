@@ -131,8 +131,8 @@ def classify(fold_folder, evaluate_epoch, vae, X_tr, z_tr, Y_tr, X_va, z_va, Y_v
                 logger.info(f"{z_tr.shape = }, {z_va.shape = }" )
 
                 logger.info(f"Before undersampling: {len(Y_tr) = }, {len(Y_va) = }, {np.sum(Y_tr==1) = }, {np.sum(Y_va==1) = }")    
-                z_tr, Y_tr = ln.undersample(z_tr, Y_tr, u=u)  
-                logger.info(f"After undersampling: {len(Y_tr) = }, {len(Y_va) = }, {np.sum(Y_tr==1) = }, {np.sum(Y_va==1) = }")    
+                #z_tr, Y_tr = ln.undersample(z_tr, Y_tr, u=u)  
+                #logger.info(f"After undersampling: {len(Y_tr) = }, {len(Y_va) = }, {np.sum(Y_tr==1) = }, {np.sum(Y_va==1) = }")    
                 maxskill = -(percent/100.)*np.log(percent/100.)-(1-percent/100.)*np.log(1-percent/100.)
                 logisticclassifier = [LogisticRegression(solver='liblinear',C=index_i) for index_i in L_parameter]
                 lassoclassifier = [LogisticRegression(solver='liblinear', penalty="l1", C=index_i) for index_i in L_parameter]
@@ -147,16 +147,16 @@ def classify(fold_folder, evaluate_epoch, vae, X_tr, z_tr, Y_tr, X_va, z_va, Y_v
                                 logger.info("vae.classifier fit")
                                 if class_type is not None:
                                     if class_type == "stochastic":
-                                        logger.info("vae.classifier is stochastic")
-                                        Y_pr_prob = vae.classifier.predict(z_va)
+                                        logger.info("Y_pr_prob = vae.classifier.predict(z_va)")
+                                        Y_pr_prob = vae.classifier.predict(z_va)[:, 0]
                                     else: # i.e. "mean"
-                                        logger.info("vae.classifier is deterministic")
-                                        Y_pr_prob = vae.classifier.predict(z_mean_va)
+                                        logger.info("Y_pr_prob = vae.classifier.predict(z_mean_va)")
+                                        Y_pr_prob = vae.classifier.predict(z_mean_va)[:, 0]
                                 else:
-                                    logger.info("vae.classifier is stochastic")
-                                    Y_pr_prob = vae.classifier.predict(z_va)
+                                    logger.info("Y_pr_prob = vae.classifier.predict(z_va)")
+                                    Y_pr_prob = vae.classifier.predict(z_va)[:, 0]
                             else:
-                                logger.info("vae.classifier not available, setting prediction to zero")
+                                logger.info("Y_pr_prob = np.zeros(z_va.shape)")
                                 Y_pr_prob = np.zeros(z_va.shape)
                         else: # we are running sklearn classifiers
                             classifier[i].fit(z_tr, Y_tr)
@@ -166,8 +166,10 @@ def classify(fold_folder, evaluate_epoch, vae, X_tr, z_tr, Y_tr, X_va, z_va, Y_v
                         
                         logger.info("model predict")
                         if classifier[i] == 'vae.classifier':
-                            entropy[i] = vae.bce(Y_va,Y_pr_prob)
-                            #entropy[i] = tf.keras.losses.BinaryCrossentropy(from_logits=from_logits)(Y_va,Y_pr_prob)  # Here we rely on tensorflow binary cross entropy that was used to compute probabilities
+                            if hasattr(vae, 'bce'):
+                                entropy[i] = vae.bce(Y_va,Y_pr_prob)
+                            else: # if load_model was used it will mess up the attributes
+                                entropy[i] = tf.keras.losses.BinaryCrossentropy(from_logits=from_logits)(Y_va,Y_pr_prob)  # Here we rely on tensorflow binary cross entropy that was used to compute probabilities
                         else:
                             entropy[i] = log_loss(Y_va, Y_pr_prob) # Here we rely on sklearn
                         skill[i] = (maxskill-entropy[i])/maxskill

@@ -145,8 +145,15 @@ class VAE(tf.keras.Model): # Class of variational autoencoder
             self.class_loss_tracker
         ]
     def call(self, inputs):
-        _, _, z =  self.encoder(inputs)
-        return self.decoder(z)
+        z_mean, _, z =  self.encoder(inputs)
+        if self.classifier is not None:
+            if self.class_type == 'stochastic':
+                zz = self.classifier(z)
+            else:
+                zz = self.classifier(z_mean)
+        else:
+            zz = z
+        return self.decoder(z), zz
 
     def train_step(self, data):
         with tf.GradientTape() as tape:
@@ -176,7 +183,7 @@ class VAE(tf.keras.Model): # Class of variational autoencoder
             kl_loss = -0.5 * (1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var))
             kl_loss = self.k2*tf.reduce_mean(tf.reduce_sum(kl_loss, axis=1))
             if self.classifier is not None: # the idea is to have the first coordinate approximate the committor
-                class_loss = self.coef_class*self.bce(label,zz)
+                class_loss = self.coef_class*self.bce(label,zz[:,0])
             else: # without labels we cannot say what is the class error
                 class_loss = 0
             total_loss = reconstruction_loss + kl_loss + class_loss
@@ -194,18 +201,12 @@ class VAE(tf.keras.Model): # Class of variational autoencoder
         }
 
 def create_classifier(mysize, L2factor=None): # Logistic regression
+    classifier_inputs = tf.keras.Input(shape=(mysize,), name ='classifier input')
     if L2factor is None:
-        return tf.keras.models.Sequential([
-            #tf.keras.layers.Flatten(input_shape=(8, 8)),     # if the model has a tensor input
-            tf.keras.layers.Input(shape=(mysize,)),                 # if the model has a flat input
-            tf.keras.layers.Dense(1) 
-        ])
+        classifier_outputs = tf.keras.layers.Dense(1, kernel_regularizer=l2(L2factor))(classifier_inputs)
     else:
-       return tf.keras.models.Sequential([
-            #tf.keras.layers.Flatten(input_shape=(8, 8)),     # if the model has a tensor input
-            tf.keras.layers.Input(shape=(mysize,)),                 # if the model has a flat input
-            tf.keras.layers.Dense(1, kernel_regularizer=l2(L2factor))
-        ])
+        classifier_outputs = tf.keras.layers.Dense(1)(classifier_inputs)
+    return tf.keras.Model(classifier_inputs, classifier_outputs, name="classifier")
 
 def build_encoder_skip(input_dim, output_dim, encoder_conv_filters = [32,64,64,64],
                                                 encoder_conv_kernel_size = [3,3,3,3],

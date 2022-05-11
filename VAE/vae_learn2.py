@@ -398,13 +398,91 @@ def k_fold_cross_val(folder, myinput, X, Y, year_permutation, create_or_load_vae
                 X_tr = normalize_X(X_tr, fold_folder, myinput=myinput, mode=normalization_mode)
                 logger.info(f'{X_tr.shape = },{np.mean(X_tr[:,5,5,0]) = },{np.std(X_tr[:,5,5,0]) = }')
             X_va = normalize_X(X_va, fold_folder, myinput='N', mode=normalization_mode) #validation is always normalized passively (based on already computed normalization)
-            logger.info(f"{X_va[5,5,5,1] = }, {Y_va[5] = }, {X_tr[5,5,5,1] = }, {Y_tr[5] = }")
+            if not reconstruction: # either training or classification, in both cases we need training set
+                logger.info(f"{X_va[5,5,5,1] = }, {Y_va[5] = }, {X_tr[5,5,5,1] = }, {Y_tr[5] = }")
             logger.info(f"{create_or_load_vae_kwargs = }")
             vae, history_vae, N_EPOCHS, INITIAL_EPOCH, ckpt_path_callback = create_or_load_vae(fold_folder, INPUT_DIM, myinput,**create_or_load_vae_kwargs)
+
+
+            logger.info(f"{len(vae.trainable_weights) = }, {len(vae.encoder.trainable_weights) = }, {len(vae.decoder.trainable_weights) = }")
+            
+            for inner_layer in vae.encoder.layers:
+                if inner_layer.name == 'encoder_conv_0':
+                    logger.info(f"vae.encoder layers: {inner_layer.name = }")
+                    logger.info(f"{inner_layer.weights[0][0,0,0,:] = }")
+            if hasattr(vae, 'classifier'):
+                for inner_layer in vae.classifier.layers:
+                    logger.info(f"vae.classifier layers: {inner_layer.name = }")
+                    logger.info(f"{inner_layer.weights = }")
+                
+                
+
+            #logger.info(f"Before training: {vae_trainable_weights = }")
+            # logger.info(f"Before training: {vae.classifier.trainable_weights = }")
             if myinput!='N': 
                 history_loss = train_vae(X_tr, Y_tr, vae, ckpt_path_callback, fold_folder, myinput, N_EPOCHS, INITIAL_EPOCH, history_vae, **train_vae_kwargs)
             else: # myinput='N' is useful when loading this function in reconstruction.py or classification for instance
                 history_loss = np.load(f"{fold_folder}/history_vae", allow_pickle=True)['loss']
+            # logger.info(f"After training: {vae.classifier.trainable_weights = }")
+            logger.info(f"{len(vae.trainable_weights) = }, {len(vae.encoder.trainable_weights) = }, {len(vae.decoder.trainable_weights) = }")
+            
+            #for trainable_weights in vae.encoder.trainable_weights:
+            #    logger.info(f"vae.encoder layers: {trainable_weights = }")
+            for inner_layer in vae.encoder.layers:
+                if inner_layer.name == 'encoder_conv_0':
+                    logger.info(f"vae.encoder layers: {inner_layer.name = }")
+                    logger.info(f"{inner_layer.weights[0][0,0,0,:] = }")
+            """
+            for layer in vae.layers:
+                logger.info(f"for layer in vae.layers: {layer.name = }, {layer = }")
+                if layer.name == 'encoder':
+                    for inner_layer in layer.layers:
+                        if inner_layer.name == 'encoder_conv_0':
+                            logger.info(f"encoder layers: {inner_layer.name = }")
+                            logger.info(f"{inner_layer.weights[0][0,0,0,:] = }")
+                if layer.name == 'classifier':
+                    for inner_layer in layer.layers:
+                        logger.info(f"classifier layers: {inner_layer.name = }")
+                        logger.info(f"{inner_layer.weights = }")
+            """
+            if hasattr(vae, 'classifier'):
+                #for trainable_weights in vae.classifier.trainable_weights:
+                #    logger.info(f"vae.classifier layers: {trainable_weights = }")
+                for inner_layer in vae.classifier.layers:
+                    logger.info(f"vae.classifier layers: {inner_layer.name = }")
+                    logger.info(f"{inner_layer.weights = }")
+            
+           
+
+            if not reconstruction: # either training or classification, in both cases we need training set
+                z_mean_tr,_,z_tr = vae.encoder.predict(X_tr)
+                z_mean_va,_,z_va = vae.encoder.predict(X_va)
+                logger.info("Evaluating classification")
+                if hasattr(vae, 'classifier'):
+                    logger.info("vae.classifier fit")
+                    if vae.class_type is not None:
+                        if vae.class_type == "stochastic":
+                            logger.info("Y_pr_prob_va = vae.classifier.predict(z_va)")
+                            Y_pr_prob_va = vae.classifier.predict(z_va)[:, 0]
+                            logger.info("Y_pr_prob_tr = vae.classifier.predict(z_tr)")
+                            Y_pr_prob_tr = vae.classifier.predict(z_tr)[:, 0]
+                        else: # i.e. "mean"
+                            logger.info("Y_pr_prob_va = vae.classifier.predict(z_mean_va)")
+                            Y_pr_prob_va = vae.classifier.predict(z_mean_va)[:, 0]
+                            logger.info("Y_pr_prob_tr = vae.classifier.predict(z_mean_tr)")
+                            Y_pr_prob_tr = vae.classifier.predict(z_mean_tr)[:, 0]
+                    else:
+                        logger.info("Y_pr_prob_va = vae.classifier.predict(z_va)")
+                        Y_pr_prob_va = vae.classifier.predict(z_va)[:, 0]
+                        logger.info("Y_pr_prob_tr = vae.classifier.predict(z_tr)")
+                        Y_pr_prob_tr = vae.classifier.predict(z_tr)[:, 0]
+                    logger.info(f"{Y_tr.shape = }, {Y_pr_prob_tr.shape = } ")
+                    vaebce_tr = vae.bce(Y_tr,Y_pr_prob_tr)
+                    vaebce_va = vae.bce(Y_va,Y_pr_prob_va)
+                    logger.info(f"{vaebce_va = }, {vaebce_tr = } ")
+                else:
+                    logger.info("vae.classifier does not exist")
+
         # Now we decide whether to use a different epoch for the projection
             checkpoint_path = tf.train.latest_checkpoint(fold_folder)
             logger.info(f"{checkpoint_path = }")
@@ -417,9 +495,6 @@ def k_fold_cross_val(folder, myinput, X, Y, year_permutation, create_or_load_vae
                 vae.load_weights(f'{checkpoint_path}').expect_partial()
                 logger.info(f'{checkpoint_path} weights loaded')
             if classification:
-                _,_,z_tr = vae.encoder.predict(X_tr)
-                _,_,z_va = vae.encoder.predict(X_va)
-                logger.info(f"{z_tr.shape = }, {z_va.shape = }" )
                 score.append(classify(fold_folder, evaluate_epoch, vae, X_tr, z_tr, Y_tr, X_va, z_va, Y_va, u)) 
             else:
                 score=None
@@ -679,27 +754,27 @@ def kwargator(thefun):
     '''
     thefun_kwargs_default = ln.get_default_params(thefun, recursive=True)
     thefun_kwargs_default = ut.set_values_recursive(thefun_kwargs_default,
-                                            {'myinput':'Y', 'lat_end': 24,'fields': ['t2m_filtered','zg500','mrso_filtered'],'year_list': 'range(100)',
+                                            {'myinput':'Y', 'lat_end': 24,'fields': ['t2m_filtered','zg500','mrso_filtered'],'year_list': 'range(500)',
                                                'print_summary' : False, 'k1': 0.9 , 'k2':0.1, 'field_weights': [20., 1, 20.],'mask_area':'France', 'usemask' : True, 'Z_DIM': 8, #8, #64,
                                                 'N_EPOCHS': 10,'batch_size': 1024, 'checkpoint_every': 1, 'lr': 5e-4, 'epoch_tol': None, 'lr_min' : 5e-4, 
                                                 'lat_0' : 0, 'lat_1' : 24, 'lon_0' : (64-28), 'lon_1' : (64+15), 'coef_out' : 0.1, 'coef_in' : 1, 
-                                                'coef_class' : 1, 'class_type' : 'mean', 'L2factor' : 1e-2,
-                                               'encoder_conv_filters':[16, 16, 16, 32, 32,  32,   64, 64],
-                                                        'encoder_conv_kernel_size':[5,  5,  5,  5,   5,   5,   5,  3],
-                                                        'encoder_conv_strides'    :[2,  1,  1,  2,   1,   1,   2,  1],
-                                                        'encoder_conv_padding':["same","same","same","same","same","same","same","valid"],
-                                                        'encoder_conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"],
-                                                        'encoder_conv_skip': [[0,2],[3,5]], # None,
-                                                        'encoder_use_batch_norm' : [True,True,True,True,True,True,True,True],
-                                                        'encoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25],
-                                               'decoder_conv_filters':[64,32,32,32,16,16,16,3],
-                                                        'decoder_conv_kernel_size':[3, 5, 5, 5, 5, 5, 5, 5],
-                                                            'decoder_conv_strides':[1, 2, 1, 1, 2, 1, 1, 2],
-                                                            'decoder_conv_padding':["valid","same","same","same","same","same","same","same"],
-                                                         'decoder_conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","sigmoid"],
-                                                               'decoder_conv_skip': [[1,3],[4,6]], # None,
-                                                            'decoder_use_batch_norm' : [True,True,True,True,True,True,True,True],
-                                                            'decoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25]
+                                                'coef_class' : 0.01, 'class_type' : 'mean', 'L2factor' : 1e-9 #,
+                                               #'encoder_conv_filters':[16, 16, 16, 32, 32,  32,   64, 64],
+                                               #         'encoder_conv_kernel_size':[5,  5,  5,  5,   5,   5,   5,  3],
+                                               #         'encoder_conv_strides'    :[2,  1,  1,  2,   1,   1,   2,  1],
+                                               #         'encoder_conv_padding':["same","same","same","same","same","same","same","valid"],
+                                               #         'encoder_conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"],
+                                               #         'encoder_conv_skip': [[0,2],[3,5]], # None,
+                                               #         'encoder_use_batch_norm' : [True,True,True,True,True,True,True,True],
+                                               #         'encoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25],
+                                               # 'decoder_conv_filters':[64,32,32,32,16,16,16,3],
+                                               #         'decoder_conv_kernel_size':[3, 5, 5, 5, 5, 5, 5, 5],
+                                               #             'decoder_conv_strides':[1, 2, 1, 1, 2, 1, 1, 2],
+                                               #             'decoder_conv_padding':["valid","same","same","same","same","same","same","same"],
+                                               #          'decoder_conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","sigmoid"],
+                                               #                'decoder_conv_skip': [[1,3],[4,6]], # None,
+                                               #             'decoder_use_batch_norm' : [True,True,True,True,True,True,True,True],
+                                               #             'decoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25]
                                               })
 
     logger.info(ut.dict2str(thefun_kwargs_default)) # a nice way of printing nested dictionaries

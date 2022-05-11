@@ -13,7 +13,7 @@ nfolds = int(sys.argv[2])
 folder = sys.argv[1]
 
 fig, ax1 = plt.subplots()
-fig.subplots_adjust(right=0.75)
+fig.subplots_adjust(right=0.68)
 color_idx = np.linspace(0, 1, nfolds)
 ax2 = ax1.twinx() 
 ax3 = ax1.twinx() 
@@ -21,7 +21,7 @@ ax4 = ax1.twinx()
 # Offset the right spine of twin2.  The ticks and label have already been
 # placed on the right by twinx above.
 ax3.spines.right.set_position(("axes", 1.2))
-ax4.spines.right.set_position(("axes", 2.2))
+ax4.spines.right.set_position(("axes", 1.4))
 for i in range(nfolds):
     history = np.load(f'{folder}/fold_{i}/history_vae', allow_pickle=True)#.item()
     print(history.keys())

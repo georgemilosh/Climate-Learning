@@ -96,7 +96,7 @@ def PrepareData(creation = []):  # if we do not specify creation it automacially
     else:
         T = 14
 
-    tau = -10 #-5  # lag
+    tau = 0 #-5  # lag
     usepipelines = False # if True => Dataset.from_tensor_slices will be used. This is a more advanced method but it takes more RAM and there is a possiblity for memory leaks when repeating training for cross-validation
     fullmetrics = True # If True MCC and confusion matrix will be evaluated during training. This makes training slower!
 
@@ -133,7 +133,7 @@ def PrepareData(creation = []):  # if we do not specify creation it automacially
 
     #checkpoint_name = myscratch+'training/stack_CNN_equalmixed_'+ckpt+'_'+thefield+'France_'+'_with_mrsoArea_'+sampling+'_u'+str(undersampling_factor)+'o'+str(oversampling_factor)+'_LONG'+str(num_years)+'yrs_'+'_per_'+str(percent)+'_tau_'+str(tau)
     #checkpoint_name = myscratch+'training/stack_CNNdeepwide2maxpool_equalmix_'+ckpt+'_'+thefield+'France_'+'_with_t2m_zg500_mrsoFrance_'+sampling+'_22by128_u'+str(undersampling_factor)+'o'+str(oversampling_factor)+'_LONG'+str(num_years)+'yrs_'+'_per_'+str(percent)+'_tau_'+str(tau)
-    checkpoint_name = myscratch+'training/stackWout0s_PCA8L2LOG1e1_equalmix_'+ckpt+'_'+thefield+'France_'+'_with_t2m_zg500_mrsoFrance_'+sampling+'_18by42_u'+str(undersampling_factor)+'o'+str(oversampling_factor)+'_LONG'+str(num_years)+'yrs_'+'_per_'+str(percent)+'_tau_'+str(tau)
+    checkpoint_name = myscratch+'training/stackWout0s_PCA8L2LOG1e-5_equalmix_'+ckpt+'_'+thefield+'France_'+'_with_t2m_zg500_mrsoFrance_'+sampling+'_18by42_u'+str(undersampling_factor)+'o'+str(oversampling_factor)+'_LONG'+str(num_years)+'yrs_'+'_per_'+str(percent)+'_tau_'+str(tau)
     #checkpoint_name = myscratch+'training/test'
 
     print("creation = ", creation)
@@ -482,7 +482,7 @@ if __name__ == '__main__':
         #model_input_dim = X.shape[1:] #(X.shape[1],X.shape[2])
         #model = custom_CNN(model_input_dim) 
         #model_input_dim = X.shape[1:] #(X.shape[1],X.shape[2])
-        model = create_regularized_model(1e1, X_train.shape[1])
+        model = create_regularized_model(1e-5, X_train.shape[1])
         
 
         tf_sampling = tf.cast([0.5*np.log(undersampling_factor), -0.5*np.log(undersampling_factor)], tf.float32)
