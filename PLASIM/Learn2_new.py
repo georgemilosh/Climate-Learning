@@ -2103,7 +2103,7 @@ class Trainer():
     '''
     Class for performing training of neural networks over multiple runs with different paramters in an efficient way
     '''
-    def __init__(self, root_folder='./', config='detect', skip_existing_run=True):
+    def __init__(self, root_folder='./', config='detect', skip_existing_run=True, upon_failed_run='raise'):
         '''
         Constructor
 
@@ -2119,8 +2119,14 @@ class Trainer():
         skip_existing_run : bool, optional
             Whether to skip runs that have already been performed in the same folder, by default True
             If False the existing run is not overwritten but a new one is performed
+        upon_filed_run : 'raise' or 'continue', optional
+            What to do if a run fails. If 'raise' an exception will be raised and all the program stops.
+            Otherwise the run will be treated as a pruned run, namely, the Trainer proceeds with the following runs.
+            By default 'raise'
         '''
         self.skip_existing_run = skip_existing_run
+        self.upon_failed_run = upon_failed_run
+
         self.root_folder = root_folder.rstrip('/')
         if not os.path.exists(self.root_folder):
             rf = Path(self.root_folder).resolve()
@@ -2427,6 +2433,8 @@ class Trainer():
             logger.critical(f'Run on {folder = } failed due to {repr(e)}')
             tb = traceback.format_exc() # log the traceback to the log file
             logger.error(tb)
+            if isinstance(e, KeyboardInterrupt):
+                raise e
             raise RuntimeError('Run failed') from e
 
         finally:
@@ -2553,6 +2561,7 @@ class Trainer():
             logfile.write('\n\n\n')
 
         # run
+        score, info = None, {}
         try:            
             score, info = self.run(f'{self.root_folder}/{folder}', **run_kwargs)
             
@@ -2570,7 +2579,10 @@ class Trainer():
             runs[run_id]['status'] = 'FAILED'
             runs[run_id]['name'] = f'F{folder}'
             shutil.move(f'{self.root_folder}/{folder}', f'{self.root_folder}/F{folder}')
-            raise e
+
+            if self.upon_failed_run == 'raise' or isinstance(e, KeyboardInterrupt):
+                raise e
+            info['status'] = 'FAILED'
 
         finally: # in any case we need to save the end time and save runs to json
             if runs[run_id]['status'] == 'RUNNING': # the run has not completed but the above except block has not been executed (e.g. due to KeybordInterruptError)
@@ -2585,7 +2597,7 @@ class Trainer():
 
             ut.dict2json(runs,self.runs_file)
 
-        return score
+        return score, info
 
 
 
