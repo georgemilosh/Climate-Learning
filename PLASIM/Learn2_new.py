@@ -1218,7 +1218,7 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
         model.add(layers.Activation(conv_activations[i]))
         if conv_dropouts[i]:
             model.add(layers.SpatialDropout2D(conv_dropouts[i]))
-        if max_pool_sizes[i]:
+        if max_pool_sizes[i] > 1:
             model.add(layers.MaxPooling2D(max_pool_sizes[i]))
 
     # flatten
