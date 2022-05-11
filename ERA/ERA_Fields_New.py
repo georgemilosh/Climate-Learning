@@ -1377,48 +1377,18 @@ def masked_average(xa:xr.DataArray,
     xr.DataArray
         masked and averaged array
     '''
-    #lest make a copy of the xa
-    xa_copy = xa.copy()
-
-    if mask is not None:
-        xa_weighted_average = __weighted_average_with_mask(
-            dim, mask, weights, xa, xa_copy
-        )
-    elif weights is not None:
-        xa_weighted_average = __weighted_average(
-            dim, weights, xa, xa_copy
-        )
-    else:
-        xa_weighted_average =  xa.mean(dim)
-
-    return xa_weighted_average
-
-
-def __weighted_average(dim, weights, xa, xa_copy):
-    '''helper function for masked_average'''
-    _, weights_all_dims = xr.broadcast(xa, weights)  # broadcast to all dims
-    x_times_w = xa_copy * weights_all_dims
-    xw_sum = x_times_w.sum(dim)
-    x_tot = weights_all_dims.where(xa_copy.notnull()).sum(dim=dim)
-    xa_weighted_average = xw_sum / x_tot
-    return xa_weighted_average
-
-
-def __weighted_average_with_mask(dim, mask, weights, xa, xa_copy):
-    '''helper function for masked_average'''
-    # TODO: this is slow as hell and stresses the RAM
-    _, mask_all_dims = xr.broadcast(xa, mask)  # broadcast to all dims
-    xa_copy = xa_copy.where(mask)
     if weights is not None:
-        _, weights_all_dims = xr.broadcast(xa, weights)  # broadcast to all dims
-        weights_all_dims = weights_all_dims.where(mask_all_dims)
-        x_times_w = xa_copy * weights_all_dims
-        xw_sum = x_times_w.sum(dim=dim)
-        x_tot = weights_all_dims.where(xa_copy.notnull()).sum(dim=dim)
-        xa_weighted_average = xw_sum / x_tot
-    else:
-        xa_weighted_average = xa_copy.mean(dim)
-    return xa_weighted_average
+        _weights = weights.copy()
+        if mask is not None:
+            _weights = _weights.where(mask, 0)
+    elif mask is not None:
+        _weights = xr.where(mask, 1, 0)
+    else: # mask = weights = None
+        return xa.mean(dim=dim)
+
+    _weights /= _weights.sum(dim=dim) # normalize weights
+    _xa = xa*_weights
+    return _xa.sum(dim=dim)
 
 def running_mean(xa:xr.DataArray, T, mode='forward', separate_years=True):
     '''
