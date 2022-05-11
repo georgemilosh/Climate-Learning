@@ -1522,8 +1522,8 @@ class Plasim_Field:
             self.years = yrs
             logger.error(f'The loaded field has {yrs} years, not {years} as provided. Setting {self.years = }')
 
-        self.land_area_weights = get_lsm(self.mylocal,self.Model)
-        self.area_weights = get_cell_area(self.mylocal, self.Model)
+        self.land_area_weights = get_lsm(self.mylocal,self.Model).sel(lat=self.field.lat, lon=self.field.lon)
+        self.area_weights = get_cell_area(self.mylocal, self.Model).sel(lat=self.field.lat, lon=self.field.lon)
         self.land_area_weights.data *= self.area_weights.data
         self.area_weights.data /= np.sum(self.area_weights.data)
         self.land_area_weights.data /= np.sum(self.land_area_weights.data)
