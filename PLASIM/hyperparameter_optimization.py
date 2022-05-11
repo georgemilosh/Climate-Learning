@@ -81,15 +81,18 @@ class ScoreOptimizer():
         try:
             score, info = self.trainer._run(**run_args)
 
-            if info['status'] in ['FAILED', 'PRUNED']:
-                raise optuna.TrialPruned(f"Run {info['status']}: pruning.")
+            if info['status'] == 'FAILED': # most likely due to invalid network architecture
+                raise optuna.TrialPruned(f"Run failed: pruning.") # we prune the trial
+
+            ## we could prune also PRUNED runs, but since we have access to a partial score on the few first folds we can keep them to instruct optuna
 
         except KeyboardInterrupt:
             raise
         except optuna.TrialPruned:
             raise
         except Exception as e:
-            raise RuntimeError('Something very bad happened if we reached this block')
+            # we get an exception that is not handled by Trainer._run
+            raise RuntimeError("If upon_failed_run was set to 'continue', something very bad happened if we reached this block") from e
 
         return score
 
