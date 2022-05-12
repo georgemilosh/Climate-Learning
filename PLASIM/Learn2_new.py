@@ -937,6 +937,7 @@ def roll_X(X, roll_axis='lon', roll_steps=0):
     '''
     if roll_steps == 0:
         return X
+    warnings.warn('Roll the data when loading it using the arguments `lon_start`, `lon_end` of function `load_data`', category=DeprecationWarning)
     if isinstance(roll_axis, str):
         if roll_axis.startswith('y'):
             roll_axis = 0
