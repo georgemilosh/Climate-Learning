@@ -27,7 +27,7 @@ logger.level = logging.INFO
 
 
 
-## user defined modules
+## user defined modules. small test
 # I go back to absolute paths becuase otherwise I have trouble using reconstruction.py on this file later when it will be called from the folder it creates
 sys.path.insert(1, '/ClimateDynamics/MediumSpace/ClimateLearningFR/gmiloshe/')       
         
