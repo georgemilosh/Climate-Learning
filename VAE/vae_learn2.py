@@ -150,7 +150,7 @@ def normalize_X(X,folder, myinput='N',mode='pointwise'):
 
 @ut.execution_time  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function
-def create_or_load_vae(folder, INPUT_DIM, myinput, VAE_kwargs=None, build_encoder_skip_kwargs=None, build_decoder_skip_kwargs=None, create_classifier_kwargs=None, checkpoint_every=1):
+def create_or_load_vae(folder, INPUT_DIM, myinput, VAE_kwargs=None, build_encoder_skip_kwargs=None, build_decoder_skip_kwargs=None, create_classifier_kwargs=None, checkpoint_every=1, roll_steps=64):
     '''
     Creates a Variational AutoEncoder Model or loads the existing one 
         from the weights given in the model
@@ -211,7 +211,7 @@ def create_or_load_vae(folder, INPUT_DIM, myinput, VAE_kwargs=None, build_encode
     
     ones_dim = np.ones(INPUT_DIM[:-1])
     
-    filter_mask = ln.roll_X(ef.create_mask('Plasim',mask_area, ones_dim, axes='last 2', return_full_mask=True),1)
+    filter_mask = ln.roll_X(ef.create_mask('Plasim',mask_area, ones_dim, axes='last 2', return_full_mask=True), roll_axis = 1, roll_steps=64)
     #filter_mask = ef.create_mask('Plasim',mask_area, ones_dim, axes='last 2', return_full_mask=True)
     logger.info(f'{filter_mask.shape = }')
     logger.info(f'{ones_dim.shape = }')
