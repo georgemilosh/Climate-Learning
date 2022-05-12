@@ -698,7 +698,7 @@ for h in [200,300,500,850]: # geopotential heights
 @ut.execution_time  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function
 def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', area='France', filter_area='France',
-              lon_start=0, lon_end=128, lat_start=0, lat_end=22, mylocal='/local/gmiloshe/PLASIM/',fields=['t2m','zg500','mrso_filtered']):
+              lon_start=-64, lon_end=64, lat_start=0, lat_end=22, mylocal='/local/gmiloshe/PLASIM/',fields=['t2m','zg500','mrso_filtered']):
     '''
     Loads the data into Plasim_Fields objects
 
@@ -721,6 +721,8 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
         area over which to keep filtered fields, usually the same of `area`. `filter` implies a mask
     lon_start, lon_end, lat_start, lat_end : int
         longitude and latitude extremes of the data expressed in indices (model specific)
+        If `lon_start` >= `lon_end` the selection will start from `lon_start`, go over the end of the array and then continue from the beginning up to `lon_end`.
+        Providing `lon_start` = `lon_end` will result in the longitude being rolled by `lon_start` steps
     mylocal : str or Path, optional
         path the the data storage. For speed it is better if it is a local path.
     fields : list, optional
@@ -735,7 +737,7 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
     '''
 
     if area != filter_area:
-        warnings.warn(f'Fields will be filtered on a different area ({filter_area}) than the region of interest ({area})')
+        warnings.warn(f'Fields will be filtered on a different area ({filter_area}) than the region of interest ({area}). If {area} is not a subset of {filter_area} the area integral will be different with and without filtering.')
 
     if dataset_years == 1000:
         dataset_suffix = ''
@@ -754,8 +756,6 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
         year_list = np.arange(year_list)
     elif isinstance(year_list, tuple):
         year_list = np.arange(*year_list) # unpack the arguments of the tuple
-    
-    mask, cell_area, lsm = ef.ExtractAreaWithMask(mylocal,Model,area) # extract land-sea mask and multiply it by cell area (normalized as to sum to 1 )
 
     if sampling == '3hrs': 
         prefix = ''
@@ -781,22 +781,26 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
             raise KeyError(f'Unknown field {field_name}')
         f_infos = fields_infos[field_name]
         # create the field object
-        field = ef.Plasim_Field(f_infos['name'], prefix+f_infos['filename_suffix'], f_infos['label'],
-                                Model=Model, lat_start=lat_start, lat_end=lat_end, lon_start=lon_start, lon_end=lon_end,
-                                myprecision='single', mysampling=sampling, years=dataset_years)
-        # load the data
-        field.load_field(mylocal+file_suffix, year_list=year_list)
-        # Set area integral
-        field.abs_area_int, field.ano_area_int = field.Set_area_integral(area,mask,containing_folder=None) # don't save area integrals in order to avoid conflicts between different runs. Also potential BUG here
+        field = ef.Plasim_Field(f_infos['name'], f"{file_suffix}{prefix}{f_infos['filename_suffix']}.nc", f_infos['label'], Model,
+                                years=dataset_years, mylocal=mylocal)
+        # select years
+        field.select_years(year_list)
+        # select longitude and latitude
+        field.select_lonlat(lat_start,lat_end,lon_start,lon_end)
+
         # filter
         if do_filter: # set to zero all values outside `filter_area`
-            filter_mask = ef.create_mask(Model, filter_area, field.var, axes='last 2', return_full_mask=True) # potential BUG here
-            field.var *= filter_mask
+            field.set_mask(filter_area)
+            field.filter()
+
+
+        # prepare to compute area integral when needed
+        field.set_mask(area)
 
         if ghost:
             field_name += '_ghost'
 
-        _fields[field_name] = field  
+        _fields[field_name] = field
     
     return _fields
 
@@ -811,7 +815,7 @@ def assign_labels(field, time_start=30, time_end=120, T=14, percent=5, threshold
     ----------
     field : Plasim_Field object
     time_start : int, optional
-        first day of the period of interest
+        first day of the period of interest (0 is the means the first datapoint of each year, so time_start is an index, not the day of the year)
     time_end : int, optional
         first day after the end of the period of interst
     T : int, optional
@@ -826,9 +830,11 @@ def assign_labels(field, time_start=30, time_end=120, T=14, percent=5, threshold
     labels : np.ndarray
         2D array with shape (years, days) and values 0 or 1
     '''
-    A, A_flattened, threshold =  field.ComputeTimeAverage(time_start, time_end, T=T, percent=percent, threshold=threshold)[:3]
+    day0 = field.field.time.dt.dayofyear[0]
+    A = field.compute_time_average(day_start=day0+time_start, day_end=day0+time_end, T=T)
+    labels, threshold = ef.is_over_threshold(field.to_numpy(A), threshold=threshold, percent=percent)
     logger.info(f"{threshold = }")
-    return np.array(A >= threshold, dtype=int)
+    return np.array(labels, dtype=int)
 
 @ut.execution_time
 @ut.indent_logger(logger)
@@ -903,7 +909,7 @@ def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0,
 
 @ut.execution_time
 @ut.indent_logger(logger)
-def roll_X(X, roll_axis='lon', roll_steps=64):
+def roll_X(X, roll_axis='lon', roll_steps=0):
     '''
     Rolls `X` along a given axis. useful for example for moving France away from the Greenwich meridian.
     In other words this allows one, for example, to shift the grid so that desired areas are not found at the boundary.
@@ -1212,7 +1218,7 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
         model.add(layers.Activation(conv_activations[i]))
         if conv_dropouts[i]:
             model.add(layers.SpatialDropout2D(conv_dropouts[i]))
-        if max_pool_sizes[i]:
+        if max_pool_sizes[i] > 1:
             model.add(layers.MaxPooling2D(max_pool_sizes[i]))
 
     # flatten
@@ -1956,8 +1962,8 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
 
     # get lat and lon
     f = list(fields.values())[0] # take the first field
-    lat = f.lat # 1d array
-    lon = f.lon # 1d array
+    lat = np.copy(f.field.lat.data) # 1d array
+    lon = np.copy(f.field.lon.data) # 1d array
 
     X,Y = make_XY(fields, **make_XY_kwargs)
     
@@ -2097,7 +2103,7 @@ class Trainer():
     '''
     Class for performing training of neural networks over multiple runs with different paramters in an efficient way
     '''
-    def __init__(self, root_folder='./', config='detect', skip_existing_run=True):
+    def __init__(self, root_folder='./', config='detect', skip_existing_run=True, upon_failed_run='raise'):
         '''
         Constructor
 
@@ -2113,8 +2119,14 @@ class Trainer():
         skip_existing_run : bool, optional
             Whether to skip runs that have already been performed in the same folder, by default True
             If False the existing run is not overwritten but a new one is performed
+        upon_filed_run : 'raise' or 'continue', optional
+            What to do if a run fails. If 'raise' an exception will be raised and all the program stops.
+            Otherwise the run will be treated as a pruned run, namely, the Trainer proceeds with the following runs.
+            By default 'raise'
         '''
         self.skip_existing_run = skip_existing_run
+        self.upon_failed_run = upon_failed_run
+
         self.root_folder = root_folder.rstrip('/')
         if not os.path.exists(self.root_folder):
             rf = Path(self.root_folder).resolve()
@@ -2421,6 +2433,8 @@ class Trainer():
             logger.critical(f'Run on {folder = } failed due to {repr(e)}')
             tb = traceback.format_exc() # log the traceback to the log file
             logger.error(tb)
+            if isinstance(e, KeyboardInterrupt):
+                raise e
             raise RuntimeError('Run failed') from e
 
         finally:
@@ -2547,6 +2561,7 @@ class Trainer():
             logfile.write('\n\n\n')
 
         # run
+        score, info = None, {}
         try:            
             score, info = self.run(f'{self.root_folder}/{folder}', **run_kwargs)
             
@@ -2564,7 +2579,10 @@ class Trainer():
             runs[run_id]['status'] = 'FAILED'
             runs[run_id]['name'] = f'F{folder}'
             shutil.move(f'{self.root_folder}/{folder}', f'{self.root_folder}/F{folder}')
-            raise e
+
+            if self.upon_failed_run == 'raise' or isinstance(e, KeyboardInterrupt):
+                raise e
+            info['status'] = 'FAILED'
 
         finally: # in any case we need to save the end time and save runs to json
             if runs[run_id]['status'] == 'RUNNING': # the run has not completed but the above except block has not been executed (e.g. due to KeybordInterruptError)
@@ -2579,7 +2597,7 @@ class Trainer():
 
             ut.dict2json(runs,self.runs_file)
 
-        return score
+        return score, info
 
 
 
@@ -2587,15 +2605,27 @@ CONFIG_DICT = build_config_dict([Trainer.run, Trainer.telegram]) # module level 
 # config file will be built from the default parameters of the functions given here and of the functions they call in a recursive manner
         
 
-        
-def main():
+def deal_with_lock():
+    '''
+    Checks if there is a lock and performs the necessary operations. 
+
+    Returns
+    -------
+    b : bool
+        True if there is a lock, False otherwise
+
+    Raises
+    ------
+    ValueError
+        If invalid command line
+    '''
     # check if there is a lock:
     lock = Path(__file__).resolve().parent / 'lock.txt'
     if os.path.exists(lock): # there is a lock
         # check for folder argument
         if len(sys.argv) < 2: 
             print(usage())
-            return
+            return True
         if len(sys.argv) == 2:
             folder = sys.argv[1]
             print(f'moving code to {folder = }')
@@ -2606,13 +2636,15 @@ def main():
             # runs file (which will keep track of various runs performed in newly created folder)
             ut.dict2json({},f'{folder}/runs.json')
 
-            return
+            return True
         else:
             with open(lock) as l:
                 raise ValueError(l.read())
     
-    # if there is a lock, the previous block of code would have ended the run, so the code below is executed only if there is no lock
-    
+    return False
+
+def parse_command_line():
+    '''Parses command line arguments into a dictionary'''
     #parse command line arguments
     cl_args = sys.argv[1:]
     i = 0
@@ -2631,6 +2663,17 @@ def main():
         except:
             logger.warning(f'Could not evaluate {value}. Keeping string type')
         arg_dict[key] = value
+
+        return arg_dict
+
+        
+def main():
+    if deal_with_lock():
+        return
+    
+    # the code below is executed only if there is no lock
+    
+    arg_dict = parse_command_line()
 
     logger.info(f'{arg_dict = }')
 

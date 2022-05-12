@@ -2,6 +2,7 @@
 # Importation des librairies
 from pathlib import Path
 from netCDF4 import Dataset
+import xarray as xr
 import numpy as np
 import warnings
 
@@ -1284,10 +1285,385 @@ class Field:
         self.ano_mask = self.detr_mask - np.mean(self.detr_mask,0)    # Evaluate detrended grid-point climatological mean 
         anomaly_series = self.ano_mask.copy()
         return series, anomaly_series
+
+@execution_time
+def monotonize_years(da:xr.DataArray):
+    '''
+    Transforms the time coordinate such that the years are consecutive and increasing monotonically and starting from 0.
+
+    Parameters
+    ----------
+    da : xr.DataArray
+        array with the data. Must have a 'time' dimension
+
+    Returns
+    -------
+    da : xr.DataArray
+        data with monotonized years
+    yrs : int
+        number of years in the dataset
+    '''
+    @np.vectorize
+    def change(a, y):
+        return a.replace(year = y)
+
+    old_y = np.array(da.time.dt.year)
+    y = None
+    new_y = 0
+
+    new_ys = np.zeros_like(old_y, dtype=int)
+    for i, _y in enumerate(old_y):
+        if y is None:
+            y = _y
+        if _y != y:
+            y = _y
+            new_y += 1
+        new_ys[i] = new_y
+
+    new_ys = change(da.time, new_ys)
+    return da.assign_coords({'time': new_ys}), new_y + 1
+
+@execution_time
+def monotonize_longitude(da:xr.DataArray):
+    '''
+    Makes the leongitude of an array monotonic. This is useful when working with rolled data.
+
+    For example if the original longitude is
+        [120, 180, 240, 300, 0, 60]
+    The monotonized one will be
+        [-240, -180, -120, -60, 0, 60]
+
+    Parameters
+    ----------
+    da : xr.DataArray
+        original data
+
+    Returns
+    -------
+    xr.DataArray
+        data with monotonized longitude
+    '''
+    slon = np.sign(da.lon.data[1:] - da.lon.data[:-1])
+    if len(set(list(slon))) == 1: # no sign change
+        return da
     
-    
+    new_zero = 360 - da.lon.data[0]
+    return da.assign_coords({'lon': (da.lon + new_zero) % 360 - new_zero})
+
+
+
+#### masked average of a field ####
+
+def masked_average(xa:xr.DataArray,
+                   dim=None,
+                   weights:xr.DataArray=None,
+                   mask:xr.DataArray=None) -> xr.DataArray:
+    '''
+    Computes the average of `xa` over given dimensions `dim`, weighting with `weights` and masking with `mask`
+
+    Parameters
+    ----------
+    xa : xr.DataArray
+        data
+    dim : str or list of str, optional
+        dimensions over which to perform the average, by default None
+    weights : xr.DataArray, optional
+        weights for the average, for example the cell, by default None
+    mask : xr.DataArray, optional
+        True over the data to keep, False over the data to ignore, by default None
+
+    Returns
+    -------
+    xr.DataArray
+        masked and averaged array
+    '''
+    if weights is not None:
+        _weights = weights.copy()
+        if mask is not None:
+            _weights = _weights.where(mask, 0)
+    elif mask is not None:
+        _weights = xr.where(mask, 1, 0)
+    else: # mask = weights = None
+        return xa.mean(dim=dim)
+
+    _weights /= _weights.sum(dim=dim) # normalize weights
+    _xa = xa*_weights
+    return _xa.sum(dim=dim)
+
+def running_mean(xa:xr.DataArray, T, mode='forward', separate_years=True):
+    '''
+    Computes the running mean over the time axis of an array of data
+
+    Parameters
+    ----------
+    xa : xr.DataArray
+        data, must have a 'time' dimension
+    T : int
+        width of the window for averaging in time units of the data. If the data is daily, than `T` will be in days.
+    mode : 'forward', 'backward' or 'center', optional
+        To which point to assign the value of the mean:
+            'forward': the value of the mean is assigned to the first point of the window, i.e. we are computing the forward T day average
+            'backward': the value of the mean is assigned to the last point of the window
+            'center': the value of the mean is assigned to the center point of the window
+        By default 'forward'
+    separate_years : bool, optional
+        Whether to treat each year independently, by default True
+
+    Returns
+    -------
+    xr.DataArray
+        time averaged data
+
+    Raises
+    ------
+    ValueError
+        If invalid `mode`
+    '''
+    # define the averaging function
+    if mode == 'backward':
+        t_avg = lambda a: a.rolling(time=T, center=False).mean().dropna('time')
+        #                                                        ^ this removes nan values
+    elif mode == 'forward':
+        t_avg = lambda a: a[::-1].rolling(time=T, center=False).mean().dropna('time')[::-1]
+        # we work on the reversed array so we have the forward T day rolling mean, since xarray by default computes the backward rolling mean
+    elif mode == 'center':
+        t_avg = lambda a: a.rolling(time=T, center=True).mean().dropna('time')
+    else:
+        raise ValueError(f"Unrecognized {mode = }. Possible options are 'forward', 'backward' or 'center'")
+
+    if separate_years:
+        return xa.groupby('time.year').apply(t_avg) # apply to each year individually
+    return t_avg(xa)
+
+def is_over_threshold(a:np.ndarray, threshold=None, percent=None):
+    '''
+    Computes whether data are above a given threshold or percentile
+
+    Parameters
+    ----------
+    a : np.ndarray
+        data
+    threshold : float, optional
+        threshold, by default None
+    percent : float in [0, 100], optional
+        Percentile used to compute the threshold, ignored if `threshold` is provided, by default None.
+        For example `percent` = 5 means that the threshold will be the ones that leaves 5 percent of the data above it
+
+    Returns
+    -------
+    l : np.ndarray
+        array of bools of the same shape as `a` indicating which datapoints are >= `threshold`
+    threshold : float
+
+    Raises
+    ------
+    ValueError
+        If both `threshold` and `percent` are None
+    '''
+    if threshold is None:
+        if percent:
+            a_flat = a.flatten()
+            threshold = np.sort(a_flat)[np.ceil(a_flat.shape[0]*(1-percent/100)).astype('int')]
+        else:
+            raise ValueError('Please provide threshold or percent')
+    return a >= threshold, threshold
+        
     
 class Plasim_Field:
+    def __init__(self, name, filename, label, Model, years=1000, mylocal='/local/gmiloshe/PLASIM/', **kwargs):
+        self.name = name    # Name inside the .nc file
+        self.filename = filename # path to the .nc file starting from `mylocal`
+        self.label = label  # Label to be displayed on the graph
+        self.Model = Model
+        self.years = years
+        self.mylocal = mylocal
+
+        self.mask_area = None
+        self.mask = None
+
+        logger.info(f'Opening field {self.name}')
+
+        self.field = xr.open_dataset(Path(self.mylocal) / self.filename)[name]
+
+        self.field = discard_all_dimensions_but(self.field, dims_to_keep=['time', 'lon', 'lat'])
+        
+        self.field, yrs = monotonize_years(self.field)
+        if yrs != self.years:
+            self.years = yrs
+            logger.error(f'The loaded field has {yrs} years, not {years} as provided. Setting {self.years = }')
+
+        self.land_area_weights = get_lsm(self.mylocal,self.Model).sel(lat=self.field.lat, lon=self.field.lon)
+        self.area_weights = get_cell_area(self.mylocal, self.Model).sel(lat=self.field.lat, lon=self.field.lon)
+        self.land_area_weights.data *= self.area_weights.data
+        self.area_weights.data /= np.sum(self.area_weights.data)
+        self.land_area_weights.data /= np.sum(self.land_area_weights.data)
+
+        self._area_integral = None
+
+    @execution_time
+    def select_years(self, year_list=None):
+        '''
+        Select a subset of years
+
+        Parameters
+        ----------
+        year_list : array-like, optional
+            list of the years to keep, by default None
+        '''
+        if year_list is not None:
+            self.field = self.field.sel(time=self.field.time.dt.year.isin(year_list))
+            self.years = len(year_list)
+
+    @execution_time
+    def select_lonlat(self, lat_start=None, lat_end=None, lon_start=None, lon_end=None):
+        '''
+        Select a region in space.
+        If `lon_start` >= `lon_end` the selection will start from `lon_start`, go over the end of the array and then continue from the beginning up to `lon_end`.
+        Providing `lon_start` = `lon_end` will result in the longitude being rolled by `lon_start` steps
+
+        Parameters
+        ----------
+        lat_start : int, optional
+            start index for latitude, by default None
+        lat_end : int, optional
+            end index for latitude, by default None
+        lon_start : int, optional
+            start index for longitude, by default None
+        lon_end : int, optional
+            end index for longitude, by default None
+        '''
+        if lat_start or lat_end:
+            self.field = self.field.isel(lat=slice(lat_start, lat_end))
+            self.area_weights = self.area_weights.sel(lat=self.field.lat)
+            self.land_area_weights = self.land_area_weights.sel(lat=self.field.lat)
+            if self.mask is not None:
+                self.mask = self.mask.sel(lat=self.field.lat)
+                
+        if lon_start or lon_end:
+            concatenation = False
+            if lon_start and lon_end:
+                lon_start = lon_start % len(self.field.lon)
+                lon_end = lon_end % len(self.field.lon)
+                if lon_start >= lon_end:
+                    concatenation = True
+
+            if concatenation:
+                self.field = xr.concat([self.field.isel(lon=slice(lon_start,None)),self.field.isel(lon=slice(None,lon_end))], dim='lon') # this loads the field in memory
+                # self.field.assign_coords({'lon': (self.field.lon + 180) % 360 - 180})
+            else:
+                self.field = self.field.isel(lon=slice(lon_start, lon_end))
+
+            self.area_weights = self.area_weights.sel(lon=self.field.lon)
+            self.land_area_weights = self.land_area_weights.sel(lon=self.field.lon)
+            if self.mask is not None:
+                self.mask = self.mask.sel(lon=self.field.lon)
+    
+    @property
+    def var(self):
+        '''Gives access to the data ov the field. For compatibility with the old version'''
+        return self.to_numpy(self.field)
+
+    def to_numpy(self, da:xr.DataArray):
+        '''Returns a numpy version of `da`, reshaping the time axis in years (the number is given by self.years) and days of year'''
+        data_shape = da.shape
+        if data_shape[0] % self.years:
+            logger.warning(f'Cannot reshape time axis of field {da.name}')
+            return da.data
+        return da.data.reshape((self.years, data_shape[0]//self.years, *data_shape[1:]))
+
+    def set_mask(self, area):
+        '''
+        Sets a mask for the object. The mask is adapted to past and future coordinate transformations of the data.
+
+        Parameters
+        ----------
+        area : str
+            name of the mask area, must be one of the ones allowed by the function `create_mask`
+        '''
+        self.mask_area = area
+        self._area_integral = None
+        self.mask = get_lsm(self.mylocal,self.Model)
+        self.mask.data = create_mask(self.Model,area,self.mask.data, axes='last 2', return_full_mask=True)
+
+        self.mask = self.mask.sel(lat=self.field.lat, lon=self.field.lon)
+        
+
+    def filter(self, keep_inside_mask=True):
+        '''If `keep_inside_mask` sets to zero all values of self.field outside the mask. Otherwise the ones inside.'''
+        if self.mask is None:
+            raise ValueError('Mask not set: cannot filter. Please use `self.set_mask`')
+        if self.field.shape[1:] != self.mask.shape:
+            raise ValueError(f'Mismatched shapes: {self.field.shape[1:] = }, {self.mask.shape = }')
+
+        if keep_inside_mask:
+            self.field.data *= self.mask.data
+        else:
+            self.field.data *= np.logical_not(self.mask.data)
+    
+    @execution_time
+    def compute_area_integral(self, weights='land_area'):
+        '''
+        Computes the area integral over the region set by the mask and stores it in self._are_integral
+
+        Parameters
+        ----------
+        weights : xr.DataArray or 'area' or 'land_area', optional
+            Weights to use for the average, by default 'land_area'
+            If provided as a xr.DataArray it must have the same grid as self.field, other (recommended) options are
+                'land_area': weights are the grid cell area over land masses
+                'area': weights are the grid cell area (over land and sea)
+
+        Returns
+        -------
+        self._area_integral : xr.DataArray
+            area intgral
+        '''
+        if isinstance(weights, str):
+            if weights == 'area':
+                weights = self.area_weights
+            elif weights == 'land_area':
+                weights = self.land_area_weights
+            else:
+                raise ValueError(f'Unrecognized string option {weights = }')
+        elif not isinstance(weights, xr.DataArray):
+            raise TypeError(f'weights must be either string or xr.DataArray, not {type(weights)}')
+
+        self._area_integral = masked_average(self.field, dim=['lat', 'lon'], weights=weights, mask=self.mask)
+        return self._area_integral
+
+    @property
+    def area_integral(self):
+        '''Access to the area integral. If it has not been computed yet it is computed with default weights'''
+        if self._area_integral is None:
+            self.compute_area_integral()
+        return self._area_integral
+
+    @execution_time
+    def compute_time_average(self, day_start, day_end, T):
+        '''
+        Computes the forward running mean of the self._area_intgral attribute
+
+        Parameters
+        ----------
+        day_start : int
+            first day of the year to consider (1 means 1st of January)
+        day_end : int
+            (last day of the year to consider) + 1, as usual with slicing
+        T : int
+            width in time units of the time average
+
+        Returns
+        -------
+        np.ndarray
+            time average
+        '''
+        cut_area_integral = self.area_integral.sel(time=self.area_integral.time.dt.dayofyear.isin(np.arange(day_start, day_end)))
+        return running_mean(cut_area_integral, T, mode='forward')
+
+        
+
+    
+class Plasim_Field_Old:
     def __init__(self, name, filename, label, Model, lat_start=0, lat_end=64, lon_start=0, lon_end=128,
                  myprecision='double', mysampling='', years=1000):
         self.name = name    # Name inside the .nc file
@@ -1356,7 +1732,7 @@ class Plasim_Field:
                 self.var = self.var.reshape(self.years, self.var.shape[0]//self.years, *self.var.shape[1:])
             else:
                 self.var = self.var.reshape(len(year_list), units_per_year, *self.var.shape[1:])
-                
+
             self.lon = dataset.variables["lon"][self.lon_start:self.lon_end]
             self.lat = dataset.variables["lat"][self.lat_start:self.lat_end]
             self.LON, self.LAT = np.meshgrid(self.lon, self.lat)
@@ -1738,6 +2114,26 @@ def PermuteFullrange(fullrange, randrange1, randrange2):# Create a permuted sequ
     returnfullrange = fullrange.copy()
     returnfullrange[randrange1], returnfullrange[randrange2] = returnfullrange[randrange2], returnfullrange[randrange1]
     return returnfullrange
+
+def discard_all_dimensions_but(xa:xr.DataArray, dims_to_keep:list):
+    dims_to_drop = [dim for dim in xa.dims if dim not in dims_to_keep]
+    xa = xa.isel({dim: 0 for dim in dims_to_drop})
+    xa = xa.drop(dims_to_drop)
+    return xa
+
+def get_lsm(mylocal,Model):
+    if Model != 'Plasim':
+        raise NotImplementedError()
+    lsm = xr.open_dataset(mylocal+'Data_Plasim_inter/CONTROL_lsmask.nc').lsm
+    lsm = discard_all_dimensions_but(lsm, ['lon', 'lat'])
+    return lsm
+
+def get_cell_area(mylocal,Model):
+    if Model != 'Plasim':
+        raise NotImplementedError()
+    cell_area = xr.open_dataset(mylocal+'Data_Plasim_inter/CONTROL_gparea.nc').cell_area
+    cell_area = discard_all_dimensions_but(cell_area, ['lon', 'lat'])
+    return cell_area
 
 def ExtractAreaWithMask(mylocal,Model,area): # extract land sea mask and multiply it by cell area
     # Load the land area mask
