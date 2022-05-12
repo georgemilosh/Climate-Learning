@@ -758,7 +758,7 @@ def kwargator(thefun):
                                             {'myinput':'Y', 'lat_end': 24,'fields': ['t2m_filtered','zg500','mrso_filtered'],'year_list': 'range(100)',
                                                'print_summary' : False, 'k1': 0.9 , 'k2':0.1, 'field_weights': [20., 1, 20.],'mask_area':'France', 'usemask' : True, 'Z_DIM': 8, #8, #64,
                                                 'N_EPOCHS': 10,'batch_size': 128, 'checkpoint_every': 1, 'lr': 5e-4, 'epoch_tol': None, 'lr_min' : 5e-4, 'lon_start' : 0, 'lon_end' : 128, 'roll_steps' : 64,
-                                                #'lat_0' : 0, 'lat_1' : 24, 'lon_0' : (64-28), 'lon_1' : (64+15), 'coef_out' : 0.1, 'coef_in' : 1, 
+                                                'lat_0' : 0, 'lat_1' : 24, 'lon_0' : (64-28), 'lon_1' : (64+15), 'coef_out' : 0.1, 'coef_in' : 1, 
                                                # 'coef_class' : 0.1, 'class_type' : 'mean', 'L2factor' : 1e-9,
                                                #'encoder_conv_filters':[16, 16, 16, 32, 32,  32,   64, 64],
                                                #         'encoder_conv_kernel_size':[5,  5,  5,  5,   5,   5,   5,  3],
