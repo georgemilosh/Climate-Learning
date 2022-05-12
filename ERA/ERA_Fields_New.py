@@ -1639,6 +1639,7 @@ class Plasim_Field:
         return self._area_integral
 
     @execution_time
+    @indent_logger(logger)
     def compute_time_average(self, day_start, day_end, T):
         '''
         Computes the forward running mean of the self._area_intgral attribute
