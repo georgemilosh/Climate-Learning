@@ -46,7 +46,7 @@ for i in range(nfolds):
             ln4 = ln3.copy()
         elif key=='class_loss':
             cmap = plt.cm.Greys(color_idx[i]) 
-            ln4 = ax4.plot(epochs, history[key], label =label, linestyle='dashdot', marker='o',color = cmap)
+            ln4 = ax4.plot(epochs, history[key], label =label, linestyle='dashdot', marker='x',color = cmap)
         if i ==nfolds-1:
             lns = ln1+ln2+ln3+ln4
             
