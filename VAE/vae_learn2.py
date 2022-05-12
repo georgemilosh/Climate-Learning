@@ -212,6 +212,7 @@ def create_or_load_vae(folder, INPUT_DIM, myinput, VAE_kwargs=None, build_encode
     ones_dim = np.ones(INPUT_DIM[:-1])
     
     filter_mask = ln.roll_X(ef.create_mask('Plasim',mask_area, ones_dim, axes='last 2', return_full_mask=True),1)
+    #filter_mask = ef.create_mask('Plasim',mask_area, ones_dim, axes='last 2', return_full_mask=True)
     logger.info(f'{filter_mask.shape = }')
     logger.info(f'{ones_dim.shape = }')
     logger.info(f'{np.array([filter_mask,ones_dim,filter_mask], dtype=bool).shape = }')
@@ -756,7 +757,7 @@ def kwargator(thefun):
     thefun_kwargs_default = ut.set_values_recursive(thefun_kwargs_default,
                                             {'myinput':'Y', 'lat_end': 24,'fields': ['t2m_filtered','zg500','mrso_filtered'],'year_list': 'range(100)',
                                                'print_summary' : False, 'k1': 0.9 , 'k2':0.1, 'field_weights': [20., 1, 20.],'mask_area':'France', 'usemask' : True, 'Z_DIM': 8, #8, #64,
-                                                'N_EPOCHS': 10,'batch_size': 128, 'checkpoint_every': 1, 'lr': 5e-4, 'epoch_tol': None, 'lr_min' : 5e-4, 
+                                                'N_EPOCHS': 10,'batch_size': 128, 'checkpoint_every': 1, 'lr': 5e-4, 'epoch_tol': None, 'lr_min' : 5e-4, 'lon_start' : 0, 'lon_end' : 128, 'roll_steps' : 64,
                                                 #'lat_0' : 0, 'lat_1' : 24, 'lon_0' : (64-28), 'lon_1' : (64+15), 'coef_out' : 0.1, 'coef_in' : 1, 
                                                # 'coef_class' : 0.1, 'class_type' : 'mean', 'L2factor' : 1e-9,
                                                #'encoder_conv_filters':[16, 16, 16, 32, 32,  32,   64, 64],
