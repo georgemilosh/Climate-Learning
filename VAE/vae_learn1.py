@@ -27,7 +27,7 @@ logger.level = logging.INFO
 
 
 
-## user defined modules
+## user defined modules. small test
 # I go back to absolute paths becuase otherwise I have trouble using reconstruction.py on this file later when it will be called from the folder it creates
 sys.path.insert(1, '/ClimateDynamics/MediumSpace/ClimateLearningFR/gmiloshe/')       
         
@@ -82,7 +82,7 @@ def move_to_folder(checkpoint_name):
 
 @ut.execution_time  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function
-def normalize_X(X,checkpoint_name, creation=None,mode='pointwise'):
+def normalize_X(X,checkpoint_name, myinput='N',mode='pointwise'):
     '''
     Performs data normalization
 
@@ -112,7 +112,7 @@ def normalize_X(X,checkpoint_name, creation=None,mode='pointwise'):
     '''
     if mode == 'pointwise':
         logger.info("===Normalizing X===")
-        if creation == None: # mean and std have to be computed
+        if myinput != 'N': # mean and std have to be computed
             X_mean = np.mean(X,0)
             X_std = np.std(X,0)
             X_std[X_std==0] = 1 # If there is no variance we shouldn't divide by zero
@@ -125,7 +125,7 @@ def normalize_X(X,checkpoint_name, creation=None,mode='pointwise'):
         return   1./(1.+np.exp(-(X-X_mean)/X_std)) # (X-X_mean)/X_std # # we have applied sigmoid because variational autoencoder reconstructs with this activation
     else:
         logger.info("===Rescaling X===")
-        if creation is None:
+        if myinput != 'N':
             maxX = np.max(X,tuple(list(range(len(X.shape)-1)))) # Equivalent to np.max(X,(0,1,...,last-1))
             minX = np.min(X,tuple(list(range(len(X.shape)-1))))
             np.save(checkpoint_name+'/maxX', maxX)
@@ -213,18 +213,18 @@ def create_or_load_vae(checkpoint_name, mask_weights, INPUT_DIM, myinput, Z_DIM=
 
 @ut.execution_time  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function
-def PrepareDataAndVAE(checkpoint_name, creation=None, myinput='Y', SET_YEARS=range(100)):
+def PrepareDataAndVAE(checkpoint_name, myinput='Y', SET_YEARS=range(100)):
     '''
     Loads the data and Creates a Variational AutoEncoder 
     
     Parameters
     ----------
-    creation: None or equal to checkpoint_name. If None we are starting from scratch
+    myinput: 
     '''
     X, _Y, _year_permutation, lat, lon = ln.prepare_data(load_data_kwargs = {'fields': ['t2m_filtered','zg500','mrso_filtered'], 'lat_end': 24, 'dataset_years': 8000, 'year_list': SET_YEARS},
                            prepare_XY_kwargs = {'roll_X_kwargs': {'roll_steps': 64}}) # That's the version that fails
-    
-    if creation is None:
+    LON, LAT = np.meshgrid(lon,lat) 
+    if myinput != 'N':
         np.save(checkpoint_name+'/year_permutation',_year_permutation)
         np.save(checkpoint_name+'/Y',_Y)
     else:
@@ -234,15 +234,15 @@ def PrepareDataAndVAE(checkpoint_name, creation=None, myinput='Y', SET_YEARS=ran
     
     INPUT_DIM = X.shape[1:]  # Image dimension
     
-    X = normalize_X(X, checkpoint_name, creation=creation, mode='pointwise')
+    X = normalize_X(X, checkpoint_name, myinput=myinput, mode='pointwise')
     logger.info(f'{X.shape = },{np.mean(X[:,5,5,0]) = },{np.std(X[:,5,5,0]) = }')
     
-    filter_mask = ln.roll_X(ef.create_mask('Plasim','France', X[0,...,0], axes='first 2', return_full_mask=True),1)
-    logger.info(f'{filter_mask.shape = }')
-    logger.info(f'{np.ones(X[0,...,0].shape).shape = }')
-    logger.info(f'{np.array([filter_mask,np.ones(X[0,...,0].shape),filter_mask], dtype=bool).shape = }')
+    filter_mask = ln.roll_X(ef.create_mask('Plasim','France', LON, axes='last 2', return_full_mask=True),1)
+    logger.info(f'{Fore.RED}{filter_mask.shape = }')
+    logger.info(f'{np.ones(LON.shape).shape = }')
+    logger.info(f'{np.array([filter_mask,np.ones(LON.shape),filter_mask], dtype=bool).shape = }{Style.RESET_ALL}')
     
-    filter_mask = np.array([filter_mask,np.ones(X[0,...,0].shape),filter_mask], dtype=bool).transpose(1,2,0) 
+    filter_mask = np.array([filter_mask,np.ones(LON.shape),filter_mask], dtype=bool).transpose(1,2,0) 
     
     logger.info(f'{X.dtype = }, {filter_mask.dtype}')
    
@@ -269,7 +269,7 @@ def PrepareDataAndVAE(checkpoint_name, creation=None, myinput='Y', SET_YEARS=ran
 
 
 @ut.execution_time  # prints the time it takes for the function to run
-#@ut.indent_logger(logger)   # indents the log messages produced by this function
+@ut.indent_logger(logger)   # indents the log messages produced by this function
 # logger indent causes: IndexError: string index out of range
 def train_vae(X, vae, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, checkpoint_name, myinput, history, batch_size=128, lr=1e-3):
     
@@ -287,8 +287,8 @@ def train_vae(X, vae, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, checkpoint_name,
 
     if myinput == 'C':
         logger.info("we merge the history dictionaries")
-        logger.info(f" {len(history['loss'])}")
-        logger.info(f" {len(my_history.history['loss'])}")
+        logger.info(f" {len(history['loss']) = }")
+        logger.info(f" {len(my_history.history['loss']) = }")
         for key in history:
             history[key] = history[key]+my_history.history[key]
     else:
@@ -303,8 +303,8 @@ def train_vae(X, vae, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, checkpoint_name,
 
 if __name__ == '__main__': # we do this so that we can then load this file as a module in reconstruction.py
     
-    checkpoint_name = './models/test5'
-    
+    #checkpoint_name = './models/test5'
+    checkpoint_name = sys.argv[1]
     
     
     # folder name where weights will be stored
@@ -322,8 +322,7 @@ if __name__ == '__main__': # we do this so that we can then load this file as a 
         os.mkdir(checkpoint_name)
         move_to_folder(checkpoint_name)
  
-    X, lon, lat, vae, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, history = PrepareDataAndVAE(creation=None, checkpoint_name=checkpoint_name,myinput=myinput
-                                                                                           )
+    X, lon, lat, vae, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, history = PrepareDataAndVAE(checkpoint_name=checkpoint_name,myinput=myinput)
     
     
     history_loss = train_vae(X, vae, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, checkpoint_name, myinput, history, batch_size=128, lr=1e-3)
