@@ -715,7 +715,7 @@ def run_vae(folder, myinput='N', XY_run_vae_keywargs=None, k_fold_cross_val_kwar
     decoder_conv_kernel_size = ut.extract_nested(k_fold_cross_val_kwargs, 'decoder_conv_kernel_size')
     decoder_conv_strides = ut.extract_nested(k_fold_cross_val_kwargs, 'decoder_conv_strides')
     decoder_conv_padding = ut.extract_nested(k_fold_cross_val_kwargs, 'decoder_conv_padding')
-
+    # This calculation below is WRONG!
     for encoder_conv_filters1, encoder_conv_kernel_size1, encoder_conv_strides1, encoder_conv_padding1 in zip(encoder_conv_filters, encoder_conv_kernel_size, encoder_conv_strides, encoder_conv_padding):
         logger.info(f"{encoder_conv_filters1 = }, {encoder_conv_kernel_size1 = }, {encoder_conv_strides1 = }, {encoder_conv_padding1 = }")
         if encoder_conv_padding1 == "same":
@@ -723,8 +723,8 @@ def run_vae(folder, myinput='N', XY_run_vae_keywargs=None, k_fold_cross_val_kwar
             lon_W = np.ceil(float(lon_W) / float(encoder_conv_strides1))
             logger.info(f" processing layer results in the dimension {lat_W = }, {lon_W = }")
         if encoder_conv_padding1 == "valid":
-            lat_W = np.ceil(float(lat_W - encoder_conv_kernel_size1) / float(encoder_conv_strides1)) + 1
-            lon_W = np.ceil(float(lon_W - encoder_conv_kernel_size1) / float(encoder_conv_strides1)) + 1
+            lat_W = np.ceil(float(lat_W - encoder_conv_kernel_size1 + 1) / float(encoder_conv_strides1))
+            lon_W = np.ceil(float(lon_W - encoder_conv_kernel_size1 + 1) / float(encoder_conv_strides1))
             logger.info(f" processing layer results in the dimension {lat_W = }, {lon_W = }")
     for decoder_conv_filters1, decoder_conv_kernel_size1, decoder_conv_strides1, decoder_conv_padding1 in zip(decoder_conv_filters, decoder_conv_kernel_size, decoder_conv_strides, decoder_conv_padding):
         logger.info(f"{decoder_conv_filters1 = }, {decoder_conv_kernel_size1 = }, {decoder_conv_strides1 = }, {decoder_conv_padding1 = }")
@@ -801,18 +801,18 @@ def kwargator(thefun):
     thefun_kwargs_default = ut.set_values_recursive(thefun_kwargs_default,
                                             {'myinput':'Y', 'lat_end': 24,'fields': ['t2m_filtered','zg500','mrso_filtered'],'year_list': 'range(100)',
                                                'print_summary' : False, 'k1': 0.9 , 'k2':0.1, 'field_weights': [20., 1, 20.],'mask_area':'France', 'usemask' : True, 'Z_DIM': 8, #8, #64,
-                                                'N_EPOCHS': 10,'batch_size': 128, 'checkpoint_every': 1, 'lr': 5e-4, 'epoch_tol': None, 'lr_min' : 5e-4, #'lat_start' : 4, 'lat_end' : 22, 'lon_start' : 101, 'lon_end' : 15, 'roll_steps' : 64,
+                                                'N_EPOCHS': 10,'batch_size': 128, 'checkpoint_every': 1, 'lr': 5e-4, 'epoch_tol': None, 'lr_min' : 5e-4, 'lat_start' : 4, 'lat_end' : 22, 'lon_start' : 101, 'lon_end' : 15, 'roll_steps' : 64,
                                                # 'lat_0' : 0, 'lat_1' : 24, 'lon_0' : (64-28), 'lon_1' : (64+15), 'coef_out' : 0.1, 'coef_in' : 1, 
                                                # 'coef_class' : 0.1, 'class_type' : 'mean', 'L2factor' : 1e-9,
                                                'print_summary' : True,
-                                               'encoder_conv_filters' : [32,64,64,64],
-                                                'encoder_conv_kernel_size' : [3,3,3,3],
-                                                'encoder_conv_strides' : [2,2,2,1],
-                                                'encoder_conv_padding' : ["same","same","same","valid"],
-                                                'decoder_conv_filters' : [64,64,32,3],
-                                                'decoder_conv_kernel_size' : [3,3,3,3],
-                                                'decoder_conv_strides' : [1,2,2,2],
-                                                'decoder_conv_padding' : ["valid","same","same","same"] 
+                                               'encoder_conv_filters' : [32,64,64],
+                                                'encoder_conv_kernel_size' : [4,4,3],
+                                                'encoder_conv_strides' : [2,2,2],
+                                                'encoder_conv_padding' : ["valid","valid","valid"],
+                                                'decoder_conv_filters' : [64,32, 3],
+                                                'decoder_conv_kernel_size' : [3,4,4],
+                                                'decoder_conv_strides' : [2,2,2],
+                                                'decoder_conv_padding' : ["valid","valid","valid"] 
                                                #'encoder_conv_filters':[16, 16, 16, 32, 32,  32,   64, 64],
                                                #         'encoder_conv_kernel_size':[5,  5,  5,  5,   5,   5,   5,  3],
                                                #         'encoder_conv_strides'    :[2,  1,  1,  2,   1,   1,   2,  1],
