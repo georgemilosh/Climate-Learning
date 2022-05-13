@@ -694,6 +694,50 @@ def run_vae(folder, myinput='N', XY_run_vae_keywargs=None, k_fold_cross_val_kwar
         
     nfolds = k_fold_cross_val_kwargs['nfolds']
     val_folds = k_fold_cross_val_kwargs['val_folds']
+
+    lat_start = ut.extract_nested(load_data_kwargs, 'lat_start')
+    lat_end = ut.extract_nested(load_data_kwargs, 'lat_end')
+    lon_start = ut.extract_nested(load_data_kwargs, 'lon_start')
+    lon_end = ut.extract_nested(load_data_kwargs, 'lon_end')
+
+    lat_W = lat_end - lat_start
+    if lon_start > lon_end:
+        lon_W = lon_end - lon_start + 128
+    else:
+        lon_W = lon_end - lon_start
+    logger.info(f" inputs {lat_W = }, {lon_W = }")
+    encoder_conv_filters = ut.extract_nested(k_fold_cross_val_kwargs, 'encoder_conv_filters')
+    encoder_conv_kernel_size = ut.extract_nested(k_fold_cross_val_kwargs, 'encoder_conv_kernel_size')
+    encoder_conv_strides = ut.extract_nested(k_fold_cross_val_kwargs, 'encoder_conv_strides')
+    encoder_conv_padding = ut.extract_nested(k_fold_cross_val_kwargs, 'encoder_conv_padding')
+    decoder_conv_filters = ut.extract_nested(k_fold_cross_val_kwargs, 'decoder_conv_filters')
+    decoder_conv_kernel_size = ut.extract_nested(k_fold_cross_val_kwargs, 'decoder_conv_kernel_size')
+    decoder_conv_strides = ut.extract_nested(k_fold_cross_val_kwargs, 'decoder_conv_strides')
+    decoder_conv_padding = ut.extract_nested(k_fold_cross_val_kwargs, 'decoder_conv_padding')
+
+    for encoder_conv_filters1, encoder_conv_kernel_size1, encoder_conv_strides1, encoder_conv_padding1 in zip(encoder_conv_filters, encoder_conv_kernel_size, encoder_conv_strides, encoder_conv_padding):
+        logger.info(f"{encoder_conv_filters1 = }, {encoder_conv_kernel_size1 = }, {encoder_conv_strides1 = }, {encoder_conv_padding1 = }")
+        if encoder_conv_padding1 == "same":
+            lat_W = np.ceil(float(lat_W) / float(encoder_conv_strides1))
+            lon_W = np.ceil(float(lon_W) / float(encoder_conv_strides1))
+            logger.info(f" processing layer results in the dimension {lat_W = }, {lon_W = }")
+        if encoder_conv_padding1 == "valid":
+            lat_W = np.ceil(float(lat_W - encoder_conv_kernel_size1) / float(encoder_conv_strides1)) + 1
+            lon_W = np.ceil(float(lon_W - encoder_conv_kernel_size1) / float(encoder_conv_strides1)) + 1
+            logger.info(f" processing layer results in the dimension {lat_W = }, {lon_W = }")
+    for decoder_conv_filters1, decoder_conv_kernel_size1, decoder_conv_strides1, decoder_conv_padding1 in zip(decoder_conv_filters, decoder_conv_kernel_size, decoder_conv_strides, decoder_conv_padding):
+        logger.info(f"{decoder_conv_filters1 = }, {decoder_conv_kernel_size1 = }, {decoder_conv_strides1 = }, {decoder_conv_padding1 = }")
+        if decoder_conv_padding1 == "same":
+            lat_W = lat_W*decoder_conv_strides1
+            lon_W = lon_W*decoder_conv_strides1
+            logger.info(f" processing layer results in the dimension {lat_W = }, {lon_W = }")
+        if decoder_conv_padding1 == "valid":
+            lat_W = (lat_W-1)*decoder_conv_strides1 + decoder_conv_kernel_size1
+            lon_W = (lon_W-1)*decoder_conv_strides1 + decoder_conv_kernel_size1
+            logger.info(f" processing layer results in the dimension {lat_W = }, {lon_W = }")
+
+    logger.info(f" pausing for 2 seconds...")
+    time.sleep(2) 
     
     try:
         if XY_run_vae_keywargs is None: # we don't have X and Y yet, need to load them (may take a lot of time!)
