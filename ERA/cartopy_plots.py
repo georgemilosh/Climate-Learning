@@ -398,7 +398,7 @@ def animate(tau, lon, lat, temp=None, zg=None, temp_t_values=None, zg_t_values=N
         frame_title: pre-title to put on top of each frame. The total title will also say which day it is
         greenwich: whether to copy the Greenwich meridian to avoid gaps in the plot.
         
-        masker: None or function that takes as inout a single argument (array), and returns a slice of said array over the region of interest.
+        masker: None or function that takes as input a single argument (array), and returns a slice of said array over the region of interest.
             For example it can be a partial of ERA_Fields.create_mask or another example could be 
                 masker = lambda data : return data[..., 6:12, 2:15]
             If None only the geo_plot is produced. Otherwise a side plot with the evolution of the temperature is also produced
