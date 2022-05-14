@@ -25,7 +25,8 @@ class ScoreOptimizer():
     def __init__(self, trainer, study_name='', common_kwargs=None):
         self.trainer = trainer
         self.common_kwargs = common_kwargs or {}
-        name = ln.make_run_name(study_name, **common_kwargs)
+        name_kwargs = {k:v for k,v in self.common_kwargs.items() if not k.startswith('prune')} # ignore kwargs related to pruning in the name of the study
+        name = ln.make_run_name(study_name, **name_kwargs)
         self.study = optuna.create_study(study_name=name, storage=f'sqlite:///{name}.db', load_if_exists=True)
 
         self._pruned_trials = 0 # number of pruned trials in the last optimize run
