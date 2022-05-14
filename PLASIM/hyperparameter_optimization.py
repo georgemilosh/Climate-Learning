@@ -112,10 +112,13 @@ class ScoreOptimizer():
             while _n_trials:
                 self._pruned_trials = 0
                 self.study.optimize(self.objective, n_trials=_n_trials, **kwargs)
+                logger.log(45, f'Completed {_n_trials} runs, {self._pruned_trials} of which failed due to invalid network architecture')
                 if count_pruned:
                     _n_trials = 0 # if we consider also the pruned runs, there is no second round
                 else:
                     _n_trials = self._pruned_trials # new number of trials for the next round
+                    logger.log(45, f'Starting another {_n_trials} runs')
+            logger.log(45, '\n\nAll runs completed!')
 
         finally:
             # remove telegram logger
@@ -127,12 +130,7 @@ class ScoreOptimizer():
 
 
 def main():
-    if ln.deal_with_lock():
-        folder = sys.argv[1]
-        print(f'moving code to {folder = }')
-        # copy this file
-        path_to_here = ln.Path(__file__).resolve() # path to this file
-        ln.shutil.copy(path_to_here, folder)
+    if ln.deal_with_lock(additional_files=[ln.Path(__file__).resolve()]):
         return
 
     arg_dict = ln.parse_command_line()
@@ -159,6 +157,7 @@ def main():
 
     study_name = arg_dict.pop('study_name', 'study')
     n_trials = arg_dict.pop('n_trials', None)
+    count_pruned = arg_dict.pop('count_pruned', True)
     if not n_trials:
         raise ValueError('You must provide a valid number of trials with n_trials=<number of trials>')
 
@@ -166,7 +165,7 @@ def main():
     so = ScoreOptimizer(trainer=trainer, study_name=study_name, common_kwargs=arg_dict)
 
     # run
-    so.optimize(n_trials=n_trials)
+    so.optimize(n_trials=n_trials, count_pruned=count_pruned)
 
 
 
