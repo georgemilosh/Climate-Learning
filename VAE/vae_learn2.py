@@ -713,7 +713,7 @@ def run_vae(folder, myinput='N', XY_run_vae_keywargs=None, k_fold_cross_val_kwar
     decoder_conv_kernel_size = ut.extract_nested(k_fold_cross_val_kwargs, 'decoder_conv_kernel_size')
     decoder_conv_strides = ut.extract_nested(k_fold_cross_val_kwargs, 'decoder_conv_strides')
     decoder_conv_padding = ut.extract_nested(k_fold_cross_val_kwargs, 'decoder_conv_padding')
-    
+
     for encoder_conv_filters1, encoder_conv_kernel_size1, encoder_conv_strides1, encoder_conv_padding1 in zip(encoder_conv_filters, encoder_conv_kernel_size, encoder_conv_strides, encoder_conv_padding):
         logger.info(f"{encoder_conv_filters1 = }, {encoder_conv_kernel_size1 = }, {encoder_conv_strides1 = }, {encoder_conv_padding1 = }")
         if encoder_conv_padding1 == "same":
@@ -737,7 +737,6 @@ def run_vae(folder, myinput='N', XY_run_vae_keywargs=None, k_fold_cross_val_kwar
 
     logger.info(f" pausing for 2 seconds...")
     time.sleep(2) 
-
     try:
         if XY_run_vae_keywargs is None: # we don't have X and Y yet, need to load them (may take a lot of time!)
         # loading full X can be heavy and unnecessary for reconstruction.py so we choose to work with validation automatically provided that folder already involves a fold: 
