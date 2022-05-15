@@ -76,13 +76,28 @@ logger.info("==Reading data==")
 year_permutation = np.load(f'{fold_folder.parent}/year_permutation.npy')
 i = int(np.load(f'{fold_folder}/fold_num.npy'))
 
-
+time_start = ut.extract_nested(run_vae_kwargs, 'time_start')
+time_end = ut.extract_nested(run_vae_kwargs, 'time_end')
+T = ut.extract_nested(run_vae_kwargs, 'T')
+if (ut.keys_exists(run_vae_kwargs, 'label_period_start') and ut.keys_exists(run_vae_kwargs, 'label_period_end')):
+    label_period_start = ut.extract_nested(run_vae_kwargs, 'label_period_start')
+    label_period_end = ut.extract_nested(run_vae_kwargs, 'label_period_end')
+    if (label_period_start is not None) and (label_period_end is not None):
+        summer_days = label_period_end - label_period_start - T + 1
+    elif (label_period_start is None) and (label_period_end is not None):
+        summer_days = label_period_end - time_start - T + 1
+    elif (label_period_start is not None) and (label_period_end is None):
+        summer_days = time_end - label_period_start - T + 1
+    else:
+        summer_days = time_end - time_start - T + 1
+else:
+    summer_days = time_end - time_start - T + 1
 #X, lat, lon, vae, Z_DIM, N_EPOCHS, INITIAL_EPOCH, BATCH_SIZE, LEARNING_RATE, checkpoint_path, fold_folder, myinput, history = foo.PrepareDataAndVAE(fold_folder, DIFFERENT_YEARS=year_permutation[:800])
 year_permutation_va = np.load(f'{fold_folder}/year_permutation_va.npy')
 # Select times we want to show for reconstruction
 if True: # select at random 10 years out of the validation set 
     year_permutation = list(year_permutation_va[rd.sample(range(len(year_permutation_va)), 10)])  
-    day_permutation = rd.sample(range(77*len(year_permutation)), 5) # There are 77 days in summer by default
+    day_permutation = rd.sample(range(summer_days*len(year_permutation)), 5) 
 else: # avoid random permutation, just select minimum number of years allowed in fold
     year_permutation = [year_permutation_va[0]]
     day_permutation = range(23,23+5)##range(12,12+5)#[4,5,6,7,8] # the length has to be 5 for plotting purposes

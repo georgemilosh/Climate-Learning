@@ -820,7 +820,7 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
 
 @ut.execution_time
 @ut.indent_logger(logger)
-def assign_labels(field, time_start=30, time_end=120, T=14, percent=5, threshold=None):
+def assign_labels(field, time_start=30, time_end=120, T=14, percent=5, threshold=None, label_period_start=None, label_period_end=None):
     '''
     Given a field of anomalies it computes the `T` days forward convolution of the integrated anomaly and assigns label 1 to anomalies above a given `threshold`.
     If `threshold` is not provided, then it is computed from `percent`, namely to identify the `percent` most extreme anomalies.
@@ -838,6 +838,10 @@ def assign_labels(field, time_start=30, time_end=120, T=14, percent=5, threshold
         percentage of the most extreme heatwaves
     threshold : float, optional
         if provided overrides `percent`.
+    label_period_start : int, optional
+        if provided the first day of the period of interest for the label threshold determination
+    label_period_end : int, optional
+        if provided the first day after the end of the period of interst for the label threshold determination
 
     Returns:
     --------
@@ -845,9 +849,23 @@ def assign_labels(field, time_start=30, time_end=120, T=14, percent=5, threshold
         2D array with shape (years, days) and values 0 or 1
     '''
     day0 = field.field.time.dt.dayofyear[0]
+    if threshold is None:
+        if (label_period_start is not None) and (label_period_end is None):
+            A = field.compute_time_average(day_start=day0+label_period_start, day_end=day0+time_end, T=T)
+            _, threshold_new = ef.is_over_threshold(field.to_numpy(A), threshold=None, percent=percent)
+        elif (label_period_start is None) and (label_period_end is not None):
+            A = field.compute_time_average(day_start=day0+time_start, day_end=day0+label_period_end, T=T)
+            _, threshold_new = ef.is_over_threshold(field.to_numpy(A), threshold=None, percent=percent)
+        elif (label_period_start is not  None) and (label_period_end is not None):
+            A = field.compute_time_average(day_start=day0+label_period_start, day_end=day0+label_period_end, T=T)
+            _, threshold_new = ef.is_over_threshold(field.to_numpy(A), threshold=None, percent=percent)
+        else: # This is the default behavior that should be consistent with what Alessandro does at the moment
+            threshold_new = None
+    else:
+        threshold_new = threshold.copy()
     A = field.compute_time_average(day_start=day0+time_start, day_end=day0+time_end, T=T)
-    labels, threshold = ef.is_over_threshold(field.to_numpy(A), threshold=threshold, percent=percent)
-    logger.info(f"{threshold = }")
+    labels, threshold = ef.is_over_threshold(field.to_numpy(A), threshold=threshold_new, percent=percent)
+    logger.info(f"{threshold_new = }")
     return np.array(labels, dtype=int)
 
 @ut.execution_time
@@ -881,7 +899,7 @@ def make_X(fields, time_start=30, time_end=120, T=14, tau=0):
 
 @ut.execution_time
 @ut.indent_logger(logger)
-def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0, percent=5, threshold=None):  
+def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0, percent=5, threshold=None, label_period_start=None, label_period_end=None):
     '''
     Combines `make_X` and `assign_labels`
 
@@ -902,6 +920,10 @@ def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0,
         percentage of the most extreme heatwaves
     threshold : float, optional
         if provided overrides `percent`
+    label_period_start : int, optional
+        if provided the first day of the period of interest for the label threshold determination
+    label_period_end : int, optional
+        if provided the first day after the end of the period of interst for the label threshold determination
 
     Returns:
     --------
@@ -910,6 +932,12 @@ def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0,
     Y : np.ndarray
         with shape (years, days)
     '''
+    #if label_period_start is not None:
+    #    if label_period_start < time_start:
+    #       raise ValueError(f'Bad parameters specified: {label_period_start = } is less than {time_start = }')
+    #if label_period_end is not None:
+    #    if label_period_end > time_end:
+    #       raise ValueError(f'Bad parameters specified: {label_period_end = } is more than {time_end = }')
     X = make_X(fields, time_start=time_start, time_end=time_end, T=T, tau=tau)
     try:
         lf = fields[label_field]
@@ -918,7 +946,7 @@ def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0,
             lf = fields[f'{label_field}_ghost']
         except KeyError:
             raise KeyError(f'Unable to find label field {label_field} among the provided fields {list(fields.keys())}')
-    Y = assign_labels(lf, time_start=time_start, time_end=time_end, T=T, percent=percent, threshold=threshold)
+    Y = assign_labels(lf, time_start=time_start, time_end=time_end, T=T, percent=percent, threshold=threshold, label_period_start=label_period_start, label_period_end=label_period_end)
     return X,Y
 
 @ut.execution_time
