@@ -212,7 +212,6 @@ def create_or_load_vae(folder, INPUT_DIM, myinput, VAE_kwargs=None, build_encode
     ones_dim = np.ones(INPUT_DIM[:-1])
     
     filter_mask = ln.roll_X(ef.create_mask('Plasim',mask_area, ones_dim, axes='last 2', return_full_mask=True), roll_axis = 1, roll_steps=64)
-    #filter_mask = ef.create_mask('Plasim',mask_area, ones_dim, axes='last 2', return_full_mask=True)
     logger.info(f'{filter_mask.shape = }')
     logger.info(f'{ones_dim.shape = }')
     logger.info(f'{np.array([filter_mask,ones_dim,filter_mask], dtype=bool).shape = }')
@@ -695,11 +694,11 @@ def run_vae(folder, myinput='N', XY_run_vae_keywargs=None, k_fold_cross_val_kwar
         
     nfolds = k_fold_cross_val_kwargs['nfolds']
     val_folds = k_fold_cross_val_kwargs['val_folds']
-    
     lat_start = ut.extract_nested(load_data_kwargs, 'lat_start')
     lat_end = ut.extract_nested(load_data_kwargs, 'lat_end')
     lon_start = ut.extract_nested(load_data_kwargs, 'lon_start')
     lon_end = ut.extract_nested(load_data_kwargs, 'lon_end')
+
     lat_W = lat_end - lat_start
     if lon_start > lon_end:
         lon_W = lon_end - lon_start + 128
@@ -714,6 +713,7 @@ def run_vae(folder, myinput='N', XY_run_vae_keywargs=None, k_fold_cross_val_kwar
     decoder_conv_kernel_size = ut.extract_nested(k_fold_cross_val_kwargs, 'decoder_conv_kernel_size')
     decoder_conv_strides = ut.extract_nested(k_fold_cross_val_kwargs, 'decoder_conv_strides')
     decoder_conv_padding = ut.extract_nested(k_fold_cross_val_kwargs, 'decoder_conv_padding')
+    
     for encoder_conv_filters1, encoder_conv_kernel_size1, encoder_conv_strides1, encoder_conv_padding1 in zip(encoder_conv_filters, encoder_conv_kernel_size, encoder_conv_strides, encoder_conv_padding):
         logger.info(f"{encoder_conv_filters1 = }, {encoder_conv_kernel_size1 = }, {encoder_conv_strides1 = }, {encoder_conv_padding1 = }")
         if encoder_conv_padding1 == "same":
