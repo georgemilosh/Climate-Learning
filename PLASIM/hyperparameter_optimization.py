@@ -3,8 +3,7 @@
 
 # @author: Alessandro Lovo
 # '''
-from ast import arg
-from sqlalchemy import false
+from ast import arg, literal_eval
 import Learn2_new as ln
 logger = ln.logger
 ut = ln.ut
@@ -26,15 +25,21 @@ class ScoreOptimizer():
     def __init__(self, trainer, study_name='', common_kwargs=None):
         self.trainer = trainer
         self.common_kwargs = common_kwargs or {}
-        name = ln.make_run_name(study_name, **common_kwargs)
+        name_kwargs = {k:v for k,v in self.common_kwargs.items() if not k.startswith('prune')} # ignore kwargs related to pruning in the name of the study
+        name = ln.make_run_name(study_name, **name_kwargs)
         self.study = optuna.create_study(study_name=name, storage=f'sqlite:///{name}.db', load_if_exists=True)
+
+        self._pruned_trials = 0 # number of pruned trials in the last optimize run
         
 
     def objective(self, trial):
         #### select hyperparameters ####
 
         hyp = {}
-        hyp['lr'] = trial.suggest_float('lr', 1e-5, 1e-3, log=True) # learning rate
+
+        lr = trial.suggest_float('lr', 1e-5, 1e-3, log=True) # learning rate
+        lr = literal_eval(f'{lr:.7f}') # limit the resolution of the learning rate
+        hyp['lr'] = lr
         hyp['batch_size'] = trial.suggest_int('batch_size', 128, 2048, log=True)
 
         # convolutional layers
@@ -50,23 +55,23 @@ class ScoreOptimizer():
             hyp['kernel_sizes'].append(trial.suggest_int(f'kernel_sizes_{i+1}', 2, 10))
             hyp['strides'].append(trial.suggest_int(f'strides_{i+1}', 1, hyp['kernel_sizes'][-1]))
             hyp['batch_normalizations'].append(trial.suggest_categorical(f'batch_normalizations_{i+1}', [True, False]))
-            hyp['conv_dropouts'].append(trial.suggest_float(f'conv_dropouts_{i+1}', 0, 0.8))
+            hyp['conv_dropouts'].append(literal_eval(f"{trial.suggest_float(f'conv_dropouts_{i+1}', 0, 0.8, step=0.01):.2f}"))
             hyp['max_pool_sizes'].append(trial.suggest_int(f'max_pool_sizes_{i+1}', 1, 4))
 
         # fully connected layers
         n_dense_layers = trial.suggest_int('n_dense_layers', 1, 4)
         hyp['dense_units'] = []
-        hyp['dense_activations'] = ['relu']*(n_dense_layers - 1) + [False]
+        hyp['dense_activations'] = ['relu']*(n_dense_layers - 1) + [None]
         hyp['dense_dropouts'] = []
         for i in range(n_dense_layers - 1):
             hyp['dense_units'].append(trial.suggest_int(f'dense_units_{i+1}', 8, 128))
-            hyp['dense_dropouts'].append(trial.suggest_float(f'dense_dropouts_{i+1}', 0, 0.8))
+            hyp['dense_dropouts'].append(literal_eval(f"{trial.suggest_float(f'dense_dropouts_{i+1}', 0, 0.8, step=0.01):.2f}"))
         hyp['dense_units'].append(2)
         hyp['dense_dropouts'].append(False)
 
         # remove arguments that remained empty lists (this facilitates commenting lines to remove kwargs to optimize)
         kw_to_remove = []
-        for k,v in hyp:
+        for k,v in hyp.items():
             if isinstance(v, list) and len(v) == 0:
                 kw_to_remove.append(k)
             if k in self.common_kwargs:
@@ -82,6 +87,7 @@ class ScoreOptimizer():
             score, info = self.trainer._run(**run_args)
 
             if info['status'] == 'FAILED': # most likely due to invalid network architecture
+                self._pruned_trials += 1
                 raise optuna.TrialPruned(f"Run failed: pruning.") # we prune the trial
 
             ## we could prune also PRUNED runs, but since we have access to a partial score on the few first folds we can keep them to instruct optuna
@@ -97,18 +103,35 @@ class ScoreOptimizer():
         return score
 
 
-    def optimize(self, **kwargs):
-        self.study.optimize(self.objective, **kwargs)
+    def optimize(self, n_trials=20, count_pruned=True, **kwargs):
+        # add telegram logger
+        th = self.trainer.telegram(**self.trainer.telegram_kwargs)
+        logger.log(45, f"Starting {n_trials} runs")
+
+        _n_trials = n_trials
+        try:
+            while _n_trials:
+                self._pruned_trials = 0
+                self.study.optimize(self.objective, n_trials=_n_trials, **kwargs)
+                logger.log(45, f'Completed {_n_trials} runs, {self._pruned_trials} of which failed due to invalid network architecture')
+                if count_pruned:
+                    _n_trials = 0 # if we consider also the pruned runs, there is no second round
+                else:
+                    _n_trials = self._pruned_trials # new number of trials for the next round
+                    logger.log(45, f'Starting another {_n_trials} runs')
+            logger.log(45, '\n\nAll runs completed!')
+
+        finally:
+            # remove telegram logger
+            if th is not None:
+                logger.handlers.remove(th)
+                logger.log(45, 'Removed telegram logger')
+
 
 
 
 def main():
-    if ln.deal_with_lock():
-        folder = sys.argv[1]
-        print(f'moving code to {folder = }')
-        # copy this file
-        path_to_here = ln.Path(__file__).resolve() # path to this file
-        ln.shutil.copy(path_to_here, folder)
+    if ln.deal_with_lock(additional_files=[ln.Path(__file__).resolve()]):
         return
 
     arg_dict = ln.parse_command_line()
@@ -135,6 +158,7 @@ def main():
 
     study_name = arg_dict.pop('study_name', 'study')
     n_trials = arg_dict.pop('n_trials', None)
+    count_pruned = arg_dict.pop('count_pruned', True)
     if not n_trials:
         raise ValueError('You must provide a valid number of trials with n_trials=<number of trials>')
 
@@ -142,7 +166,7 @@ def main():
     so = ScoreOptimizer(trainer=trainer, study_name=study_name, common_kwargs=arg_dict)
 
     # run
-    so.optimize(n_trials=n_trials)
+    so.optimize(n_trials=n_trials, count_pruned=count_pruned)
 
 
 

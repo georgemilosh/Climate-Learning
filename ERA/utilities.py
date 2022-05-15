@@ -27,6 +27,8 @@ else:
     logger = logging.getLogger(__name__)
 logger.level = logging.INFO
 
+MAX_FILENAME_LENGTH = 128
+
 ######## time formatting ##########
 def now():
     '''
@@ -670,6 +672,18 @@ def make_safe(path):
     path = path.replace('[', '(')
     path = path.replace(']', ')')
     path = path.replace("'", '')
+
+    path_to = None
+    if '/' in path:
+        path_to, path = path.rsplit('/', 1)
+    
+    if len(path) > MAX_FILENAME_LENGTH:
+        clipped_path = path[:MAX_FILENAME_LENGTH - 3] + '...'
+        logger.warning(f'Too long filename\n\t{path}\nClipping to\n\t{clipped_path}')
+        path = clipped_path
+    if path_to is not None:
+        path = f'{path_to}/{path}'
+    
     return path
 
 

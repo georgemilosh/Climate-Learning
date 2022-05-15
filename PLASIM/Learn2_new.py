@@ -636,9 +636,21 @@ def get_run(load_from, current_run_name=None, runs_path='./runs.json'):
 ########## COPY SOURCE FILES #########
 ######################################
 
-def move_to_folder(folder):
+def move_to_folder(folder, additional_files=None):
     '''
     Copies this file and its dependencies to a given folder.
+
+    Parameters
+    ----------
+    folder : str or Path
+        destination folder
+    additional_files : list[Path], optional
+        list of additional files to copy in `folder`, by default None
+
+    Raises
+    ------
+    FileExistsError
+        If there is already code in `folder`
     '''
     folder = Path(folder).resolve()
     ERA_folder = folder / 'ERA' # GM: container of the useful routines in a subfolder "folder/ERA". The abbreviation comes from the original routines deveoped for ERA5 reanalysis
@@ -654,11 +666,11 @@ def move_to_folder(folder):
     # copy other files in the same directory as this one
     path_to_here = path_to_here.parent
     shutil.copy(path_to_here / 'import_config.py', folder)
+
     # copy additional files
-    # History.py
-    # Metrics.py
-    # Recalc_Tau_Metrics.py
-    # Recalc_History.py
+    if additional_files:
+        for file in additional_files:
+            shutil.copy(file, folder)
 
     # copy useful files from ../ERA/ to folder/ERA/
     path_to_here = path_to_here.parent / 'ERA'
@@ -668,7 +680,9 @@ def move_to_folder(folder):
     shutil.copy(path_to_here / 'utilities.py', ERA_folder)
 
     print(f'Now you can go to {folder} and run the learning from there:\n')
-    print(f'cd \"{folder}\"\n')
+    print(f'\n\ncd \"{folder}\"\n')
+    # print(f'cd \"{folder}\"\n has been copied to your clipboard :)')
+    # pyperclip.copy(f'cd \"{folder}\"')
     
     
 ############################################
@@ -2606,9 +2620,9 @@ CONFIG_DICT = build_config_dict([Trainer.run, Trainer.telegram]) # module level 
 # config file will be built from the default parameters of the functions given here and of the functions they call in a recursive manner
         
 
-def deal_with_lock():
+def deal_with_lock(**kwargs):
     '''
-    Checks if there is a lock and performs the necessary operations. 
+    Checks if there is a lock and performs the necessary operations. **kwargs are passed to `move_to_folder`
 
     Returns
     -------
@@ -2630,7 +2644,7 @@ def deal_with_lock():
         if len(sys.argv) == 2:
             folder = sys.argv[1]
             print(f'moving code to {folder = }')
-            move_to_folder(folder)
+            move_to_folder(folder, **kwargs)
             
             ut.dict2json(CONFIG_DICT,f'{folder}/config.json')
 
@@ -2665,7 +2679,7 @@ def parse_command_line():
             logger.warning(f'Could not evaluate {value}. Keeping string type')
         arg_dict[key] = value
 
-        return arg_dict
+    return arg_dict
 
         
 def main():
