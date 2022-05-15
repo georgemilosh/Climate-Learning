@@ -722,8 +722,8 @@ def run_vae(folder, myinput='N', XY_run_vae_keywargs=None, k_fold_cross_val_kwar
             lon_W = np.ceil(float(lon_W) / float(encoder_conv_strides1))
             logger.info(f" processing layer results in the dimension {lat_W = }, {lon_W = }")
         if encoder_conv_padding1 == "valid":
-            lat_W = np.ceil(float(lat_W - encoder_conv_kernel_size1) / float(encoder_conv_strides1)) + 1
-            lon_W = np.ceil(float(lon_W - encoder_conv_kernel_size1) / float(encoder_conv_strides1)) + 1
+            lat_W = np.ceil(float(lat_W - encoder_conv_kernel_size1 + 1) / float(encoder_conv_strides1))
+            lon_W = np.ceil(float(lon_W - encoder_conv_kernel_size1 + 1) / float(encoder_conv_strides1))
             logger.info(f" processing layer results in the dimension {lat_W = }, {lon_W = }")
     for decoder_conv_filters1, decoder_conv_kernel_size1, decoder_conv_strides1, decoder_conv_padding1 in zip(decoder_conv_filters, decoder_conv_kernel_size, decoder_conv_strides, decoder_conv_padding):
         logger.info(f"{decoder_conv_filters1 = }, {decoder_conv_kernel_size1 = }, {decoder_conv_strides1 = }, {decoder_conv_padding1 = }")
@@ -742,7 +742,7 @@ def run_vae(folder, myinput='N', XY_run_vae_keywargs=None, k_fold_cross_val_kwar
     try:
         if XY_run_vae_keywargs is None: # we don't have X and Y yet, need to load them (may take a lot of time!)
         # loading full X can be heavy and unnecessary for reconstruction.py so we choose to work with validation automatically provided that folder already involves a fold: 
-            X, Y, year_permutation, lat, lon = ln.prepare_data(load_data_kwargs = load_data_kwargs, prepare_XY_kwargs =prepare_XY_kwargs) # Here I follow the same structure as Alessandro has, otherwise we could use prepare_data_kwargs
+            X, Y, year_permutation, lat, lon = ln.prepare_data(load_data_kwargs=load_data_kwargs, prepare_XY_kwargs=prepare_XY_kwargs) # Here I follow the same structure as Alessandro has, otherwise we could use prepare_data_kwargs
             LON, LAT = np.meshgrid(lon,lat)
         else: # we already have X and Y yet, no need to load them
             logger.info(f"loading from provided XY_run_vae_keywargs")
