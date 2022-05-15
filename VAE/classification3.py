@@ -8,6 +8,10 @@ os.environ['TF_XLA_FLAGS'] = '--tf_xla_enable_xla_devices'  # https://stackoverf
 
 folder = Path(sys.argv[1])  # The name of the folder where the weights have been stored
 checkpoint = int(sys.argv[2])       # The checkpoint at which the weights have been stored
+if (len(sys.argv)>3):
+    tau = int(sys.argv[3]) # lag time
+else:
+    tau = 0
 
 import logging
 from colorama import Fore # support colored output in terminal
@@ -138,7 +142,8 @@ def classify(fold_folder, evaluate_epoch, vae, X_tr, z_tr, Y_tr, X_va, z_va, Y_v
                 lassoclassifier = [LogisticRegression(solver='liblinear', penalty="l1", C=index_i) for index_i in L_parameter]
                 kNNclassifier = [neighbors.KNeighborsClassifier(n_neighbors, weights="uniform",n_jobs=32) for n_neighbors in K_parameter]
                 vaeclassifier = ['vae.classifier']
-                for classifier, C_parameter in zip([logisticclassifier, lassoclassifier, kNNclassifier,vaeclassifier], [L_parameter,L_parameter,K_parameter,[0]]):
+                # for classifier, C_parameter in zip([logisticclassifier, lassoclassifier, kNNclassifier,vaeclassifier], [L_parameter,L_parameter,K_parameter,[0]]):
+                for classifier, C_parameter in zip([logisticclassifier, kNNclassifier], [L_parameter,K_parameter]):
                     logger.info(f"{classifier = }")
                     entropy, skill= [np.zeros(len(classifier),) for x in range(2)]
                     for i in range(len(classifier)):
@@ -188,10 +193,22 @@ def classify(fold_folder, evaluate_epoch, vae, X_tr, z_tr, Y_tr, X_va, z_va, Y_v
 
 #z_tr[23,24], Y_tr[23], z_va[23,24], Y_va[23]#
 run_vae_kwargs = ut.json2dict(f"{folder}/config.json")
-
+if (ut.keys_exists(run_vae_kwargs, 'label_period_start') and ut.keys_exists(run_vae_kwargs, 'label_period_end')):
+    label_period_start = ut.extract_nested(run_vae_kwargs, 'label_period_start')
+    label_period_end = ut.extract_nested(run_vae_kwargs, 'label_period_end')
+    time_start = ut.extract_nested(run_vae_kwargs, 'time_start')
+    time_end = ut.extract_nested(run_vae_kwargs, 'time_end')
+    if label_period_start is not None:
+        time_start = label_period_start
+    if label_period_end is not None:
+        time_end = label_period_end
+    run_vae_kwargs = ut.set_values_recursive(run_vae_kwargs, {'myinput' : 'N', 'evaluate_epoch' :checkpoint, 'tau' : tau, 'time_start' : time_start, 'time_end' : time_end})
+else:
+    run_vae_kwargs = ut.set_values_recursive(run_vae_kwargs, {'myinput' : 'N', 'evaluate_epoch' :checkpoint}) # backward compatibiity where there was no month of may
 foo.classify = classify
 logger.info(f"{Style.RESET_ALL}")
-run_vae_kwargs = ut.set_values_recursive(run_vae_kwargs, {'myinput' : 'N', 'evaluate_epoch' :checkpoint})
+
+
 history, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, vae, X_va, Y_va, X_tr, Y_tr, score = foo.run_vae(folder, **run_vae_kwargs)
 
 logger.info(f"{Fore.BLUE}") #  indicates we are inside the routine 
@@ -201,7 +218,7 @@ logger.info(f"{Fore.BLUE}") #  indicates we are inside the routine
 score = pd.concat(score, keys=range(len(score)),names=['fold','checkpoint','method', None])
 #logger.info('score:')
 #logger.info(f'{score}')
-score.to_csv(f'{folder}/score.csv')
+score.to_csv(f'{folder}/score_tau{tau}.csv')
 
 logger.info(f"{Style.RESET_ALL}")
 
