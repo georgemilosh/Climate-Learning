@@ -700,7 +700,6 @@ def run_vae(folder, myinput='N', XY_run_vae_keywargs=None, k_fold_cross_val_kwar
     lat_end = ut.extract_nested(load_data_kwargs, 'lat_end')
     lon_start = ut.extract_nested(load_data_kwargs, 'lon_start')
     lon_end = ut.extract_nested(load_data_kwargs, 'lon_end')
-
     lat_W = lat_end - lat_start
     if lon_start > lon_end:
         lon_W = lon_end - lon_start + 128
@@ -715,7 +714,6 @@ def run_vae(folder, myinput='N', XY_run_vae_keywargs=None, k_fold_cross_val_kwar
     decoder_conv_kernel_size = ut.extract_nested(k_fold_cross_val_kwargs, 'decoder_conv_kernel_size')
     decoder_conv_strides = ut.extract_nested(k_fold_cross_val_kwargs, 'decoder_conv_strides')
     decoder_conv_padding = ut.extract_nested(k_fold_cross_val_kwargs, 'decoder_conv_padding')
-    # This calculation below is WRONG!
     for encoder_conv_filters1, encoder_conv_kernel_size1, encoder_conv_strides1, encoder_conv_padding1 in zip(encoder_conv_filters, encoder_conv_kernel_size, encoder_conv_strides, encoder_conv_padding):
         logger.info(f"{encoder_conv_filters1 = }, {encoder_conv_kernel_size1 = }, {encoder_conv_strides1 = }, {encoder_conv_padding1 = }")
         if encoder_conv_padding1 == "same":
