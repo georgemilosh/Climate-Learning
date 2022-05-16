@@ -176,8 +176,8 @@ def vae_generate_images(vae,Z_DIM,n_to_show=10):
         img0 = reconst_images0[i].squeeze()   
         logger.info(f"{LON.shape = } ,{LAT.shape = } ,{img0.shape = }, {img1.shape = }")
         m.set_extent([-180,180, 30, 90], crs=data_proj)
-        ef.geo_contourf(m, ax[iterate], 0, *cplt.Greenwich(LON, LAT,img0),levels, "seismic", f" generated", put_colorbar=False, draw_gridlines=False)
-        ef.geo_contour (m, ax[iterate], 0, *cplt.Greenwich(LON, LAT,img1),levels, "summer", "PRGn")
+        ef.geo_contourf(m, ax[iterate], 0, LON, LAT,img0,levels, "seismic", f" generated", put_colorbar=False, draw_gridlines=False)
+        ef.geo_contour (m, ax[iterate], 0, LON, LAT,img1,levels, "summer", "PRGn")
         
         
         for img_sub, loc_string, title_sub in zip([img0, img2],["upper left","upper right"],["t2m","mrso"]):
@@ -189,8 +189,8 @@ def vae_generate_images(vae,Z_DIM,n_to_show=10):
             axins[-1].add_feature(cartopy.feature.COASTLINE)
             axins[-1].set_extent([-5,7, 42, 52], crs=data_proj)
 
-            ef.geo_contourf(axins[-1], ax[iterate], 0, *cplt.Greenwich(LON, LAT,img_sub),levels, "seismic", "", put_colorbar=False, draw_gridlines=False)
-            ef.geo_contour (axins[-1], ax[iterate], 0, *cplt.Greenwich(LON, LAT,img1),levels, "summer", "PRGn")
+            ef.geo_contourf(axins[-1], ax[iterate], 0, LON, LAT,img_sub,levels, "seismic", "", put_colorbar=False, draw_gridlines=False)
+            ef.geo_contour (axins[-1], ax[iterate], 0, LON, LAT,img1,levels, "summer", "PRGn")
 
 
             axins[-1].set_title(title_sub)
@@ -245,11 +245,11 @@ def plot_compare(model, images=None):
         
         logger.info(f"{LON.shape = } ,{LAT.shape = } ,{img0.shape = }, {img1.shape = }")
         if jterate == 0:
-            ef.geo_contourf(m, ax[iterate], 0, *cplt.Greenwich(LON, LAT,img0),levels, "seismic", f"actual", put_colorbar=False, draw_gridlines=False)
-            ef.geo_contour (m, ax[iterate], 0, *cplt.Greenwich(LON, LAT,img1),levels, "summer", "PRGn")
+            ef.geo_contourf(m, ax[iterate], 0, LON, LAT,img0,levels, "seismic", f"actual", put_colorbar=False, draw_gridlines=False)
+            ef.geo_contour (m, ax[iterate], 0, LON, LAT,img1,levels, "summer", "PRGn")
         else:
-            ef.geo_contourf(m, ax[iterate], 0, *cplt.Greenwich(LON, LAT,img0),levels, "seismic", f"reconstructed", put_colorbar=False, draw_gridlines=False)
-            ef.geo_contour (m, ax[iterate], 0, *cplt.Greenwich(LON, LAT,img1),levels, "summer", "PRGn")
+            ef.geo_contourf(m, ax[iterate], 0, LON, LAT,img0,levels, "seismic", f"reconstructed", put_colorbar=False, draw_gridlines=False)
+            ef.geo_contour (m, ax[iterate], 0, LON, LAT,img1,levels, "summer", "PRGn")
             
         for img_sub, loc_string, title_sub in zip([img0, img2],["upper left","upper right"],["t2m","mrso"]):
             axins.append(inset_axes(m, width="40%", height="50%", loc=loc_string, 
@@ -260,8 +260,8 @@ def plot_compare(model, images=None):
             axins[-1].add_feature(cartopy.feature.COASTLINE)
             axins[-1].set_extent([-5,7, 42, 52], crs=data_proj)
 
-            ef.geo_contourf(axins[-1], ax[iterate], 0, *cplt.Greenwich(LON, LAT,img_sub),levels, "seismic", "", put_colorbar=False, draw_gridlines=False)
-            ef.geo_contour (axins[-1], ax[iterate], 0, *cplt.Greenwich(LON, LAT,img1),levels, "summer", "PRGn")
+            ef.geo_contourf(axins[-1], ax[iterate], 0, LON, LAT,img_sub,levels, "seismic", "", put_colorbar=False, draw_gridlines=False)
+            ef.geo_contour (axins[-1], ax[iterate], 0, LON, LAT,img1,levels, "summer", "PRGn")
 
 
             axins[-1].set_title(title_sub)

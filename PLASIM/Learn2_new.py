@@ -2072,6 +2072,43 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
 
     return X, Y, year_permutation, lat, lon
 
+@ut.execution_time
+@ut.indent_logger(logger)
+def prepare_data_and_mask(load_data_kwargs=None, prepare_XY_kwargs=None):
+    '''
+    Combines all the steps from loading the data to the creation of X and Y
+
+    Parameters
+    ----------
+    load_data_kwargs: dict
+        arguments to pass to the function `load_data`
+    prepare_XY_kwargs: dict
+        arguments to pass to the function `prepare_XY`
+        
+    Returns
+    -------
+    (
+        X : np.ndarray
+            data. If flatten_time_axis with shape (days, lat, lon, fields), else (years, days, lat, lon, fields)
+        Y : np.ndarray 
+            labels. If flatten_time_axis with shape (days,), else (years, days)
+        year_permutation : np.ndarray
+            with shape (years,), final permutaion of the years that reproduces X and Y once applied to the just loaded data
+        mask : np.ndarray
+            a mask obtained from the first element of fields.
+        lat
+        lon
+    )
+    mask
+    '''
+    if load_data_kwargs is None:
+        load_data_kwargs = {}
+    if prepare_XY_kwargs is None:
+        prepare_XY_kwargs = {}
+    # load data
+    fields = load_data(**load_data_kwargs)
+
+    return prepare_XY(fields, **prepare_XY_kwargs), fields[next(iter(fields))].mask
 
 @ut.execution_time
 @ut.indent_logger(logger)
@@ -2094,6 +2131,8 @@ def prepare_data(load_data_kwargs=None, prepare_XY_kwargs=None):
         labels. If flatten_time_axis with shape (days,), else (years, days)
     year_permutation : np.ndarray
         with shape (years,), final permutaion of the years that reproduces X and Y once applied to the just loaded data
+    lat
+    lon
     '''
     if load_data_kwargs is None:
         load_data_kwargs = {}

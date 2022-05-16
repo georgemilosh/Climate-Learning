@@ -150,7 +150,7 @@ def normalize_X(X,folder, myinput='N',mode='pointwise'):
 
 @ut.execution_time  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function
-def create_or_load_vae(folder, INPUT_DIM, myinput, VAE_kwargs=None, build_encoder_skip_kwargs=None, build_decoder_skip_kwargs=None, create_classifier_kwargs=None, checkpoint_every=1, roll_steps=64):
+def create_or_load_vae(folder, INPUT_DIM, myinput, filter_mask, VAE_kwargs=None, build_encoder_skip_kwargs=None, build_decoder_skip_kwargs=None, create_classifier_kwargs=None, checkpoint_every=1, roll_steps=64):
     '''
     Creates a Variational AutoEncoder Model or loads the existing one 
         from the weights given in the model
@@ -211,7 +211,6 @@ def create_or_load_vae(folder, INPUT_DIM, myinput, VAE_kwargs=None, build_encode
     
     ones_dim = np.ones(INPUT_DIM[:-1])
     
-    filter_mask = ln.roll_X(ef.create_mask('Plasim',mask_area, ones_dim, axes='last 2', return_full_mask=True), roll_axis = 1, roll_steps=64)
     logger.info(f'{filter_mask.shape = }')
     logger.info(f'{ones_dim.shape = }')
     logger.info(f'{np.array([filter_mask,ones_dim,filter_mask], dtype=bool).shape = }')
@@ -227,6 +226,9 @@ def create_or_load_vae(folder, INPUT_DIM, myinput, VAE_kwargs=None, build_encode
     if print_summary:
         encoder.summary()
     logger.info("==Building decoder==") 
+    filter_mask = filter_mask.astype(float)
+    logger.info(f"{filter_mask.shape = }")
+    logger.info(f"{filter_mask = }")
     _, _, decoder = tff.build_decoder_skip(mask=filter_mask, input_dim = Z_DIM, shape_before_flattening = shape_before_flattening, **build_decoder_skip_kwargs)
     if print_summary:
         decoder.summary()
@@ -275,7 +277,7 @@ def classify(fold_folder, evaluate_epoch, vae, X_tr, z_tr, Y_tr, X_va, z_va, Y_v
 
 @ut.execution_time
 @ut.indent_logger(logger)   
-def k_fold_cross_val(folder, myinput, X, Y, year_permutation, create_or_load_vae_kwargs=None, train_vae_kwargs=None, nfolds=10, val_folds=1, range_nfolds=None, u=1, normalization_mode='pointwise', classification=True, evaluate_epoch='last', repeat_nan=5):
+def k_fold_cross_val(folder, myinput, mask, X, Y, year_permutation, create_or_load_vae_kwargs=None, train_vae_kwargs=None, nfolds=10, val_folds=1, range_nfolds=None, u=1, normalization_mode='pointwise', classification=True, evaluate_epoch='last', repeat_nan=5):
     '''
     Performs k fold cross validation on a model architecture.
 
@@ -287,6 +289,8 @@ def k_fold_cross_val(folder, myinput, X, Y, year_permutation, create_or_load_vae
         all data (train + val)
     Y : np.ndarray
         all labels
+    mask : np.ndarray
+       
     year_permutation : np.ndarray
         provided here to be stored in individual fold during training
     create_or_load_vae_kwargs : dict
@@ -401,7 +405,7 @@ def k_fold_cross_val(folder, myinput, X, Y, year_permutation, create_or_load_vae
             if not reconstruction: # either training or classification, in both cases we need training set
                 logger.info(f"{X_va[5,5,5,1] = }, {Y_va[5] = }, {X_tr[5,5,5,1] = }, {Y_tr[5] = }")
             logger.info(f"{create_or_load_vae_kwargs = }")
-            vae, history_vae, N_EPOCHS, INITIAL_EPOCH, ckpt_path_callback = create_or_load_vae(fold_folder, INPUT_DIM, myinput,**create_or_load_vae_kwargs)
+            vae, history_vae, N_EPOCHS, INITIAL_EPOCH, ckpt_path_callback = create_or_load_vae(fold_folder, INPUT_DIM, myinput, mask, **create_or_load_vae_kwargs)
 
 
             logger.info(f"{len(vae.trainable_weights) = }, {len(vae.encoder.trainable_weights) = }, {len(vae.decoder.trainable_weights) = }")
@@ -740,7 +744,7 @@ def run_vae(folder, myinput='N', XY_run_vae_keywargs=None, k_fold_cross_val_kwar
     try:
         if XY_run_vae_keywargs is None: # we don't have X and Y yet, need to load them (may take a lot of time!)
         # loading full X can be heavy and unnecessary for reconstruction.py so we choose to work with validation automatically provided that folder already involves a fold: 
-            X, Y, year_permutation, lat, lon = ln.prepare_data(load_data_kwargs=load_data_kwargs, prepare_XY_kwargs=prepare_XY_kwargs) # Here I follow the same structure as Alessandro has, otherwise we could use prepare_data_kwargs
+            (X, Y, year_permutation, lat, lon), mask = ln.prepare_data_and_mask(load_data_kwargs=load_data_kwargs, prepare_XY_kwargs=prepare_XY_kwargs) # Here I follow the same structure as Alessandro has, otherwise we could use prepare_data_kwargs
             LON, LAT = np.meshgrid(lon,lat)
         else: # we already have X and Y yet, no need to load them
             logger.info(f"loading from provided XY_run_vae_keywargs")
@@ -763,7 +767,7 @@ def run_vae(folder, myinput='N', XY_run_vae_keywargs=None, k_fold_cross_val_kwar
                 Y_load = np.load(f'{folder.parent}/Y.npy')
             # TODO: Check optionally that the files are consistent
 
-        history_vae, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, vae, X_va, Y_va, X_tr, Y_tr, score = k_fold_cross_val(folder, myinput, X, Y, year_permutation,**k_fold_cross_val_kwargs)
+        history_vae, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, vae, X_va, Y_va, X_tr, Y_tr, score = k_fold_cross_val(folder, myinput, mask, X, Y, year_permutation,**k_fold_cross_val_kwargs)
         
     except Exception as e:
             logger.critical(f'Run on {folder = } failed due to {repr(e)}')
@@ -797,20 +801,20 @@ def kwargator(thefun):
     thefun_kwargs_default = ln.get_default_params(thefun, recursive=True)
     thefun_kwargs_default = ut.set_values_recursive(thefun_kwargs_default,
                                             {'myinput':'Y', 'lat_end': 24,'fields': ['t2m_filtered','zg500','mrso_filtered'],'year_list': 'range(100)',
-                                               'print_summary' : False, 'k1': 0.9 , 'k2':0.1, 'field_weights': [20., 1, 20.],'mask_area':'France', 'usemask' : True, 'Z_DIM': 8, #8, #64,
+                                               'print_summary' : False, 'k1': 0.9 , 'k2':0.1, 'field_weights': [20., 1, 20.],'mask_area':'France', 'usemask' : True, 'Z_DIM': 64, #8, #64,
                                                 'N_EPOCHS': 10,'batch_size': 128, 'checkpoint_every': 1, 'lr': 5e-4, 'epoch_tol': None, 'lr_min' : 5e-4, 'lat_start' : 4, 'lat_end' : 22, 'lon_start' : 101, 'lon_end' : 15, 'roll_steps' : 64,
-                                                'time_start' : 0, 'label_period_start' : 30,
-                                               # 'lat_0' : 0, 'lat_1' : 24, 'lon_0' : (64-28), 'lon_1' : (64+15), 'coef_out' : 0.1, 'coef_in' : 1, 
-                                               # 'coef_class' : 0.1, 'class_type' : 'mean', 'L2factor' : 1e-9,
-                                               'print_summary' : True,
-                                               'encoder_conv_filters' : [32,64,64],
-                                                'encoder_conv_kernel_size' : [4,4,3],
-                                                'encoder_conv_strides' : [2,2,2],
-                                                'encoder_conv_padding' : ["valid","valid","valid"],
-                                                'decoder_conv_filters' : [64,32, 3],
-                                                'decoder_conv_kernel_size' : [3,4,4],
-                                                'decoder_conv_strides' : [2,2,2],
-                                                'decoder_conv_padding' : ["valid","valid","valid"] 
+                                                'time_start' : 0, 'label_period_start' : 30#,
+                                                # 'lat_0' : 0, 'lat_1' : 24, 'lon_0' : (64-28), 'lon_1' : (64+15), 'coef_out' : 0.1, 'coef_in' : 1, 
+                                                # 'coef_class' : 0.1, 'class_type' : 'mean', 'L2factor' : 1e-9,
+                                                #'print_summary' : True,
+                                                #'encoder_conv_filters' : [32,64,64],
+                                                #'encoder_conv_kernel_size' : [4,4,3],
+                                                #'encoder_conv_strides' : [2,2,2],
+                                                #'encoder_conv_padding' : ["valid","valid","valid"],
+                                                #'decoder_conv_filters' : [64,32, 3],
+                                                #'decoder_conv_kernel_size' : [3,4,4],
+                                                #'decoder_conv_strides' : [2,2,2],
+                                                #'decoder_conv_padding' : ["valid","valid","valid"] 
                                                #'encoder_conv_filters':[16, 16, 16, 32, 32,  32,   64, 64],
                                                #         'encoder_conv_kernel_size':[5,  5,  5,  5,   5,   5,   5,  3],
                                                #         'encoder_conv_strides'    :[2,  1,  1,  2,   1,   1,   2,  1],
