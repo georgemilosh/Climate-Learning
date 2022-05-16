@@ -108,7 +108,8 @@ def classify(fold_folder, evaluate_epoch, vae, X_tr, z_tr, Y_tr, X_va, z_va, Y_v
         checkpoints = list(range(0,evaluate_epoch+1,1))
     checkpoints = checkpoints[1:]
     score = []
-    labels = ['Log_L2','Log_L1','kNN_uni','vae.class']
+    # labels = ['Log_L2','Log_L1','kNN_uni','vae.class']
+    labels = ['Log_L2','kNN_uni']
     L_parameter = [1e-5,1e-3, 1e-2, 1e-1, 5e-1, 1e0, 1e1, 1e2, 1e3, 1e5] # Logistic regularization coefficients (L2 by default)
     K_parameter = [40, 75, 100, 150, 200, 400, 800, 1600] # Number of KNN
     #K_parameter2 = [1, 2, 3, 5, 10, 15, 20, 40, 100] # Number of KNN
