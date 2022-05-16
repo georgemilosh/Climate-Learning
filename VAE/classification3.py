@@ -1,5 +1,6 @@
 # George Miloshevich 2022
 # This routine is written for two parameters: input folder for VAE weights and the given epoch. It shows us how good the classification of the VAE works
+# The new usage classification3.py <folder> <epoch> -1,-3,-5,-10,-15
 import os, sys
 import shutil
 from pathlib import Path
@@ -9,7 +10,8 @@ os.environ['TF_XLA_FLAGS'] = '--tf_xla_enable_xla_devices'  # https://stackoverf
 folder = Path(sys.argv[1])  # The name of the folder where the weights have been stored
 checkpoint = int(sys.argv[2])       # The checkpoint at which the weights have been stored
 if (len(sys.argv)>3):
-    taus = int(sys.argv[3]) # lag time
+    taus = sys.argv[3].split(',') # lag time
+    taus = [int(tau_el) for tau_el in taus]
 else:
     taus = [0]
 import logging
