@@ -56,6 +56,19 @@ will result in 4 runs:
     fields=['t2m', 'zg500'], tau=1
     fields=['t2m', 'zg500'], tau=2
 
+You can also import parameters from a previous run by using the argument 'import_params_from'.
+    Let's say you have performed run 0 with
+        percent=5
+        tau=0
+        T=12
+    Now if you run
+        python Learn2_new.py import_params_from=0 percent=1 fields="['t2m']"
+    You will perform a run with the same parameters as run 0, except for those explicitly provided. In particular for this case
+        percent=1
+        tau=0
+        T=12
+        fields="['t2m']"
+
 FAQ
 ---
 Q: what is tau?
@@ -2762,9 +2775,26 @@ def main():
     trainer_kwargs = get_default_params(Trainer)
     trainer_kwargs.pop('config')
     trainer_kwargs.pop('root_folder') # this two parameters cannot be changed
-    for k in arg_dict:
-        if k in trainer_kwargs:
+    for k in trainer_kwargs:
+        if k in arg_dict:
             trainer_kwargs[k] = arg_dict.pop(k)
+
+    # check if we want to import the parameters from another run
+    import_params_from = arg_dict.pop('import_params_from', None)
+    if import_params_from is not None:
+        runs = ut.json2dict('./runs.json')
+        try:
+            rargs = runs[str(import_params_from)]['args']
+        except KeyError:
+            raise KeyError(f'{import_params_from} is not a valid run')
+        logger.info(f'Importing parameters from run {import_params_from}')
+        logger.info(ut.dict2str(rargs))
+        
+        for k,v in rargs.items(): # add the imported parameters to arg_dict, but not the ones explicitly provided in the command line
+            if k not in arg_dict:
+                arg_dict[k] = v
+
+        logger.info(f'\n\nEquivalent command line arguments:\n{ut.dict2str(arg_dict)}')
 
     # create trainer
     trainer = Trainer(config='./config.json', **trainer_kwargs)
