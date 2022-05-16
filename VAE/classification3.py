@@ -9,9 +9,9 @@ os.environ['TF_XLA_FLAGS'] = '--tf_xla_enable_xla_devices'  # https://stackoverf
 folder = Path(sys.argv[1])  # The name of the folder where the weights have been stored
 checkpoint = int(sys.argv[2])       # The checkpoint at which the weights have been stored
 if (len(sys.argv)>3):
-    tau = int(sys.argv[3]) # lag time
+    taus = int(sys.argv[3]) # lag time
 else:
-    tau = 0
+    taus = [0]
 import logging
 from colorama import Fore # support colored output in terminal
 from colorama import Style
@@ -191,33 +191,35 @@ def classify(fold_folder, evaluate_epoch, vae, X_tr, z_tr, Y_tr, X_va, z_va, Y_v
     return score
 
 #z_tr[23,24], Y_tr[23], z_va[23,24], Y_va[23]#
-run_vae_kwargs = ut.json2dict(f"{folder}/config.json")
-if (ut.keys_exists(run_vae_kwargs, 'label_period_start') and ut.keys_exists(run_vae_kwargs, 'label_period_end')):
-    label_period_start = ut.extract_nested(run_vae_kwargs, 'label_period_start')
-    label_period_end = ut.extract_nested(run_vae_kwargs, 'label_period_end')
-    time_start = ut.extract_nested(run_vae_kwargs, 'time_start')
-    time_end = ut.extract_nested(run_vae_kwargs, 'time_end')
-    if label_period_start is not None:
-        time_start = label_period_start
-    if label_period_end is not None:
-        time_end = label_period_end
-    run_vae_kwargs = ut.set_values_recursive(run_vae_kwargs, {'myinput' : 'N', 'evaluate_epoch' :checkpoint, 'tau' : tau, 'time_start' : time_start, 'time_end' : time_end})
-else:
-    run_vae_kwargs = ut.set_values_recursive(run_vae_kwargs, {'myinput' : 'N', 'evaluate_epoch' :checkpoint}) # backward compatibiity where there was no month of may
-foo.classify = classify
-logger.info(f"{Style.RESET_ALL}")
 
-history, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, vae, X_va, Y_va, X_tr, Y_tr, score = foo.run_vae(folder, **run_vae_kwargs)
+for tau in taus:
+    logger.info(f"Computing for {tau = }")
+    run_vae_kwargs = ut.json2dict(f"{folder}/config.json")
+    if (ut.keys_exists(run_vae_kwargs, 'label_period_start') and ut.keys_exists(run_vae_kwargs, 'label_period_end')):
+        label_period_start = ut.extract_nested(run_vae_kwargs, 'label_period_start')
+        label_period_end = ut.extract_nested(run_vae_kwargs, 'label_period_end')
+        time_start = ut.extract_nested(run_vae_kwargs, 'time_start')
+        time_end = ut.extract_nested(run_vae_kwargs, 'time_end')
+        if label_period_start is not None:
+            time_start = label_period_start
+        if label_period_end is not None:
+            time_end = label_period_end
+        run_vae_kwargs = ut.set_values_recursive(run_vae_kwargs, {'myinput' : 'N', 'evaluate_epoch' :checkpoint, 'tau' : tau, 'time_start' : time_start, 'time_end' : time_end})
+    else:
+        run_vae_kwargs = ut.set_values_recursive(run_vae_kwargs, {'myinput' : 'N', 'evaluate_epoch' :checkpoint}) # backward compatibiity where there was no month of may
+    foo.classify = classify
+    logger.info(f"{Style.RESET_ALL}")
 
-logger.info(f"{Fore.BLUE}") #  indicates we are inside the routine 
-# the rest of the code goes here
-#logger.info('score = ')
-#logger.info(f'{score}')
-score = pd.concat(score, keys=range(len(score)),names=['fold','checkpoint','method', None])
-#logger.info('score:')
-#logger.info(f'{score}')
-score.to_csv(f'{folder}/score_tau{tau}.csv')
+    history, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, vae, X_va, Y_va, X_tr, Y_tr, score = foo.run_vae(folder, **run_vae_kwargs)
 
-logger.info(f"{Style.RESET_ALL}")
+    logger.info(f"{Fore.BLUE}") #  indicates we are inside the routine 
+    # the rest of the code goes here
+    #logger.info('score = ')
+    #logger.info(f'{score}')
+    score = pd.concat(score, keys=range(len(score)),names=['fold','checkpoint','method', None])
+    #logger.info('score:')
+    #logger.info(f'{score}')
+    score.to_csv(f'{folder}/score_tau{tau}.csv')
+    logger.info(f"{Style.RESET_ALL}")
 
 # Construct 2D array for lon-lat:
