@@ -226,6 +226,8 @@ def create_or_load_vae(folder, INPUT_DIM, myinput, VAE_kwargs=None, build_encode
     classifier = tff.create_classifier(Z_DIM, **create_classifier_kwargs)
     if print_summary:
         encoder.summary()
+    logger.info(f"{filter_mask.shape = }")
+    # logger.info(f"{filter_mask = }")
     logger.info("==Building decoder==") 
     _, _, decoder = tff.build_decoder_skip(mask=filter_mask, input_dim = Z_DIM, shape_before_flattening = shape_before_flattening, **build_decoder_skip_kwargs)
     if print_summary:
