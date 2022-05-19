@@ -61,7 +61,7 @@ def get_q(root_folder: str, run: dict, nfolds: int = 10, fold_subfolder=None, fl
     fold_subfolder : str, list[str] or None, optional
         subfolder inside every fold folder where the checkpoints are located, by default None
         If list the names of the fold subfolder for every fold
-    concatenate : bool, optional
+    flatten : bool, optional
         Whether to keep the fold structure in the committor (flatten=False) or concatenate the folds (flatten=True). By default True
 
     Returns
@@ -103,7 +103,7 @@ def get_Y(root_folder: str, run: dict, nfolds: int = 10, fold_subfolder=None, fl
     fold_subfolder : str, list[str] or None, optional
         subfolder inside every fold folder where the checkpoints are located, by default None
         If list the names of the fold subfolder for every fold
-    concatenate : bool, optional
+    flatten : bool, optional
         Whether to keep the fold structure in the labels (flatten=False) or concatenate the folds (flatten=True). By default True
 
     Returns
@@ -127,7 +127,26 @@ def get_Y(root_folder: str, run: dict, nfolds: int = 10, fold_subfolder=None, fl
 # Saliency map #
 ################
 
-def get_saliency_map(model, image, class_idx):
+def get_grad(model, x, class_idx, softmax=False):
+    x = tf.convert_to_tensor(x)
+    
+    with tf.GradientTape() as tape:
+        tape.watch(x)
+        predictions = model(x)
+        
+        if softmax:
+            loss = keras.layers.Softmax()(predictions)[:, class_idx]
+        else:
+            loss = predictions[:, class_idx]
+
+    # Get the gradients of the loss w.r.t to the input image.
+    gradient = tape.gradient(loss, x).numpy().squeeze()
+    predictions = tf.keras.layers.Softmax()(predictions)[:, class_idx]
+
+    return gradient, predictions
+
+
+def get_saliency_map(model, x, class_idx=1, softmax=False, normalize=False, smooth_samples=None, smooth_noise=0.1, mask=None, significance=0):
     '''
     Returns the saliency map of a `model` when evaluated over an `image` and assuming it is classified in `class_idx`
 
@@ -145,26 +164,40 @@ def get_saliency_map(model, image, class_idx):
     np.ndarray
         of the same shape of `image`
     '''
-    with tf.GradientTape() as tape:
-        tape.watch(image)
-        predictions = model(image)
+    smooth_samples = smooth_samples or 1
+
+    grads, preds = [], []
+    for i in range(smooth_samples):
+        if i == 0:
+            _x = x
+        else:
+            noise = np.random.normal(0, smooth_noise, x.shape)
+            if mask is not None:
+                noise = noise*mask
+            _x = x + noise
+
+        gradient, predictions = get_grad(model, _x, class_idx, softmax=softmax)
+        if mask is not None:
+            gradient = gradient*mask
         
-        loss = predictions[:, class_idx]
-    
-    # Get the gradients of the loss w.r.t to the input image.
-    gradient = tape.gradient(loss, image)
-    
-    # take maximum across channels
-    gradient = tf.reduce_max(gradient, axis=-1)
-    
-    # convert to numpy
-    gradient = gradient.numpy()
-    
-    # normaliz between 0 and 1
-    min_val, max_val = np.min(gradient), np.max(gradient)
-    smap = (gradient - min_val) / (max_val - min_val + keras.backend.epsilon())
-    
-    return smap
+        grads.append(gradient)
+        preds.append(predictions)
+
+    grads = np.stack(grads)
+    preds = np.stack(preds)
+
+    gradient_mean = np.mean(grads, axis=0)
+    gradient_std = np.std(grads, axis=0)
+    gradient = gradient_mean*(np.abs(gradient_mean) > significance*gradient_std)
+
+    predictions = np.mean(predictions, axis=0)
+
+    if normalize:
+        # normalize between -1 and 1
+        n = max(np.max(gradient), -np.min(gradient))
+        gradient /= n
+        
+    return gradient, predictions
 
 ############
 # Plotting #
@@ -269,4 +302,3 @@ def consistency_check(q: np.ndarray, Y: np.ndarray, nbins: int = 50) -> Tuple[np
         acc[i] = np.mean(Y[(q >= bin_edges[i])*(q < bin_edges[i+1])]) # fraction of positive events when q is inside bin i
 
     return 0.5*(bin_edges[1:] + bin_edges[:-1]), acc
-    
