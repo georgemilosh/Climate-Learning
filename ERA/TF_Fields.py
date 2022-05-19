@@ -395,11 +395,11 @@ def build_decoder_skip(mask,input_dim, shape_before_flattening, decoder_conv_fil
     x[-1] = tf.keras.layers.Reshape(shape_before_flattening)(x[-1])
     
     preconvlen_x = len(x)
-    print(f"{preconvlen_x = }")
+    #print(f"{preconvlen_x = }")
     
     # Add convolutional layers
     for i in range(n_layers):
-        print(i, f"Conv2D, filters = {decoder_conv_filters[i]}, kernel_size = {decoder_conv_kernel_size[i]}, strides = {decoder_conv_strides[i]}, padding = {decoder_conv_padding[i]}")
+        #print(i, f"Conv2D, filters = {decoder_conv_filters[i]}, kernel_size = {decoder_conv_kernel_size[i]}, strides = {decoder_conv_strides[i]}, padding = {decoder_conv_padding[i]}")
         conv = Conv2DTranspose(filters = decoder_conv_filters[i], 
                             kernel_size = decoder_conv_kernel_size[i],
                             strides = decoder_conv_strides[i], 
@@ -408,32 +408,32 @@ def build_decoder_skip(mask,input_dim, shape_before_flattening, decoder_conv_fil
         
         if decoder_use_batch_norm[i]:
             conv = BatchNormalization()(conv)
-            print("conv = BatchNormalization()(conv)")
+            #print("conv = BatchNormalization()(conv)")
             
         if decoder_conv_activation[i] == 'LeakyRelu':
             actv = LeakyReLU()(conv)
-            print("actv = LeakyReLU()(conv)")
+            #print("actv = LeakyReLU()(conv)")
         else:
             actv = Activation(decoder_conv_activation[i])(conv)
-            print("actv = Activation(conv_activation[i])(conv)")
+            #print("actv = Activation(conv_activation[i])(conv)")
             
         if decoder_use_dropout[i]:
             actv = Dropout(rate=decoder_use_dropout[i])(actv)
-            print("actv = Dropout(rate=0.25)(actv)")
+            #print("actv = Dropout(rate=0.25)(actv)")
         
         if i in decoder_conv_skip_dict.values(): # The arrow of the skip connection end here
-            print('conv = keras.layers.add([conv, arrow_start])')
+            #print('conv = keras.layers.add([conv, arrow_start])')
             actv = keras.layers.add([actv, arrow_start])
             if decoder_use_batch_norm:
                 actv = BatchNormalization()(actv)
-                print("actv = BatchNormalization()(actv)")
+                #print("actv = BatchNormalization()(actv)")
         
         if i in decoder_conv_skip_dict.keys(): # The arrow of the skip connection starts here
-            print('arrow_start = actv')
+            #print('arrow_start = actv')
             arrow_start = actv
         
         x.append(actv)
-    print(f"{usemask = }")    
+    #print(f"{usemask = }")    
     if usemask: # a tensorflow array that will typically contain 
         decoder_outputs = ConstMul(mask,(~mask)*0.5)(x[-1])  # This will multiply the input by mask consisting of 0's (False) and 1's (True). Because the decoder is expected to reconstruct sigmoid function we add 0.5 where there were 0's
     else:
