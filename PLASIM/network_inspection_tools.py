@@ -164,10 +164,10 @@ def get_saliency_map(model, x, class_idx=1, softmax=False, normalize=False, smoo
     np.ndarray
         of the same shape of `image`
     '''
-    smooth_samples = smooth_samples or 1
+    smooth_samples = smooth_samples or 0
 
     grads, preds = [], []
-    for i in range(smooth_samples):
+    for i in range(smooth_samples + 1):
         if i == 0:
             _x = x
         else:
@@ -183,14 +183,18 @@ def get_saliency_map(model, x, class_idx=1, softmax=False, normalize=False, smoo
         grads.append(gradient)
         preds.append(predictions)
 
-    grads = np.stack(grads)
-    preds = np.stack(preds)
+    if smooth_samples:
+        grads = np.stack(grads)
+        preds = np.stack(preds)
 
-    gradient_mean = np.mean(grads, axis=0)
-    gradient_std = np.std(grads, axis=0)
-    gradient = gradient_mean*(np.abs(gradient_mean) > significance*gradient_std)
+        gradient_mean = np.mean(grads, axis=0)
+        gradient_std = np.std(grads, axis=0)
+        gradient = gradient_mean*(np.abs(gradient_mean) > significance*gradient_std)
 
-    predictions = np.mean(predictions, axis=0)
+        predictions = np.mean(predictions, axis=0)
+    else:
+        gradient, grads[0]
+        predictions = preds[0]
 
     if normalize:
         # normalize between -1 and 1
