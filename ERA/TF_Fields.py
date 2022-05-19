@@ -9,7 +9,7 @@ from tensorflow.keras import regularizers
 from tensorflow.keras.layers import Dense, Activation, Flatten, Conv2D, SeparableConv2D, MaxPooling2D, BatchNormalization, Dropout, SpatialDropout2D, Input, concatenate, Softmax, Reshape, Add, Conv2DTranspose, LeakyReLU # Vallerian's approach
 from tensorflow.keras.models import Sequential, Model
 from tensorflow.keras.regularizers import l2
-from tensorflow.keras import datasets, layers, models # from https://www.tensorflow.org/tutorials/images/cnn
+from tensorflow.keras import datasets, layers, models 
 from tensorflow.keras import backend as K
 import matplotlib.pyplot as plt
 
@@ -260,7 +260,7 @@ def build_encoder_skip(input_dim, output_dim, encoder_conv_filters = [32,64,64,6
     x.append(encoder_inputs)
     # Add convolutional layers
     for i in range(n_layers):
-        #print(i, f"Conv2D, filters = {conv_filters[i]}, kernel_size = {conv_kernel_size[i]}, strides = {conv_strides[i]}, padding = {conv_padding[i]}")
+        # print(i, f"Conv2D, filters = {encoder_conv_filters[i]}, kernel_size = {encoder_conv_kernel_size[i]}, strides = {encoder_conv_strides[i]}, padding = {encoder_conv_padding[i]}")
         conv = Conv2D(filters = encoder_conv_filters[i], 
                 kernel_size = encoder_conv_kernel_size[i],
                 strides = encoder_conv_strides[i], 
@@ -269,36 +269,50 @@ def build_encoder_skip(input_dim, output_dim, encoder_conv_filters = [32,64,64,6
 
         if encoder_use_batch_norm[i]:
             conv = BatchNormalization()(conv)
-            #print("conv = BatchNormalization()(conv)")
+            # print("conv = BatchNormalization()(conv)")
             
         if encoder_conv_activation[i] == 'LeakyRelu':
             actv = LeakyReLU()(conv)
-            #print("actv = LeakyReLU()(conv)")
+            # print("actv = LeakyReLU()(conv)")
         else:
             actv = Activation(encoder_conv_activation[i])(conv)
-            #print("actv = Activation(conv_activation[i])(conv)")
+            # print("actv = Activation(conv_activation[i])(conv)")
 
         if encoder_use_dropout[i]>0:
             actv = Dropout(rate=encoder_use_dropout[i])(actv)
-            #print("actv = Dropout(rate=0.25)(actv)")
+            # print("actv = Dropout(rate=0.25)(actv)")
         
         if i in encoder_conv_skip_dict.values(): # The arrow of the skip connection end here
-            #print('conv = keras.layers.add([conv, arrow_start])')
+            # print('conv = keras.layers.add([conv, arrow_start])')
             actv = keras.layers.add([actv, arrow_start])
             if encoder_use_batch_norm:
                 actv = BatchNormalization()(actv)
-                #print("actv = BatchNormalization()(actv)")
+                # print("actv = BatchNormalization()(actv)")
         
         if i in encoder_conv_skip_dict.keys(): # The arrow of the skip connection starts here
-            #print('arrow_start = actv')
+            # print('arrow_start = actv')
             arrow_start = actv
         
         x.append(actv)
         
 
     shape_before_flattening = K.int_shape(x[-1])[1:] 
-    #print("shape_before_flattening = ", shape_before_flattening)
+    print("shape_before_flattening = ", shape_before_flattening)
     x.append(tf.keras.layers.Flatten()(x[-1]))
+
+    for i in range(len(encoder_conv_filters),len(encoder_conv_kernel_size)): # if lengths are the same there will be no extra layer
+        dense = tf.keras.layers.Dense(encoder_conv_kernel_size[i], name="dense")(x[-1])
+        if encoder_use_batch_norm[i]:
+            dense = BatchNormalization()(dense)
+        if encoder_conv_activation[i] == 'LeakyRelu':
+            actv = LeakyReLU()(dense)
+        else:
+            actv = Activation(encoder_conv_activation[i])(dense)
+        if encoder_use_dropout[i]>0:
+            actv = Dropout(rate=encoder_use_dropout[i])(actv)
+        x.append(actv)
+
+
     z_mean = tf.keras.layers.Dense(output_dim, name="z_mean")(x[-1])
     z_log_var = tf.keras.layers.Dense(output_dim, name="z_log_var")(x[-1])
     z = Sampling()([z_mean, z_log_var])
@@ -316,7 +330,7 @@ def build_decoder_skip(mask,input_dim, shape_before_flattening, decoder_conv_fil
                                         decoder_conv_activation = ["LeakyRelu","LeakyRelu","LeakyRelu","sigmoid"],
                                         decoder_conv_skip = None, 
                                         decoder_use_batch_norm = [False,False,False,False], 
-                                        decoder_use_dropout = [0,0,0,0], usemask=False):
+                                        decoder_use_dropout = [0,0,0,0], usemask=False, reshape_activation="relu"):
     '''
     builds decoder
 
@@ -362,45 +376,60 @@ def build_decoder_skip(mask,input_dim, shape_before_flattening, decoder_conv_fil
     n_layers = len(decoder_conv_filters)
     decoder_inputs = tf.keras.Input(shape=input_dim)
     
-    x = []
+    x = [decoder_inputs]
+
+    for i in range(len(decoder_conv_filters),len(decoder_conv_kernel_size)): # if lengths are the same there will be no extra layer
+        dense = tf.keras.layers.Dense(decoder_conv_kernel_size[i], name="dense")(x[-1])
+        if decoder_use_batch_norm[i]:
+            dense = BatchNormalization()(dense)
+        if decoder_conv_activation[i] == 'LeakyRelu':
+            actv = LeakyReLU()(dense)
+        else:
+            actv = Activation(decoder_conv_activation[i])(dense)
+        if decoder_use_dropout[i]>0:
+            actv = Dropout(rate=decoder_use_dropout[i])(actv)
+        x.append(actv)
+        
+    x.append(tf.keras.layers.Dense(tf.math.reduce_prod(shape_before_flattening), activation=reshape_activation)(x[-1]))
+
+    x[-1] = tf.keras.layers.Reshape(shape_before_flattening)(x[-1])
     
-    x.append(tf.keras.layers.Dense(tf.math.reduce_prod(shape_before_flattening), activation="relu")(decoder_inputs))
-    x[0] = tf.keras.layers.Reshape(shape_before_flattening)(x[0])
-    
+    preconvlen_x = len(x)
+    print(f"{preconvlen_x = }")
     
     # Add convolutional layers
     for i in range(n_layers):
-        #print(i, f"Conv2D, filters = {conv_filters[i]}, kernel_size = {conv_kernel_size[i]}, strides = {conv_strides[i]}, padding = {conv_padding[i]}")
+        print(i, f"Conv2D, filters = {decoder_conv_filters[i]}, kernel_size = {decoder_conv_kernel_size[i]}, strides = {decoder_conv_strides[i]}, padding = {decoder_conv_padding[i]}")
         conv = Conv2DTranspose(filters = decoder_conv_filters[i], 
                             kernel_size = decoder_conv_kernel_size[i],
                             strides = decoder_conv_strides[i], 
                             padding = decoder_conv_padding[i],
-                            name = 'decoder_conv_' + str(i))(x[i])
+                            name = 'decoder_conv_' + str(i))(x[i+preconvlen_x-1])
         
         if decoder_use_batch_norm[i]:
             conv = BatchNormalization()(conv)
-            #print("conv = BatchNormalization()(conv)")
+            print("conv = BatchNormalization()(conv)")
             
         if decoder_conv_activation[i] == 'LeakyRelu':
             actv = LeakyReLU()(conv)
-            #print("actv = LeakyReLU()(conv)")
+            print("actv = LeakyReLU()(conv)")
         else:
             actv = Activation(decoder_conv_activation[i])(conv)
-            #print("actv = Activation(conv_activation[i])(conv)")
+            print("actv = Activation(conv_activation[i])(conv)")
             
         if decoder_use_dropout[i]:
             actv = Dropout(rate=decoder_use_dropout[i])(actv)
-            #print("actv = Dropout(rate=0.25)(actv)")
+            print("actv = Dropout(rate=0.25)(actv)")
         
         if i in decoder_conv_skip_dict.values(): # The arrow of the skip connection end here
-            #print('conv = keras.layers.add([conv, arrow_start])')
+            print('conv = keras.layers.add([conv, arrow_start])')
             actv = keras.layers.add([actv, arrow_start])
             if decoder_use_batch_norm:
                 actv = BatchNormalization()(actv)
-                #print("actv = BatchNormalization()(actv)")
+                print("actv = BatchNormalization()(actv)")
         
         if i in decoder_conv_skip_dict.keys(): # The arrow of the skip connection starts here
-            #print('arrow_start = actv')
+            print('arrow_start = actv')
             arrow_start = actv
         
         x.append(actv)
