@@ -897,3 +897,36 @@ def adaptive_interpolation(func, x_range, max_xstep=0.1, max_ystep_rel=0.1, verb
             
     yfunc = interpolate.interp1d(xs, ys, **kwargs)
     return np.array(xs), np.array(ys), yfunc
+
+
+def average_with_significance(x:np.ndarray, axis=0, significance_level=0):
+    '''
+    Computes the average and the significance of an array along a specific axis.
+
+    significance is defined as mean/std
+
+    Parameters
+    ----------
+    x : np.ndarray
+        
+    axis : int, optional
+        axis over which to perform the operation, by default 0
+    significance_level : float, optional
+        level of significance that discriminates between significant and non significant data, by default 0
+
+    Returns
+    -------
+    x_mean : np.ndarray
+        mean
+    significance : np.ndarray
+        significance
+    significance_mask : np.ndarray
+        `|significance| > significance_level`
+    '''
+    logger.info(f'Performing mean over {x.shape[axis]} samples.')
+    x_mean = x.mean(axis=axis)
+    x_std = x.std(axis=axis)
+    significance_mask = np.abs(x_mean) > significance_level*x_std
+    significance = x_mean/x_std
+
+    return x_mean, significance_mask, significance

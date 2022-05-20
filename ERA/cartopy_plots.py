@@ -369,6 +369,11 @@ def ShowArea(lon_mask, lat_mask, field_mask, coords=[-7,15,40,60], **kwargs):
     return fig, m
 
 
+def multiple_field_plot():
+    pass
+    # TODO
+
+
 ###### animations #######
 def save_animation(ani, name, fps=1, progress_callback=lambda i, n: print(f'\b\b\b\b{i}', end=''), **kwargs):
     if not name.endswith('.gif'):
