@@ -27,7 +27,7 @@ def module_from_file(module_name, file_path): #The code that imports the file wh
 list_extremes_tau = []
 committor_tau = []
 A_reshape_tau = []
-for tau in range(0,-35,-5): #range(0,-31,-1):
+for tau in range(0,-31,-1):
     training_name = training_name0+str(tau)
     filename = training_name+"/Funs.py"
     r = str(10)
