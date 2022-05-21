@@ -415,7 +415,7 @@ def multiple_field_plot(lon, lat, f, projections=ccrs.Orthographic(central_latit
         raise ValueError('f must have the first 2 dimensions with the same shape of lon and lat')
 
     if len(f.shape) == 3:
-        n_fields = f.shape[3]
+        n_fields = f.shape[2]
     else:
         n_fields = 1
 
@@ -444,12 +444,27 @@ def multiple_field_plot(lon, lat, f, projections=ccrs.Orthographic(central_latit
         else:
             fig = plt.figure(figsize=figsize)
 
-        m = fig.add_subplot(projections = projections[i])
-        m.set_extent(extents[i])
+        m = fig.add_subplot(projection = projections[i])
+        if extents[i]:
+            m.set_extent(extents[i])
 
         geo_plotter(m, lon, lat, _f, title=titles[i], norm=norm, **kwargs)
 
         fig.tight_layout()
+
+def mfp(lon, lat, f,
+         projections=[
+            ccrs.Orthographic(central_latitude=90),
+            ccrs.Orthographic(central_latitude=90),
+            ccrs.PlateCarree()
+        ],
+        fig_num=8,
+        extents=[None, None, (-5, 10, 39, 60)],
+        titles=['Temperature [K]', 'Geopotential [m]', 'Soil Moisture [m]'],
+        mode='pcolormesh',
+        **kwargs):
+    '''Simply multiple field plot with useful default arguments'''
+    return multiple_field_plot(lon, lat, f, projections=projections, fig_num=fig_num, extents=extents, titles=titles, mode=mode, **kwargs)
 
 
     
