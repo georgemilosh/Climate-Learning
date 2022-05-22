@@ -203,6 +203,18 @@ def get_saliency_map(model, x, class_idx=1, softmax=False, normalize=False, smoo
         
     return gradient, predictions
 
+def optimal_activation(model, class_idx=1, seed=None,
+                       loss=keras.losses.SparseCategoricalCrossentropy(from_logits=True),
+                       optimizer=keras.optimizers.Adam(),
+                       nsteps=20,
+                      ):
+    @tf.function
+    def train_step():
+        with tf.GradientTape as tape:
+            pass
+    pass
+    # TODO (if worth)
+
 ############
 # Plotting #
 ############
