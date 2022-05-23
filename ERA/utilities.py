@@ -929,4 +929,4 @@ def average_with_significance(x:np.ndarray, axis=0, significance_level=0):
     significance_mask = np.abs(x_mean) > significance_level*x_std
     significance = x_mean/x_std
 
-    return x_mean, significance_mask, significance
+    return x_mean, significance, significance_mask
