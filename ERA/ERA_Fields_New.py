@@ -108,7 +108,7 @@ def significative_data2(Data, Data_t_value, T_value, both): # CHANGE THIS FOR TE
     '''
     Does the same of significative_data, but with `default_value` to np.NaN
     '''
-    return significative_data(Data, Data_t_value, T_value, both, default_value=np.NaN)
+    return ut.significative_data(Data, Data_t_value, T_value, both=both, default_value=np.NaN)
     # OLD VERSION
     
     # Out_taken = np.empty((np.shape(Data)))
