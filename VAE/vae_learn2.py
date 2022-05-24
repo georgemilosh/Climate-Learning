@@ -150,7 +150,7 @@ def normalize_X(X,folder, myinput='N',mode='pointwise'):
 
 @ut.execution_time  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function
-def create_or_load_vae(folder, INPUT_DIM, myinput, filter_mask, VAE_kwargs=None, build_encoder_skip_kwargs=None, build_decoder_skip_kwargs=None, create_classifier_kwargs=None, checkpoint_every=1, roll_steps=64):
+def create_or_load_vae(folder, INPUT_DIM, myinput, filter_mask, VAE_kwargs=None, build_encoder_skip_kwargs=None, build_decoder_skip_kwargs=None, create_classifier_kwargs=None, checkpoint_every=1):
     '''
     Creates a Variational AutoEncoder Model or loads the existing one 
         from the weights given in the model
