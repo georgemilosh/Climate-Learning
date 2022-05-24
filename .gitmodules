@@ -1,0 +1,3 @@
+[submodule "general_purpose"]
+	path = general_purpose
+	url = https://github.com/AlessandroLovo/general_purpose
