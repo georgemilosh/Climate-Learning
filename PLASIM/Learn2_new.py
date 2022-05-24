@@ -175,7 +175,10 @@ if not path_to_ERA in sys.path:
 
 import ERA.ERA_Fields_New as ef # general routines
 import ERA.TF_Fields as tff # tensorflow routines
-import ERA.utilities as ut
+try:
+    import general_purpose.utilities as ut
+except ImportError:
+    import ERA.utilities as ut
 
 # separators to create the run name from the run arguments
 arg_sep = '--' # separator between arguments
@@ -686,11 +689,10 @@ def move_to_folder(folder, additional_files=None):
             shutil.copy(file, folder)
 
     # copy useful files from ../ERA/ to folder/ERA/
-    path_to_here = path_to_here.parent / 'ERA'
-    shutil.copy(path_to_here / 'cartopy_plots.py', ERA_folder)
-    shutil.copy(path_to_here / 'ERA_Fields_New.py', ERA_folder)
-    shutil.copy(path_to_here / 'TF_Fields.py', ERA_folder)
-    shutil.copy(path_to_here / 'utilities.py', ERA_folder)
+    shutil.copy(path_to_here / 'general_purpose/cartopy_plots.py', ERA_folder)
+    shutil.copy(path_to_here / 'ERA/ERA_Fields_New.py', ERA_folder)
+    shutil.copy(path_to_here / 'ERA/TF_Fields.py', ERA_folder)
+    shutil.copy(path_to_here / 'general_purpose/utilities.py', ERA_folder)
 
     print(f'Now you can go to {folder} and run the learning from there:\n')
     print(f'\n\ncd \"{folder}\"\n')

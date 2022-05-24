@@ -33,11 +33,11 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import confusion_matrix
 from skimage.transform import resize
 
-path_to_ERA = str(Path(__file__).resolve().parent)
-if not path_to_ERA in sys.path:
-    sys.path.insert(1, path_to_ERA)
+path_to_parent = str(Path(__file__).resolve().parent.parent)
+if not path_to_parent in sys.path:
+    sys.path.insert(1, path_to_parent)
 
-from utilities import execution_time, indent_logger
+import general_purpose.utilities as ut
 
 logger = logging.getLogger(__name__)
 logger.level = logging.INFO
@@ -64,7 +64,10 @@ def import_basemap():
 def import_cartopy():
     try:
         global cplt
-        import cartopy_plots as cplt
+        try:
+            import general_purpose.cartopy_plots as cplt
+        except ImportError:
+            import cartopy_plots as cplt
         logger.info('Successfully imported cartopy')
         return True
     except (ImportError, FileNotFoundError):
@@ -99,47 +102,7 @@ def significative_data(Data, Data_t_value=None, T_value=None, both=False, defaul
     Data that fail the filter conditions are set to `default_value`.
     If `Data_t_value` or `T_value` are None, all of `Data` is considered significant
     '''
-    if Data is None:
-        if both:
-            return None, 0, 0
-        else:
-            return None, 0
-    
-    data = np.array(Data)
-    
-    if Data_t_value is None or T_value is None:
-        warnings.warn('Assuming all data are significant')
-        if both:
-            return data, np.ones_like(data)*default_value, np.product(data.shape)
-        else:
-            return data, np.product(data.shape)
-        
-    data_t_value = np.array(Data_t_value)
-    if data.shape != data_t_value.shape:
-        raise ValueError('Shape mismatch')
-    Out_taken = data.copy()
-    
-#     # old function definition   
-#     N_points_taken = 0
-#     for la in range(len(Data)):
-#         for lo in range(len(Data[la])):
-#             if abs(Data_t_value[la, lo]) >= T_value:
-#                 Out_taken[la, lo] = Data[la, lo]
-#                 N_points_taken += 1
-#             else:
-#                 Out_not_taken[la, lo] = Data[la, lo]
-    
-    # considerable speed up wrt the old nested for loops
-    mask = data_t_value >= T_value
-    N_points_taken = np.sum(mask)
-    Out_taken[np.logical_not(mask)] = default_value
-    
-    if both:
-        Out_not_taken = data.copy()
-        Out_not_taken[mask] = default_value
-        return Out_taken, Out_not_taken, N_points_taken
-    else:
-        return Out_taken, N_points_taken
+    return ut.significative_data(Data, Data_t_value, T_value, both=both, default_value=default_value)
     
 def significative_data2(Data, Data_t_value, T_value, both): # CHANGE THIS FOR TEMPERATURE SO THAT THE OLD ROUTINE IS USED
     '''
@@ -1286,7 +1249,7 @@ class Field:
         anomaly_series = self.ano_mask.copy()
         return series, anomaly_series
 
-@execution_time
+@ut.execution_time
 def monotonize_years(da:xr.DataArray):
     '''
     Transforms the time coordinate such that the years are consecutive and increasing monotonically and starting from 0.
@@ -1323,7 +1286,7 @@ def monotonize_years(da:xr.DataArray):
     new_ys = change(da.time, new_ys)
     return da.assign_coords({'time': new_ys}), new_y + 1
 
-@execution_time
+@ut.execution_time
 def monotonize_longitude(da:xr.DataArray):
     '''
     Makes the leongitude of an array monotonic. This is useful when working with rolled data.
@@ -1500,7 +1463,7 @@ class Plasim_Field:
 
         self._area_integral = None
 
-    @execution_time
+    @ut.execution_time
     def select_years(self, year_list=None):
         '''
         Select a subset of years
@@ -1514,7 +1477,7 @@ class Plasim_Field:
             self.field = self.field.sel(time=self.field.time.dt.year.isin(year_list))
             self.years = len(year_list)
 
-    @execution_time
+    @ut.execution_time
     def select_lonlat(self, lat_start=None, lat_end=None, lon_start=None, lon_end=None):
         '''
         Select a region in space.
@@ -1600,7 +1563,7 @@ class Plasim_Field:
         else:
             self.field.data *= np.logical_not(self.mask.data)
     
-    @execution_time
+    @ut.execution_time
     def compute_area_integral(self, weights='land_area'):
         '''
         Computes the area integral over the region set by the mask and stores it in self._are_integral
@@ -1638,8 +1601,8 @@ class Plasim_Field:
             self.compute_area_integral()
         return self._area_integral
 
-    @execution_time
-    @indent_logger(logger)
+    @ut.execution_time
+    @ut.indent_logger(logger)
     def compute_time_average(self, day_start, day_end, T):
         '''
         Computes the forward running mean of the self._area_intgral attribute
@@ -1685,8 +1648,8 @@ class Plasim_Field_Old:
             self.np_precision = np.float32
             self.np_precision_complex = np.complex64
         
-    @execution_time
-    @indent_logger(logger)
+    @ut.execution_time
+    @ut.indent_logger(logger)
     def load_field(self, folder, year_list=None):
         '''
         Load the file from the database stored in `folder`
@@ -1783,7 +1746,7 @@ class Plasim_Field_Old:
             raise NotImplementedError('if you specify a day, you must also specify a year')
         return Greenwich(self.var[year,day])
     
-    @execution_time
+    @ut.execution_time
     def Set_area_integral(self, input_area, input_mask, containing_folder='Postproc', delta=1, force_computation=False):
         '''
         Evaluate area integral and (possibly if delta is not 1) coarse grain it in time
