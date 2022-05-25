@@ -126,7 +126,6 @@ from pathlib import Path
 from stat import S_IREAD
 import sys
 import traceback
-import warnings
 import time
 import shutil
 import gc
@@ -688,11 +687,11 @@ def move_to_folder(folder, additional_files=None):
         for file in additional_files:
             shutil.copy(file, folder)
 
-    # copy useful files from ../ERA/ to folder/ERA/
-    shutil.copy(path_to_here / 'general_purpose/cartopy_plots.py', ERA_folder)
-    shutil.copy(path_to_here / 'ERA/ERA_Fields_New.py', ERA_folder)
-    shutil.copy(path_to_here / 'ERA/TF_Fields.py', ERA_folder)
-    shutil.copy(path_to_here / 'general_purpose/utilities.py', ERA_folder)
+    # copy useful files from other directories to 'folder/ERA/'
+    shutil.copy(path_to_here.parent / 'ERA/ERA_Fields_New.py', ERA_folder)
+    shutil.copy(path_to_here.parent / 'ERA/TF_Fields.py', ERA_folder)
+    shutil.copy(path_to_here.parent / 'general_purpose/cartopy_plots.py', ERA_folder)
+    shutil.copy(path_to_here.parent / 'general_purpose/utilities.py', ERA_folder)
 
     print(f'Now you can go to {folder} and run the learning from there:\n')
     print(f'\n\ncd \"{folder}\"\n')
@@ -766,7 +765,7 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
     '''
 
     if area != filter_area:
-        warnings.warn(f'Fields will be filtered on a different area ({filter_area}) than the region of interest ({area}). If {area} is not a subset of {filter_area} the area integral will be different with and without filtering.')
+        logger.warn(f'Fields will be filtered on a different area ({filter_area}) than the region of interest ({area}). If {area} is not a subset of {filter_area} the area integral will be different with and without filtering.')
 
     if dataset_years == 1000:
         dataset_suffix = ''
@@ -994,7 +993,7 @@ def roll_X(X, roll_axis='lon', roll_steps=0):
     '''
     if roll_steps == 0:
         return X
-    warnings.warn('Roll the data when loading it using the arguments `lon_start`, `lon_end` of function `load_data`', category=DeprecationWarning)
+    logger.warn('DeprecationWarning: Roll the data when loading it using the arguments `lon_start`, `lon_end` of function `load_data`')
     if isinstance(roll_axis, str):
         if roll_axis.startswith('y'):
             roll_axis = 0
@@ -1616,13 +1615,12 @@ def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='m
 
     if collective: # the optimal checkpoint is the same for all folds and it is based on the average performance over the folds
         # check that the nfolds histories have the same length
-        l0 = len(historyCustom[0])
-        for h in historyCustom[1:]:
-            if len(h) != l0:
-                logger.error('Cannot compute a collective checkpoint from folds trained a different number of epochs. Computing independent checkpoints instead')
-                collective = False
-                break
-    if collective:
+        lm = np.min([len(historyCustom[i]) for i in range(nfolds)])
+        lM = np.max([len(historyCustom[i]) for i in range(nfolds)])
+        if lm < lM: # folds have different history length
+            logger.warning('Using collective checkpoint on histories of different length is deprecated! Longer histories will be clipped to the shortest one')
+            historyCustom = [historyCustom[i][:lm] for i in range(nfolds)]
+
         historyCustom = np.mean(np.array(historyCustom),axis=0)
         opt_checkpoint = opt_f(historyCustom)
     else:
@@ -2279,7 +2277,7 @@ class Trainer():
             print(f"{tf.config.list_physical_devices('GPU') = }")
             GPU = len(tf.config.list_physical_devices('GPU'))
         if not GPU:
-            warnings.warn('\nThis machine does not have a GPU: training may be very slow\n')
+            logger.warn('\nThis machine does not have a GPU: training may be very slow\n')
 
     @property
     def LON(self):
