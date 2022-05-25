@@ -37,7 +37,10 @@ path_to_parent = str(Path(__file__).resolve().parent.parent)
 if not path_to_parent in sys.path:
     sys.path.insert(1, path_to_parent)
 
-import general_purpose.utilities as ut
+try:
+    import general_purpose.utilities as ut
+except ImportError:
+    import ERA.utilities as ut
 
 logger = logging.getLogger(__name__)
 logger.level = logging.INFO
