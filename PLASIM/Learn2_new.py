@@ -282,6 +282,7 @@ def check_config_dict(config_dict):
     '''
     try:
         config_dict_flat = ut.collapse_dict(config_dict) # in itself this checks for multiple values for the same key
+
         found = False
         label_field = config_dict_flat['label_field']
         for field_name in config_dict_flat['fields']:
@@ -292,6 +293,12 @@ def check_config_dict(config_dict):
             logger.warning(f"field {label_field} is not a loaded field: adding ghost field")
             config_dict_flat['fields'].append(f'{label_field}_ghost')
             ut.set_values_recursive(config_dict, {'fields': config_dict_flat['fields']}, inplace=True)
+
+        if config_dict_flat['enable_early_stopping']:
+            if config_dict_flat['patience'] == 0:
+                logger.warning('Setting `patience` to 0 disables early stopping')
+            elif config_dict_flat['collective']:
+                raise ValueError('Using collective checkpoint together with early stopping is highly deprecated')
     except Exception as e:
         raise KeyError('Invalid config dictionary') from e
     return config_dict_flat
