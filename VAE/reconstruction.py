@@ -107,6 +107,8 @@ logger.info(f"{year_permutation = },{day_permutation = }")
 
 logger.info(f"{Style.RESET_ALL}")
 run_vae_kwargs = ut.set_values_recursive(run_vae_kwargs, {'myinput' : 'N', 'year_permutation' :year_permutation})
+if not os.path.exists(ut.extract_nested(run_vae_kwargs, 'mylocal')): # we are assuming that training was not run on R740server5
+    run_vae_kwargs = ut.set_values_recursive(run_vae_kwargs, {'mylocal' : '/ClimateDynamics/MediumSpace/ClimateLearningFR/gmiloshe/PLASIM/'})
 logger.info(f"{run_vae_kwargs = }")
 
 history, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, vae, X_va, Y_va, X_tr, Y_tr, _ = foo.run_vae(fold_folder, **run_vae_kwargs)
