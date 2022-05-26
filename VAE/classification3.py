@@ -142,7 +142,7 @@ def classify(fold_folder, evaluate_epoch, vae, X_tr, z_tr, Y_tr, X_va, z_va, Y_v
                 maxskill = -(percent/100.)*np.log(percent/100.)-(1-percent/100.)*np.log(1-percent/100.)
                 logisticclassifier = [LogisticRegression(solver='liblinear',C=index_i) for index_i in L_parameter]
                 lassoclassifier = [LogisticRegression(solver='liblinear', penalty="l1", C=index_i) for index_i in L_parameter]
-                kNNclassifier = [neighbors.KNeighborsClassifier(n_neighbors, weights="uniform",n_jobs=32) for n_neighbors in K_parameter]
+                kNNclassifier = [neighbors.KNeighborsClassifier(n_neighbors, weights="uniform") for n_neighbors in K_parameter]
                 vaeclassifier = ['vae.classifier']
                 # for classifier, C_parameter in zip([logisticclassifier, lassoclassifier, kNNclassifier,vaeclassifier], [L_parameter,L_parameter,K_parameter,[0]]):
                 for classifier, C_parameter in zip([logisticclassifier, kNNclassifier], [L_parameter,K_parameter]):
@@ -210,8 +210,11 @@ for tau in taus:
         run_vae_kwargs = ut.set_values_recursive(run_vae_kwargs, {'myinput' : 'N', 'evaluate_epoch' :checkpoint, 'tau' : tau, 'time_start' : time_start, 'time_end' : time_end})
     else:
         run_vae_kwargs = ut.set_values_recursive(run_vae_kwargs, {'myinput' : 'N', 'evaluate_epoch' :checkpoint}) # backward compatibiity where there was no month of may
+    if not os.path.exists(ut.extract_nested(run_vae_kwargs, 'mylocal')): # we are assuming that training was not run on R740server5
+        run_vae_kwargs = ut.set_values_recursive(run_vae_kwargs, {'mylocal' : '/ClimateDynamics/MediumSpace/ClimateLearningFR/gmiloshe/PLASIM/'})
     foo.classify = classify
     logger.info(f"{Style.RESET_ALL}")
+
 
     history, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, LAT, LON, vae, X_va, Y_va, X_tr, Y_tr, score = foo.run_vae(folder, **run_vae_kwargs)
 
