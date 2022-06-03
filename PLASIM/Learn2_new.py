@@ -713,6 +713,16 @@ fields_infos = {
         'filename_suffix': 'mrso',
         'label': 'Soil Moisture',
     },
+    't2m_inter': { # temperature
+        'name': 'tas',
+        'filename_suffix': 'tas_inter',
+        'label': '3 day Temperature',
+    },
+    'mrso_inter': { # soil moisture
+        'name': 'mrso',
+        'filename_suffix': 'mrso_inter',
+        'label': '3 day Soil Moisture',
+    },
 }
 
 for h in [200,300,500,850]: # geopotential heights
