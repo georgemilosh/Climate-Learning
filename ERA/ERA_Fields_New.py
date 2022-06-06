@@ -1390,7 +1390,25 @@ def masked_average(xa:xr.DataArray,
     _xa = xa*_weights
     return _xa.sum(dim=dim)
 
-def running_mean(xa:xr.DataArray, T, mode='forward', separate_years=True):
+def weight_average(*a,**kwargs):
+    '''
+        Perform weighted average
+    '''
+    kwargs['axis'] = kwargs['axis'][0] # Otherwise what is being fed into this function could be something of the sort (dim,), which is in conflict with weights
+    return np.average(*a,**kwargs)
+
+def rolling_reduce_weighted(my_a:xr.DataArray, T, weights=None):
+    '''
+        Perform weighted average
+    '''
+    #print(f"{my_a = }")
+    rolling = my_a.rolling(time=T, center=False)
+    #print(f"{rolling = }")
+    rolling.construct("window_dim")
+    #print(f"{rolling = }")
+    return rolling.reduce(weight_average, weights=weights).dropna('time')*np.sum(weights)/len(weights)
+
+def running_mean(xa:xr.DataArray, T, mode='forward', separate_years=True, weights=None):
     '''
     Computes the running mean over the time axis of an array of data
 
@@ -1421,19 +1439,32 @@ def running_mean(xa:xr.DataArray, T, mode='forward', separate_years=True):
     '''
     # define the averaging function
     if mode == 'backward':
-        t_avg = lambda a: a.rolling(time=T, center=False).mean().dropna('time')
+        if weights is not None:
+            raise ValueError(f"Currently weighted running mean only suppported with mode = 'forward'")
+        else:
+            t_avg = lambda a: a.rolling(time=T, center=False).mean().dropna('time')
         #                                                        ^ this removes nan values
     elif mode == 'forward':
-        t_avg = lambda a: a[::-1].rolling(time=T, center=False).mean().dropna('time')[::-1]
+        if weights is None:
+            t_avg = lambda a: a[::-1].rolling(time=T, center=False).mean().dropna('time')[::-1]
         # we work on the reversed array so we have the forward T day rolling mean, since xarray by default computes the backward rolling mean
     elif mode == 'center':
-        t_avg = lambda a: a.rolling(time=T, center=True).mean().dropna('time')
+        if weights is not None:
+            raise ValueError(f"Currently weighted running mean only suppported with mode = 'forward'")
+        else:
+            t_avg = lambda a: a.rolling(time=T, center=True).mean().dropna('time')
     else:
         raise ValueError(f"Unrecognized {mode = }. Possible options are 'forward', 'backward' or 'center'")
 
     if separate_years:
-        return xa.groupby('time.year').apply(t_avg) # apply to each year individually
-    return t_avg(xa)
+        if weights is not None:
+            return xa.groupby('time.year').apply(rolling_reduce_weighted, T=T, weights=weights)
+        else:
+            return xa.groupby('time.year').apply(t_avg) # apply to each year individually
+    if weights is not None:
+        return rolling_reduce_weighted(xa, T=T, weights=weights)
+    else:
+        return t_avg(xa)
 
 def is_over_threshold(a:np.ndarray, threshold=None, percent=None):
     '''
@@ -1480,6 +1511,7 @@ class Plasim_Field:
 
         self.mask_area = None
         self.mask = None
+        self.A = None # This is a placeholder variable that can be used as a running mean save. Problem is that our routines do not output it and rewritting could cause issues with backward compatibility
 
         logger.info(f'Opening field {self.name}')
 
@@ -1640,7 +1672,7 @@ class Plasim_Field:
 
     @execution_time
     @indent_logger(logger)
-    def compute_time_average(self, day_start, day_end, T):
+    def compute_time_average(self, day_start, day_end, T, weights=None):
         '''
         Computes the forward running mean of the self._area_intgral attribute
 
@@ -1659,7 +1691,7 @@ class Plasim_Field:
             time average
         '''
         cut_area_integral = self.area_integral.sel(time=self.area_integral.time.dt.dayofyear.isin(np.arange(day_start, day_end)))
-        return running_mean(cut_area_integral, T, mode='forward')
+        return running_mean(cut_area_integral, T, mode='forward',weights=weights)
 
         
 
