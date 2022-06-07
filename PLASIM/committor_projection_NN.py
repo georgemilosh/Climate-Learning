@@ -30,11 +30,18 @@ class SeparateMRSOLinearModel(keras.Model):
         x = self.conc([x,mrso])
         return x
 
+class Dense2D(keras.layers.Layer):
+    def __init__(self,) #AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+
+
+def create_model(input_shape, m=2, dense_units=[64,2], dense_activations=['relu', None], dense_dropouts=[0.2,False]):
+
 
 
 #####################################################
 # set the modified function to override the old one #
 #####################################################
+ln.create_model = create_model
 ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram]) # module level config dictionary
 
 if __name__ == '__main__':
