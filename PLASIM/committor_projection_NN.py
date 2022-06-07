@@ -34,8 +34,8 @@ class SeparateMRSOLinearModel(keras.Model):
 
 class Dense2D(layers.Layer):
 
-    def __init__(self, filters_per_field=[1,2,1], regularizer=None, input_shape=None):
-        super().__init__()
+    def __init__(self, filters_per_field=[1,2,1], regularizer=None, **kwargs):
+        super().__init__(**kwargs)
         self.filters_per_field = filters_per_field
         self.nfields = len(self.filters_per_field)
         self.m = np.sum(self.filters_per_field)
@@ -43,9 +43,6 @@ class Dense2D(layers.Layer):
         self.regularizer = regularizer
 
         self.conc = keras.layers.Concatenate()
-
-        if input_shape is not None:
-            self.build(input_shape)
 
     def build(self, input_shape):
         if input_shape[-1] != self.nfields:
