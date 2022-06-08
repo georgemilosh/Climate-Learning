@@ -115,7 +115,7 @@ class GradientRegularizer(keras.regularizers.Regularizer):
         return {'c': self.c, 'weights': self.weights, 'periodic_lon': self.periodic_lon, 'normalize': self.normalize}
 
 
-def create_model(input_shape, filters_per_field=[1,1,1], reg_c=1, reg_weights=None, reg_periodicity=True, reg_norm=True, dense_units=[64,2], dense_activations=['relu', None], dense_dropouts=[0.2,False]):
+def create_model(input_shape, filters_per_field=[1,1,1], reg_c=1, reg_weights=None, reg_periodicity=True, reg_norm=True, dense_units=[8,2], dense_activations=['relu', None], dense_dropouts=False):
     if not reg_c:
         regularizer = None
     else:
