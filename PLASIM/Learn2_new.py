@@ -266,7 +266,7 @@ def build_config_dict(functions):
         d[f'{f_name}_kwargs'] = get_default_params(f, recursive=True)
     return d
 
-def check_config_dict(config_dict):
+def check_config_dict(config_dict, correct_mistakes=True):
     '''
     Checks that the confic dictionary is consistent
 
@@ -290,9 +290,12 @@ def check_config_dict(config_dict):
                 found = True
                 break
         if not found:
-            logger.warning(f"field {label_field} is not a loaded field: adding ghost field")
-            config_dict_flat['fields'].append(f'{label_field}_ghost')
-            ut.set_values_recursive(config_dict, {'fields': config_dict_flat['fields']}, inplace=True)
+            if correct_mistakes:
+                logger.warning(f"field {label_field} is not a loaded field: adding ghost field")
+                config_dict_flat['fields'].append(f'{label_field}_ghost')
+                ut.set_values_recursive(config_dict, {'fields': config_dict_flat['fields']}, inplace=True)
+            else:
+                raise ValueError(f"{label_field = } is not one of the loaded fields: please add a ghost field as {label_field+'_ghost'}")
 
         if config_dict_flat['enable_early_stopping']:
             if config_dict_flat['patience'] == 0:
@@ -2252,7 +2255,7 @@ class Trainer():
         else:
             raise TypeError(f'Invalid type {type(config)} for config')
         
-        self.config_dict_flat = check_config_dict(self.config_dict)
+        self.config_dict_flat = check_config_dict(self.config_dict, correct_mistakes=False)
         
         # cached (heavy) variables
         self.fields = None
