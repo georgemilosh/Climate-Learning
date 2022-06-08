@@ -70,7 +70,13 @@ class Dense2D(layers.Layer):
 
 
 class GradientRegularizer(keras.regularizers.Regularizer):
-    def __init__(self, c=1, weights=None, periodic_lon=True, normalize=True):
+    def __init__(self, mode='l2', c=1, weights=None, periodic_lon=True, normalize=True):
+        if mode in ['L1', 'l1', 'sparse']:
+            self.mode = 'l1'
+        else:
+            if mode not in ['L2', 'l2']:
+                logger.warning(f"Unrecognized regularization {mode = }: using 'l2'")
+            self.mode = 'l2'
         self.c = c
         self.weights = weights
         self.periodic_lon = periodic_lon
@@ -87,25 +93,30 @@ class GradientRegularizer(keras.regularizers.Regularizer):
             raise ValueError(f'weight shape {self.weights.shape} does not match received input shape {x.shape[:-1]}')
         s = 0
         for i in range(nfilters):
+            if self.mode == 'l1':
+                op = tf.math.abs
+            else:
+                op = tf.math.square
+            
             if self.weights is not None:
                 # add gradient along x (lat)
-                _s = tf.math.reduce_sum(tf.math.abs((x[1:,:,i] - x[:-1,:,i])*self.weights[:-1,:,0]))
+                _s = tf.math.reduce_sum(op((x[1:,:,i] - x[:-1,:,i])*self.weights[:-1,:,0]))
                 # add gradient along y (lon)
-                _s = _s + tf.math.reduce_sum(tf.math.abs((x[:,1:,i] - x[:,:-1,i])*self.weights[:,:-1,1]))
+                _s = _s + tf.math.reduce_sum(op((x[:,1:,i] - x[:,:-1,i])*self.weights[:,:-1,1]))
                 # add periodic point
                 if self.periodic_lon:
-                    _s = _s + tf.math.reduce_sum(tf.math.abs((x[:,0,i] - x[:,-1,i])*self.weights[:,-1,1]))
+                    _s = _s + tf.math.reduce_sum(op((x[:,0,i] - x[:,-1,i])*self.weights[:,-1,1]))
             else:
                 # add gradient along x (lat)
-                _s = tf.math.reduce_sum(tf.math.abs(x[1:,:,i] - x[:-1,:,i]))
+                _s = tf.math.reduce_sum(op(x[1:,:,i] - x[:-1,:,i]))
                 # add gradient along y (lon)
-                _s = _s + tf.math.reduce_sum(tf.math.abs(x[:,1:,i] - x[:,:-1,i]))
+                _s = _s + tf.math.reduce_sum(op(x[:,1:,i] - x[:,:-1,i]))
                 # add periodic point
                 if self.periodic_lon:
-                    _s = _s + tf.math.reduce_sum(tf.math.abs(x[:,0,i] - x[:,-1,i]))
+                    _s = _s + tf.math.reduce_sum(op(x[:,0,i] - x[:,-1,i]))
 
             if self.normalize:
-                _s = _s/tf.math.reduce_sum(tf.math.abs(x))
+                _s = _s/tf.math.reduce_sum(op(x))
 
             s = s + _s
 
@@ -115,11 +126,11 @@ class GradientRegularizer(keras.regularizers.Regularizer):
         return {'c': self.c, 'weights': self.weights, 'periodic_lon': self.periodic_lon, 'normalize': self.normalize}
 
 
-def create_model(input_shape, filters_per_field=[1,1,1], reg_c=1, reg_weights=None, reg_periodicity=True, reg_norm=True, dense_units=[8,2], dense_activations=['relu', None], dense_dropouts=False):
+def create_model(input_shape, filters_per_field=[1,1,1], reg_mode='l2', reg_c=1, reg_weights=None, reg_periodicity=True, reg_norm=True, dense_units=[8,2], dense_activations=['relu', None], dense_dropouts=False):
     if not reg_c:
         regularizer = None
     else:
-        regularizer = GradientRegularizer(c=reg_c, weights=reg_weights, periodic_lon=reg_periodicity, normalize=reg_norm)
+        regularizer = GradientRegularizer(mode=reg_mode, c=reg_c, weights=reg_weights, periodic_lon=reg_periodicity, normalize=reg_norm)
     
     model = keras.models.Sequential()
 
