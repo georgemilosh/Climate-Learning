@@ -86,7 +86,7 @@ class GradientRegularizer(keras.regularizers.Regularizer):
             if self.mode == 'l1':
                 self.weights = self.weights/tf.math.reduce_mean(tf.math.abs(self.weights)) # now the mean of the weights is 1
             else:
-                self.weights = self.weights/tf.math.sqrt(tf.math.reduce_mean(tf.math.square(self.weigth)))
+                self.weights = self.weights/tf.math.sqrt(tf.math.reduce_mean(tf.math.square(self.weights)))
 
     def __call__(self, x):
         if self.c == 0:
