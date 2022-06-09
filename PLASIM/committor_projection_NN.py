@@ -130,6 +130,16 @@ def create_model(input_shape, filters_per_field=[1,1,1], reg_mode='l2', reg_c=1,
     if not reg_c:
         regularizer = None
     else:
+        if isinstance(reg_weights, str):
+                if reg_weights == 'auto':
+                    # TODO: this si not very versatile
+                    lat = 87.863799 - 2.7886687*np.arange(22)
+                    reg_weights = np.ones((22,128,2), dtype=float)
+                    # gradient in the lat (x) direction is uniform so we don't do anything
+                    # gradient in the lon direction depends on latitude
+                    reg_weights[...,1] = (reg_weights[...,1].T/np.cos(lat*np.pi/180)).T # these double transposition helps using numpy native operators
+                else:
+                    raise ValueError(f'Unrecognized string option for weights: {reg_weights}')
         regularizer = GradientRegularizer(mode=reg_mode, c=reg_c, weights=reg_weights, periodic_lon=reg_periodicity, normalize=reg_norm)
     
     model = keras.models.Sequential()
