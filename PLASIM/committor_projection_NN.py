@@ -134,7 +134,7 @@ def create_model(input_shape, filters_per_field=[1,1,1], reg_mode='l2', reg_c=1,
                 if reg_weights == 'auto':
                     # TODO: this si not very versatile
                     lat = 87.863799 - 2.7886687*np.arange(22)
-                    reg_weights = np.ones((22,128,2), dtype=float)
+                    reg_weights = np.ones((22,128,2), dtype=np.float32)
                     # gradient in the lat (x) direction is uniform so we don't do anything
                     # gradient in the lon direction depends on latitude
                     reg_weights[...,1] = (reg_weights[...,1].T/np.cos(lat*np.pi/180)).T # these double transposition helps using numpy native operators
