@@ -2269,8 +2269,8 @@ class Trainer():
         self._LONLAT = None # meshgrid of self.lat, self.lon
 
         # extract default arguments for each function
-        self.default_run_kwargs = ut.extract_nested(self.config_dict, 'run_kwargs')
-        self.telegram_kwargs = ut.extract_nested(self.config_dict, 'telegram_kwargs')
+        self.default_run_kwargs = ut.extract_nested(self.config_dict, 'run_kwargs').copy()
+        self.telegram_kwargs = ut.extract_nested(self.config_dict, 'telegram_kwargs').copy()
 
         # setup last evaluation arguments
         self._load_data_kwargs = None
