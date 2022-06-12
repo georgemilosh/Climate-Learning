@@ -2369,7 +2369,7 @@ class Trainer():
         # retrieve values of the arguments
         iteration_values = [kwargs[k] for k in iterate_over]
         # expand the iterations into a list performing the meshgrid
-        iteration_values = list(zip(*[m.flatten() for m in np.meshgrid(*iteration_values, indexing='ij')]))
+        iteration_values = ut.zipped_meshgrid(*iteration_values)
         # ensure json serializability by converting to string and back
         iteration_values = ast.literal_eval(str(iteration_values))
 
