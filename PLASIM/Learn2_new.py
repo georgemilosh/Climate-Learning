@@ -1024,23 +1024,26 @@ def roll_X(X, roll_axis='lon', roll_steps=0):
 
 def normalize_X(X, mode='pointwise'):
     '''
-    Performs data normalization
+    Performs data normalization x_norm = (x - x_mean)/x_std
 
     Parameters
     ----------
-    X : np.ndarray of shape (N, ...)
+    X : np.ndarray of shape (N, lat, lon, fields)
         data
-    mode : 'pointwise', optional
-        how to perform the normalization. For now the only possible option is 'pointwise', which means every grid point is treated independently, by default 'pointwise'
+    mode : str, optional
+        how to perform the normalization, possibilities are:
+            'pointwise': every gridpoint of every field is treated independenly (default)
+            'global': mean and std are computed globally on each field
+            'mean': mean and std are computed pointwise and then averaged over each field
 
     Returns
     -------
     X_n : np.ndarray of same shape as X
         normalized data
-    X_mean : np.ndarray of shape (...)
-        mean of X along the first axis
-    X_std : np.ndarray of shape (...)
-        std of X along the first axis
+    X_mean : np.ndarray 
+        mean of X along the axes given by the normalization mode
+    X_std : np.ndarray
+        std of X along the axes given by the normalization mode
 
     Raises
     ------
@@ -1051,15 +1054,32 @@ def normalize_X(X, mode='pointwise'):
         # renormalize data with pointwise mean and std
         X_mean = np.mean(X, axis=0)
         X_std = np.std(X, axis=0)
-        logger.info(f'{np.sum(X_std < 1e-5)/np.product(X_std.shape)*100 :.4f}\% of the data have std below 1e-5')
-        X_std[X_std==0] = 1 # If there is no variance we shouldn't divide by zero ### hmmm: this may create discontinuities
-                            # This is necessary because we will be masking (filtering) certain parts of the map 
-                            #     for certain fields, e.g. mrso, setting them to zero. Also there are some fields that don't
-                            #     vary over the ocean. I've tried normalizing by field, rather than by grid point, in which case
-                            #     the problem X_std==0 does not arise, but then the results came up slightly worse. 
-
+    elif mode == 'global':
+        # mean over all axes except the last one (field axis). This does not work very well with filtered fields
+        axis = tuple(range(len(X.shape) - 1))
+        X_mean = np.mean(X, axis=axis)
+        X_std = np.std(X, axis=axis)
+    elif mode == 'mean':
+        X_mean = np.mean(X, axis=0)
+        X_std = np.std(X, axis=0)
+        nfields = X.shape[-1]
+        for i in range(nfields):
+            mask = X_std[...,i] != 0 # work only on the points that display some fluctuations
+            non_zero_non_fluctuating_points = np.sum(X_mean[...,i][~mask] != 0) # number of gridpoints that have a non zero value that is always the same
+            if non_zero_non_fluctuating_points:
+                logger.warning(f'Field {i} has {non_zero_non_fluctuating_points} non zero non fluctuating gridpoints')
+            X_mean[...,i][mask] = np.mean(X_mean[...,i][mask])
+            X_std[...,i][mask] = np.mean(X_std[...,i][mask])
     else:
         raise NotImplementedError(f'Unknown normalization {mode = }')
+
+    logger.info(f'{np.sum((X_std < 1e-4)*(X_std > 0))/np.product(X_std.shape)*100 :.4f}\% of the data have non zero std below 1e-4')
+    X_std[X_std==0] = 1 # If there is no variance we shouldn't divide by zero ### hmmm: this may create discontinuities
+                        # This is necessary because we will be masking (filtering) certain parts of the map 
+                        #     for certain fields, e.g. mrso, setting them to zero. Also there are some fields that don't
+                        #     vary over the ocean. I've tried normalizing by field, rather than by grid point, in which case
+                        #     the problem X_std==0 does not arise, but then the results came up slightly worse.
+    
     return  (X - X_mean)/X_std, X_mean, X_std
 
 ####### MIXING ########    
