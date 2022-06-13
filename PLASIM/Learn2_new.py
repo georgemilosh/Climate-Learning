@@ -2043,7 +2043,15 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
     lon = np.copy(f.field.lon.data) # 1d array
 
     X,Y = make_XY(fields, **make_XY_kwargs)
-    
+    time_start = ut.extract_nested(make_XY_kwargs, 'time_start') # We need to extract these values to limit the season of Y which matters for balancing folds (see below)
+    time_end = ut.extract_nested(make_XY_kwargs, 'time_end')
+    label_period_start = ut.extract_nested(make_XY_kwargs, 'label_period_start')
+    label_period_end = ut.extract_nested(make_XY_kwargs, 'label_period_end')
+    T = ut.extract_nested(make_XY_kwargs, 'T')
+    if label_period_start is None:
+        label_period_start = time_start
+    if label_period_end is None:
+        label_period_end = time_end
     # move greenwich_meridian
     X = roll_X(X, **roll_X_kwargs)
     # roll also lat and lon
@@ -2080,7 +2088,10 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
 
         # balance folds:
         if do_balance_folds:
-            weights = np.sum(Y, axis=1) # get the number of heatwave events per year
+            # GM: now the weights will be computed solely based on the time of interest, so the balancing will only care about heatwaves inside this time
+            logger.info(f" {label_period_start = } ;{time_start = } ;{time_end = } ;{label_period_end = } ")
+            logger.info(f"{Y.shape = }, from {label_period_start-time_start} to {label_period_end-time_start-T+1} ")
+            weights = np.sum(Y[:,(label_period_start-time_start):(label_period_end-time_start-T+1)], axis=1) # get the number of heatwave events per year
             balance_permutation = balance_folds(weights,nfolds=nfolds, verbose=True)
             Y = Y[balance_permutation]
             if year_permutation is None:
