@@ -87,6 +87,7 @@ class GradientRegularizer(keras.regularizers.Regularizer):
                 if self.weights == 'sphere':
                     lat = 87.863799 - 2.7886687*np.arange(22) # TODO: this si not very versatile
                     self.coslat = np.cos(lat*np.pi/180)
+                    self.broadcasted_coslat = None
                 elif self.weights in ['auto', 'compromise']: # for backward compatibility
                     logger.warning(f"Deprecation warning: regularization weight in mode {self.weights} is deprecated. Please use None or 'sphere'")
                     apply_sqrt = self.weights == 'compromise'
@@ -111,8 +112,12 @@ class GradientRegularizer(keras.regularizers.Regularizer):
         if self.c == 0:
             return 0
         nfilters = x.shape[-1]
-        if self.weights is not None and self.weights.shape[:-1] != x.shape[:-1]:
-            raise ValueError(f'weight shape {self.weights.shape} does not match received input shape {x.shape[:-1]}')
+        if self.weights is not None:
+            if isinstance(self.weights, str):
+                if self.broadcasted_coslat is None:
+                    self.broadcasted_coslat = (np.ones(x.shape[:2]).T*self.coslat).T # these double transposition helps using numpy native operators
+            elif self.weights.shape[:-1] != x.shape[:-1]:
+                raise ValueError(f'weight shape {self.weights.shape} does not match received input shape {x.shape[:-1]}')
         s = 0
         for i in range(nfilters):
             if self.mode == 'l1':
@@ -124,12 +129,12 @@ class GradientRegularizer(keras.regularizers.Regularizer):
                 if isinstance(self.weights, str):
                     if self.weights == 'sphere':
                         # add gradient along x (lat)
-                        _s = tf.math.reduce_sum(self.coslat[:-1]*op((x[1:,:,i] - x[:-1,:,i]).T))
+                        _s = tf.math.reduce_sum(self.broadcasted_coslat[:-1,:]*op(x[1:,:,i] - x[:-1,:,i]))
                         # add gradient along y (lon)
-                        _s = _s + tf.math.reduce_sum(self.coslat*op((x[:,1:,i] - x[:,:-1,i]).T/self.coslat))
+                        _s = _s + tf.math.reduce_sum(self.broadcasted_coslat[:,:-1]*op((x[:,1:,i] - x[:,:-1,i])*self.broadcasted_coslat[:,:-1]))
                         # add periodic point
                         if self.periodic_lon:
-                            _s = _s + tf.math.reduce_sum(self.coslat*op((x[:,0,i] - x[:,-1,i]).T/self.coslat))
+                            _s = _s + tf.math.reduce_sum(self.broadcasted_coslat[:,-1]*op((x[:,0,i] - x[:,-1,i])*self.broadcasted_coslat[:,-1]))
                     else:
                         raise ValueError(f'Unrecognized string option for weights: {self.weights}')
                 else:
@@ -173,7 +178,7 @@ def create_model(input_shape, filters_per_field=[1,1,1], batch_normalization=Fal
         model.add(keras.layers.BatchNormalization())
 
     # dense layers
-    # adjust the shape of the arguments to be of the same length as conv_channels
+    # adjust the shape of the arguments to be of the same length as `dense_units`
     args = [dense_activations, dense_dropouts]
     for j,arg in enumerate(args):
         if not isinstance(arg, list):
