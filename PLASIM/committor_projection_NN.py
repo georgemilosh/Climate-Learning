@@ -83,10 +83,29 @@ class GradientRegularizer(keras.regularizers.Regularizer):
         self.normalize = normalize
 
         if self.weights is not None:
-            if self.mode == 'l1':
-                self.weights = self.weights/tf.math.reduce_mean(tf.math.abs(self.weights)) # now the mean of the weights is 1
-            else:
-                self.weights = self.weights/tf.math.sqrt(tf.math.reduce_mean(tf.math.square(self.weights)))
+            if isinstance(self.weights, str):
+                if self.weights == 'sphere':
+                    lat = 87.863799 - 2.7886687*np.arange(22) # TODO: this si not very versatile
+                    self.coslat = np.cos(lat*np.pi/180)
+                elif self.weights in ['auto', 'compromise']: # for backward compatibility
+                    logger.warning(f"Deprecation warning: regularization weight in mode {self.weights} is deprecated. Please use None or 'sphere'")
+                    apply_sqrt = self.weights == 'compromise'
+                    # TODO: this si not very versatile
+                    lat = 87.863799 - 2.7886687*np.arange(22)
+                    self.weights = np.ones((22,128,2), dtype=np.float32)
+                    # gradient in the lat (x) direction is uniform so we don't do anything
+                    # gradient in the lon direction depends on latitude
+                    self.weights[...,1] = (self.weights[...,1].T/np.cos(lat*np.pi/180)).T # these double transposition helps using numpy native operators
+                    if apply_sqrt:
+                        self.weights = np.sqrt(self.weights)
+                else:
+                    raise ValueError(f'Unrecognized string option for weights: {self.weights}')
+
+            if not isinstance(self.weights, str): # the weights are numerical, so we normalize them
+                if self.mode == 'l1':
+                    self.weights = self.weights/tf.math.reduce_mean(tf.math.abs(self.weights)) # now the mean of the weights is 1
+                else:
+                    self.weights = self.weights/tf.math.sqrt(tf.math.reduce_mean(tf.math.square(self.weights)))
 
     def __call__(self, x):
         if self.c == 0:
@@ -102,13 +121,25 @@ class GradientRegularizer(keras.regularizers.Regularizer):
                 op = tf.math.square
             
             if self.weights is not None:
-                # add gradient along x (lat)
-                _s = tf.math.reduce_sum(op((x[1:,:,i] - x[:-1,:,i])*self.weights[:-1,:,0]))
-                # add gradient along y (lon)
-                _s = _s + tf.math.reduce_sum(op((x[:,1:,i] - x[:,:-1,i])*self.weights[:,:-1,1]))
-                # add periodic point
-                if self.periodic_lon:
-                    _s = _s + tf.math.reduce_sum(op((x[:,0,i] - x[:,-1,i])*self.weights[:,-1,1]))
+                if isinstance(self.weights, str):
+                    if self.weights == 'sphere':
+                        # add gradient along x (lat)
+                        _s = tf.math.reduce_sum(self.coslat[:-1]*op((x[1:,:,i] - x[:-1,:,i]).T))
+                        # add gradient along y (lon)
+                        _s = _s + tf.math.reduce_sum(self.coslat*op((x[:,1:,i] - x[:,:-1,i]).T/self.coslat))
+                        # add periodic point
+                        if self.periodic_lon:
+                            _s = _s + tf.math.reduce_sum(self.coslat*op((x[:,0,i] - x[:,-1,i]).T/self.coslat))
+                    else:
+                        raise ValueError(f'Unrecognized string option for weights: {self.weights}')
+                else:
+                    # add gradient along x (lat)
+                    _s = tf.math.reduce_sum(op((x[1:,:,i] - x[:-1,:,i])*self.weights[:-1,:,0]))
+                    # add gradient along y (lon)
+                    _s = _s + tf.math.reduce_sum(op((x[:,1:,i] - x[:,:-1,i])*self.weights[:,:-1,1]))
+                    # add periodic point
+                    if self.periodic_lon:
+                        _s = _s + tf.math.reduce_sum(op((x[:,0,i] - x[:,-1,i])*self.weights[:,-1,1]))
             else:
                 # add gradient along x (lat)
                 _s = tf.math.reduce_sum(op(x[1:,:,i] - x[:-1,:,i]))
@@ -133,19 +164,6 @@ def create_model(input_shape, filters_per_field=[1,1,1], batch_normalization=Fal
     if not reg_c:
         regularizer = None
     else:
-        if isinstance(reg_weights, str):
-                if reg_weights in ['auto', 'compromise']:
-                    apply_sqrt = reg_weights == 'compromise'
-                    # TODO: this si not very versatile
-                    lat = 87.863799 - 2.7886687*np.arange(22)
-                    reg_weights = np.ones((22,128,2), dtype=np.float32)
-                    # gradient in the lat (x) direction is uniform so we don't do anything
-                    # gradient in the lon direction depends on latitude
-                    reg_weights[...,1] = (reg_weights[...,1].T/np.cos(lat*np.pi/180)).T # these double transposition helps using numpy native operators
-                    if apply_sqrt:
-                        reg_weights = np.sqrt(reg_weights)
-                else:
-                    raise ValueError(f'Unrecognized string option for weights: {reg_weights}')
         regularizer = GradientRegularizer(mode=reg_mode, c=reg_c, weights=reg_weights, periodic_lon=reg_periodicity, normalize=reg_norm)
     
     model = keras.models.Sequential()
