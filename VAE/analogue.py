@@ -100,6 +100,7 @@ def classify(fold_folder, evaluate_epoch, vae, X_tr, z_tr, Y_tr, X_va, z_va, Y_v
     
     dist = {}
     ind_new = {}
+    ind = {}
     for checkpoint in checkpoints:
         found = 0
         while found == 0:
@@ -121,12 +122,14 @@ def classify(fold_folder, evaluate_epoch, vae, X_tr, z_tr, Y_tr, X_va, z_va, Y_v
                 z = np.concatenate((z_va,z_tr),axis=0) # This structure will be preserved for each fold
                 dim = z.shape[1]
                 siz = z.shape[0]
-                Zminus3 = z.reshape(siz//(time_end-time_start-T+1),time_end-time_start-T+1,-1)[:,:-3,:].reshape(-1,dim) # Remove last 3 days that makrov chain cannot access
-                
-                tree = cKDTree(Zminus3)
-                dist[checkpoint], ind = tree.query(z, k=1000,n_jobs = 3)
-                ind_new[checkpoint] = (ind // time_end-time_start-T+1 - 3)*(3) + ind
-
+                logger.info(f"{z.shape = }, {siz = }, {T = }, {time_start = }, {time_end = }")
+                Zminus3 = z.reshape(siz//(time_end-time_start-T+1),time_end-time_start-T+1,-1)[:,:-3,:] # Remove last 3 days that makrov chain cannot access
+                logger.info(f"{Zminus3.shape = }")
+                tree = cKDTree(Zminus3.reshape(-1,dim))
+                dist[checkpoint], ind[checkpoint] = tree.query(z, k=1000,n_jobs = 3)
+                logger.info(f"{ind[checkpoint] = }")
+                ind_new[checkpoint] = ind[checkpoint] // (time_end-time_start-T+1 - 3)*(3) + ind[checkpoint]
+                logger.info(f"{ind_new[checkpoint] = }")
                 logger.info(f"{z_tr.shape = }, {z_va.shape = }, {z.shape = }, {Zminus3.shape = }" )
                 
 
@@ -149,13 +152,14 @@ if (ut.keys_exists(run_vae_kwargs, 'label_period_start') and ut.keys_exists(run_
     time_end = ut.extract_nested(run_vae_kwargs, 'time_end')
     if label_period_start is not None:
         time_start = label_period_start
-    if label_period_end is not None:
-        time_end = label_period_end
-    run_vae_kwargs = ut.set_values_recursive(run_vae_kwargs, {'myinput' : 'N', 'evaluate_epoch' :checkpoints[-1], 'time_start' : time_start, 'time_end' : time_end})
+    #if label_period_end is not None: We comment this because the idea is to keep extra X's so that we get also the X's for the period that is normally deprecated since those heat waves end in september
+    #    time_end = label_period_end
+    run_vae_kwargs = ut.set_values_recursive(run_vae_kwargs, {'myinput' : 'N', 'evaluate_epoch' :checkpoints[-1], 'time_start' : time_start}) #, 'time_end' : time_end})
 else:
     run_vae_kwargs = ut.set_values_recursive(run_vae_kwargs, {'myinput' : 'N', 'evaluate_epoch' :checkpoints[-1]}) # backward compatibiity where there was no month of may
 if not os.path.exists(ut.extract_nested(run_vae_kwargs, 'mylocal')): # we are assuming that training was not run on R740server5
     run_vae_kwargs = ut.set_values_recursive(run_vae_kwargs, {'mylocal' : '/ClimateDynamics/MediumSpace/ClimateLearningFR/gmiloshe/PLASIM/'})
+logger.info(f"{run_vae_kwargs = }")
 foo.classify = classify
 logger.info(f"{Style.RESET_ALL}")
 

@@ -341,7 +341,8 @@ def k_fold_cross_val(folder, myinput, mask, X, Y, year_permutation, create_or_lo
     reconstruction=False # by default we are not doing reconstruction, we are either doing training and/or classification
     # k fold cross validation
     scores = []
-    range_nfolds=range(nfolds) #range(2)
+    if range_nfolds is None:
+        range_nfolds=range(nfolds) #range(2)
     if myinput == 'N': # In training regime, otherwise default value for reconstruction
         if os.path.exists(f'{folder}/fold_num.npy'): # # we are inside of one of the folds
             logger.log(35,f'{folder}/fold_num.npy exists')
@@ -800,7 +801,7 @@ def kwargator(thefun):
     thefun_kwargs_default = ln.get_default_params(thefun, recursive=True)
     thefun_kwargs_default = ut.set_values_recursive(thefun_kwargs_default,
                                             {'myinput':'Y', 'fields': ['t2m_inter_filtered','zg500_inter','mrso_inter_filtered'], 'label_field' : 't2m_inter', 'year_list': 'range(500)', 'T' : 15, 'A_weights' : [3,0,0, 3,0,0, 3,0,0, 3,0,0, 3,0,0],
-                                               'print_summary' : False, 'k1': 0.9 , 'k2':0.1, 'field_weights': [20., 1., 20.],'mask_area':'France', 'usemask' : True, 'Z_DIM': 8, #16, #8, #64,
+                                               'print_summary' : False, 'k1': 0.9 , 'k2':0.1, 'field_weights': [20., 1., 20.],'mask_area':'France', 'usemask' : True, 'Z_DIM': 16, #16, #8, #64,
                                                 'N_EPOCHS': 10,'batch_size': 128, 'checkpoint_every': 1, 'lr': 5e-4, 'epoch_tol': None, 'lr_min' : 5e-4, 'lat_start' : 0, 'lat_end' : 24, 'lon_start' : 98, 'lon_end' : 18, 
                                                 #'lat_start' : 4, 'lat_end' : 22, 'lon_start' : 101, 'lon_end' : 15, 
                                                 'time_start' : 15, 'label_period_start' : 30,  'time_end' : 134, 'label_period_end' : 120,
