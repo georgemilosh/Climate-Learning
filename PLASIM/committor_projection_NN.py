@@ -33,8 +33,17 @@ class SeparateMRSOLinearModel(keras.Model):
         return x
 
 class Dense2D(layers.Layer):
-
     def __init__(self, filters_per_field=[1,2,1], regularizer=None, **kwargs):
+        '''
+        Layer for performing a linear projection of a color image treating the colors (fields) independently
+
+        Parameters
+        ----------
+        filters_per_field : list[int], optional
+            Number of patterns onto which to project for every color (field), by default [1,2,1]
+        regularizer : tf.keras.regularizers.Regularizer, optional
+            Regularizer, by default None
+        '''
         super().__init__(**kwargs)
         self.filters_per_field = filters_per_field
         self.nfields = len(self.filters_per_field)
