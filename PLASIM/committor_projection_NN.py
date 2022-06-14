@@ -166,6 +166,39 @@ class GradientRegularizer(keras.regularizers.Regularizer):
 
 
 def create_model(input_shape, filters_per_field=[1,1,1], batch_normalization=False, reg_mode='l2', reg_c=1, reg_weights=None, reg_periodicity=True, reg_norm=True, dense_units=[8,2], dense_activations=['relu', None], dense_dropouts=False):
+    '''
+    Creates a neural network
+
+    Parameters
+    ----------
+    input_shape : tuple
+        shape of the data (without the batch axis)
+    filters_per_field : list[int], optional
+        Number of projection patterns for each of the fields ('ghost' fields should not be counted), by default [1,1,1]
+    batch_normalization : bool, optional
+        whether to perform batch normalization after the projection. This helps if the input data is not normalized, by default False
+    reg_mode : str, optional
+        how to regularize the graident, either 'l1' or 'l2', by default 'l2'
+    reg_c : float, optional
+        coefficient for the gradient regularization penalty that is added to the loss, by default 1
+    reg_weights : str, optional
+        How to compute the gradient: either None (assuming euclidean distance between the gridpoints) or 'sphere' which accounts for the fact that the Earth is spherical, by default None
+    reg_periodicity : bool, optional
+        Whether to regularize the gradient over the Bering straight, by default True
+    reg_norm : bool, optional
+        Whether to normalize the gradient to the norm of the projection pattern. This avoids the tendency to simply push all the values in the pattern to zero, by default True
+    dense_units : list[int], optional
+        Number of neurons for each hidden layer of the classification network. The last layer must have 2 neurons, by default [8,2]
+    dense_activations : list[str], optional
+        Activation functions at the end of each layer. Must have the same length of `dense_units` and the last layer must have None activation, by default ['relu', None]
+    dense_dropouts : list[float], optional
+        Dropout rates for each layer. If False or None it is disabled, by default False
+
+    Returns
+    -------
+    tf.keras.Model
+        Neural network
+    '''
     if not reg_c:
         regularizer = None
     else:
