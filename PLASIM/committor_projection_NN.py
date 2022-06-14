@@ -131,10 +131,10 @@ class GradientRegularizer(keras.regularizers.Regularizer):
                         # add gradient along x (lat)
                         _s = tf.math.reduce_sum(self.broadcasted_coslat[:-1,:]*op(x[1:,:,i] - x[:-1,:,i]))
                         # add gradient along y (lon)
-                        _s = _s + tf.math.reduce_sum(self.broadcasted_coslat[:,:-1]*op((x[:,1:,i] - x[:,:-1,i])*self.broadcasted_coslat[:,:-1]))
+                        _s = _s + tf.math.reduce_sum(self.broadcasted_coslat[:,:-1]*op((x[:,1:,i] - x[:,:-1,i])/self.broadcasted_coslat[:,:-1]))
                         # add periodic point
                         if self.periodic_lon:
-                            _s = _s + tf.math.reduce_sum(self.broadcasted_coslat[:,-1]*op((x[:,0,i] - x[:,-1,i])*self.broadcasted_coslat[:,-1]))
+                            _s = _s + tf.math.reduce_sum(self.broadcasted_coslat[:,-1]*op((x[:,0,i] - x[:,-1,i])/self.broadcasted_coslat[:,-1]))
                     else:
                         raise ValueError(f'Unrecognized string option for weights: {self.weights}')
                 else:
