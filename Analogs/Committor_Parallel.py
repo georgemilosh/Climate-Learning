@@ -20,16 +20,16 @@ except FileExistsError:
     print("Directory " , dirName ,  " already exists")
 
 #function for computing cross-entropy
-def RelEnt(pred,prob):
+def RelEnt(pred,prob): ## GM: why define this when you have tensorflow and sklearn binary cross-entropies available?
     res = 0.      #result
     count_0 = 0   #it counts the number of points for which the probability is 1 while the label is 0  
     count_1 = 0   #it counts the number of points for which the probability is 0 while the label is 1
     for i in range(len(pred)):   #loop on predictions
-        if(prob[i]<=0.):         #exclude divergence of log
+        if(prob[i]<=0.):         #exclude singularity of log
             if(pred[i]==1):
                 count_1 += 1
             res += pred[i]*np.log(10**(-14))+(1-pred[i])*np.log(1-prob[i])
-        elif(prob[i]>=1.):       #exclude divergence of log
+        elif(prob[i]>=1.):       #exclude singularity of log
             if(pred[i]==0):
                 count_0 += 1
             res += pred[i]*np.log(prob[i])+(1-pred[i])*np.log(10**(-14))
@@ -73,7 +73,7 @@ if(new_permutation==True):
     for i in range(9):
         for j in range(i+1,10):
             if((permutation[i]==permutation[j]).all()==True):
-                print('ERROR:Two identical dataset')
+                print('ERROR:Two identical datasets')
 else:
     permutation = np.load('Perm1.npy')
 
@@ -87,17 +87,22 @@ neighbors = [10]
 
 num_Traj = 10000 #number of trajectories for monte-carlo sampling of committor
 
-step_Traj = 5  #number of step in the markov chain for 15 days.
+step_Traj = 5  #number of steps in the markov chain for 15 days.
 
-#Function for computing the committor at one point. Input: day=point where committor is computed (state of markov chain), ther= vector of threshold, dela= vector of delays, nn= number of neighbors, Matr=Matix which contains indeces of Markov chain, res= vector where results are stored
+# We will have num_Traj trajectories each of which will from step_traj + maximum of delay and devided by coarse graining time
+
+
+#Function for computing the committor at one point (just for one day). Since there is quvectorize the function is vectorized and so can be applied to many days
+#  Input: day=point where committor is computed (state of markov chain), ther= vector of thresholds, dela= vector of delays, nn= number of neighbors, Matr=Matix which contains indices of Markov chain, res= vector where results are stored
 @guvectorize([(nb.int64,nb.float64[:],nb.int64[:],nb.int64,nb.int64[:,:],nb.float64[:,:])],'(),(n),(m),(),(l,j)->(n,m)',nopython=True,target="parallel")
-def CommOnePoint(day,ther,dela,nn,Matr,res):
+def CommOnePoint(day,ther,dela,nn,Matr,res): # day can be list, ther and dela is already array
     z = np.zeros((len(ther),len(dela))) #auxiliary variable (result), placeholder for committor functions for all thresholds and all lead-times
     key_day = 0     #parameter for initial condition, key_day=0 if day does not belong to Train data-set (day is not an analogue of day), key>0 otherwise
+                    ## GM: 
     for i in range(num_Traj): #loop on number of Trajectories to be generated, it generates num_Traj Trajectories which start at day.
-        if(key_day>0):
-            s_0 = day
-        else:
+        if(key_day>0): # if we are in the train set
+            s_0 = day 
+        else: # if we are in the validation set
             app = random.randint(0,nn-1) #select random one analogue of day
             s_0 = Matr[day][app]         #initial condition for synthetic trajectory
         
@@ -116,7 +121,7 @@ def CommOnePoint(day,ther,dela,nn,Matr,res):
                 else:                   #if tau>0
                     if(j>=dela[l_2]//3 and j<dela[l_2]//3+step_Traj): #add temperature to A if j (time of Markov chain) is between tau//3 and (tau+15)//3 days
                         for l_1 in range(len(ther)): #loop on thresholds (A[l_1][l_2] is the integrated temperature tau=delay[l_2] days after s0)
-                            A[l_1][l_2] += Temp[s]
+                            A[l_1][l_2] += Temp[s] ## GM: we start counting A only when we get into this delay window
         A = A / 5. #average temperature
         
         #Check if A>a
@@ -133,9 +138,9 @@ def CommOnePoint(day,ther,dela,nn,Matr,res):
 
 y = 0
 
-M = T.copy()
+M = T.copy() 
 
-#Compilation CommOnePoint Function
+#Compilation CommOnePoint Function # GM: this time we call it for one day to compile the function with numba
 start_time = time.time()
 nn = neighbors[0]
 q_1 = CommOnePoint(y*90+89,thershold,delay,nn,M)
@@ -151,10 +156,10 @@ print(q.shape)
 print(q[len(q)-1][0][0])
 print('--- %s seconds ---'%(time.time() - start_time))
 
-
+#GM: the idea is to remove the validation set analogues
 #Function for removing states of test-data from matrix of analogue. Input: num_row=number of states, dum_vec = auxiliary vector for dimension, nn= number of neighbors, num_perm= number of test data-set (from 0 to 9),  new_row= vector where results are stored
 @guvectorize([(nb.int64,nb.int64[:],nb.int64,nb.int64,nb.int64[:])],'(),(n),(),()->(n)',nopython=True,target="parallel")
-def CreateMatrixForTest(num_row,dum_vec,nn,num_perm,new_row):
+def CreateMatrixForTest(num_row,dum_vec,nn,num_perm,new_row): # GM: dum_vec is there just to keep track of the dimensional of the output
     count = 0           #analogues selected
     place_holder = []   #placeholder containing selected analogues
     while(len(place_holder)<nn and count<len(T[num_row])): #loop until nn analogues are selected or until the end of the stored possible analogues
