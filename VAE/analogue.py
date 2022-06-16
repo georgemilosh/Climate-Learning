@@ -98,13 +98,15 @@ def classify(fold_folder, evaluate_epoch, vae, X_tr, z_tr, Y_tr, X_va, z_va, Y_v
     score = []
 
     
-    dist = {}
-    ind_new = {}
-    ind = {}
+    dist_tr = {}
+    ind_new_tr = {}
+    ind_tr = {}
+    dist_va = {}
+    ind_new_va = {}
+    ind_va = {}
     for checkpoint in checkpoints:
         found = 0
         while found == 0:
-            score_method = []
             checkpoint_path = str(fold_folder)+f"/cp_vae-{checkpoint:04d}.ckpt" # TODO: convert checkpoints to f-strings
             checkpoint_path_check = checkpoint_path+".index" 
             if not os.path.exists(checkpoint_path_check): # it could be that the training was unstable and we have to look for a checkpoint just before:
@@ -119,18 +121,26 @@ def classify(fold_folder, evaluate_epoch, vae, X_tr, z_tr, Y_tr, X_va, z_va, Y_v
                 logger.info(f'{checkpoint_path} weights loaded')
                 _,_,z_tr = vae.encoder.predict(X_tr)
                 _,_,z_va = vae.encoder.predict(X_va)
-                z = np.concatenate((z_va,z_tr),axis=0) # This structure will be preserved for each fold
-                dim = z.shape[1]
-                siz = z.shape[0]
-                logger.info(f"{z.shape = }, {siz = }, {T = }, {time_start = }, {time_end = }")
-                Zminus3 = z.reshape(siz//(time_end-time_start-T+1),time_end-time_start-T+1,-1)[:,:-3,:] # Remove last 3 days that makrov chain cannot access
+                #z = np.concatenate((z_tr,z_va),axis=0) # This structure will be preserved for each fold
+                dim = z_tr.shape[1] #dim = z.shape[1]
+                siz = z_tr.shape[0] #siz = z.shape[0]
+                logger.info(f"{z_tr.shape = }, {siz = }, {T = }, {time_start = }, {time_end = }")
+                #Zminus3 = z.reshape(siz//(time_end-time_start-T+1),time_end-time_start-T+1,-1)[:,:-3,:] # Remove last 3 days that makrov chain cannot access
+                Zminus3 = z_tr.reshape(siz//(time_end-time_start-T+1),time_end-time_start-T+1,-1)[:,:-3,:] # Remove last 3 days that makrov chain cannot access
                 logger.info(f"{Zminus3.shape = }")
                 tree = cKDTree(Zminus3.reshape(-1,dim))
-                dist[checkpoint], ind[checkpoint] = tree.query(z, k=1000,n_jobs = 3)
-                logger.info(f"{ind[checkpoint] = }")
-                ind_new[checkpoint] = ind[checkpoint] // (time_end-time_start-T+1 - 3)*(3) + ind[checkpoint]
-                logger.info(f"{ind_new[checkpoint] = }")
-                logger.info(f"{z_tr.shape = }, {z_va.shape = }, {z.shape = }, {Zminus3.shape = }" )
+                #dist[checkpoint], ind[checkpoint] = tree.query(z, k=1000,n_jobs = 3)
+                dist_tr[checkpoint], ind_tr[checkpoint] = tree.query(z_tr, k=1000,n_jobs = 3)
+                logger.info(f"{ind_tr[checkpoint] = }")
+                ind_new_tr[checkpoint] = ind_tr[checkpoint] // (time_end-time_start-T+1 - 3)*(3) + ind_tr[checkpoint]
+                logger.info(f"{ind_new_tr[checkpoint] = }")
+
+                dist_va[checkpoint], ind_va[checkpoint] = tree.query(z_va, k=1000,n_jobs = 3)
+                logger.info(f"{ind_va[checkpoint] = }")
+                ind_new_va[checkpoint] = ind_va[checkpoint] // (time_end-time_start-T+1 - 3)*(3) + ind_va[checkpoint]
+                logger.info(f"{ind_new_va[checkpoint] = }")
+                
+                logger.info(f"{z_tr.shape = }, {z_va.shape = }, {Zminus3.shape = }" )
                 
 
 
@@ -138,7 +148,7 @@ def classify(fold_folder, evaluate_epoch, vae, X_tr, z_tr, Y_tr, X_va, z_va, Y_v
                 #z_tr, Y_tr = ln.undersample(z_tr, Y_tr, u=u)  
                 #logger.info(f"After undersampling: {len(Y_tr) = }, {len(Y_va) = }, {np.sum(Y_tr==1) = }, {np.sum(Y_va==1) = }")    
     logger.info(f"{Style.RESET_ALL}")
-    return {'dist' : dist, 'ind_new' : ind_new}
+    return {'dist_tr' : dist_tr, 'ind_new_tr' : ind_new_tr, 'dist_va' : dist_va, 'ind_new_va' : ind_new_va}
 
 #z_tr[23,24], Y_tr[23], z_va[23,24], Y_va[23]#
 
