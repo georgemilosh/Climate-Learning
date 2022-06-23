@@ -1994,7 +1994,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
 @ut.execution_time
 @ut.indent_logger(logger)
 def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
-               do_premix=False, premix_seed=0, do_balance_folds=True, nfolds=10, year_permutation=None, flatten_time_axis=True):
+               do_premix=False, premix_seed=0, do_balance_folds=True, nfolds=10, year_permutation=None, flatten_time_axis=True, return_time_series=False):
     '''
     Performs all operations to extract from the fields X and Y ready to be fed to the neural network.
 
@@ -2017,6 +2017,8 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
         if provided overrides both premixing and fold balancing, useful for transfer learning as avoids contaminating test sets. By default None
     flatten_time_axis : bool, optional
         whether to flatten the time axis consisting of years and days
+    return_time_series : bool, optional
+        If True it appends to the return statement the time series integrated over the area
 
     Returns
     -------
@@ -2030,6 +2032,8 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
         latitude, with shape (lat,) (rolled if necessary)
     lon : np.ndarray
         longitude, with shape (lon,) (rolled if necessary)
+    time_series : np.ndarray
+        output which is conditional on the input return_time_series
     '''
     if make_XY_kwargs is None:
         make_XY_kwargs = {}
@@ -2047,6 +2051,7 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
     time_end = ut.extract_nested(make_XY_kwargs, 'time_end')
     label_period_start = ut.extract_nested(make_XY_kwargs, 'label_period_start')
     label_period_end = ut.extract_nested(make_XY_kwargs, 'label_period_end')
+    tau = ut.extract_nested(make_XY_kwargs, 'tau')
     T = ut.extract_nested(make_XY_kwargs, 'T')
     if label_period_start is None:
         label_period_start = time_start
@@ -2115,7 +2120,21 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
         Y = Y.reshape((Y.shape[0]*Y.shape[1]))
         logger.info(f'Flattened time: {X.shape = }, {Y.shape = }')
 
+    if return_time_series:
+        time_series = []
+        # logger.info(f"{fields.values() = }")
+        for field in fields.values():
+            #logger.info(f"{field.area_integral =}")=
+            temp = (field.area_integral.to_numpy().reshape(field.years,-1))[year_permutation]
+            time_series.append((temp[:,time_start+tau:time_end+tau-T+1]).flatten()) 
+        
+        logger.info(f"{time_series = }")
+        time_series = np.array(time_series).T
+        logger.info(f"{time_series.shape = }")
+        return X, Y, year_permutation, lat, lon, time_series
+    
     return X, Y, year_permutation, lat, lon
+
 
 @ut.execution_time
 @ut.indent_logger(logger)

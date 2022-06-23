@@ -147,8 +147,11 @@ def classify(fold_folder, evaluate_epoch, vae, X_tr, z_tr, Y_tr, X_va, z_va, Y_v
                 logger.info(f"Before undersampling: {len(Y_tr) = }, {len(Y_va) = }, {np.sum(Y_tr==1) = }, {np.sum(Y_va==1) = }")    
                 #z_tr, Y_tr = ln.undersample(z_tr, Y_tr, u=u)  
                 #logger.info(f"After undersampling: {len(Y_tr) = }, {len(Y_va) = }, {np.sum(Y_tr==1) = }, {np.sum(Y_va==1) = }")    
+                open_file = open(f'{fold_folder}/analogues.pkl', "wb")
+                pickle.dump({'dist_tr' : dist_tr, 'ind_new_tr' : ind_new_tr, 'dist_va' : dist_va, 'ind_new_va' : ind_new_va}, open_file)
+                open_file.close()
     logger.info(f"{Style.RESET_ALL}")
-    return {'dist_tr' : dist_tr, 'ind_new_tr' : ind_new_tr, 'dist_va' : dist_va, 'ind_new_va' : ind_new_va}
+    return 0
 
 #z_tr[23,24], Y_tr[23], z_va[23,24], Y_va[23]#
 
@@ -160,8 +163,8 @@ if (ut.keys_exists(run_vae_kwargs, 'label_period_start') and ut.keys_exists(run_
     label_period_end = ut.extract_nested(run_vae_kwargs, 'label_period_end')
     time_start = ut.extract_nested(run_vae_kwargs, 'time_start')
     time_end = ut.extract_nested(run_vae_kwargs, 'time_end')
-    if label_period_start is not None:
-        time_start = label_period_start
+    #if label_period_start is not None:
+    #    time_start = label_period_start
     #if label_period_end is not None: We comment this because the idea is to keep extra X's so that we get also the X's for the period that is normally deprecated since those heat waves end in september
     #    time_end = label_period_end
     run_vae_kwargs = ut.set_values_recursive(run_vae_kwargs, {'myinput' : 'N', 'evaluate_epoch' :checkpoints[-1], 'time_start' : time_start}) #, 'time_end' : time_end})
@@ -181,9 +184,7 @@ logger.info(f"{Fore.BLUE}") #  indicates we are inside the routine
 logger.info(f"{len(analogues) = }")
 logger.info(f"{type(analogues[0]) = }")
 
-open_file = open(f'{folder}/analogues.pkl', "wb")
-pickle.dump(dict(zip(range(len(analogues)),analogues)), open_file)
-open_file.close()
+
 
 logger.info(f"{Style.RESET_ALL}")
 

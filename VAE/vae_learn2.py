@@ -276,7 +276,7 @@ def classify(fold_folder, evaluate_epoch, vae, X_tr, z_tr, Y_tr, X_va, z_va, Y_v
 
 @ut.execution_time
 @ut.indent_logger(logger)   
-def k_fold_cross_val(folder, myinput, mask, X, Y, year_permutation, create_or_load_vae_kwargs=None, train_vae_kwargs=None, nfolds=10, val_folds=1, range_nfolds=None, u=1, normalization_mode='pointwise', classification=True, evaluate_epoch='last', repeat_nan=5):
+def k_fold_cross_val(folder, myinput, mask, X, Y, time_series, year_permutation, create_or_load_vae_kwargs=None, train_vae_kwargs=None, nfolds=10, val_folds=1, range_nfolds=None, u=1, normalization_mode='pointwise', classification=True, evaluate_epoch='last', repeat_nan=5):
     '''
     Performs k fold cross validation on a model architecture.
 
@@ -288,6 +288,8 @@ def k_fold_cross_val(folder, myinput, mask, X, Y, year_permutation, create_or_lo
         all data (train + val)
     Y : np.ndarray
         all labels
+    time_series : list
+        a list of area integrals masked over X
     mask : np.ndarray
        
     year_permutation : np.ndarray
@@ -381,6 +383,12 @@ def k_fold_cross_val(folder, myinput, mask, X, Y, year_permutation, create_or_lo
                 Y_va = Y
                 classification=False # we will not do classification in this case (not compatible with current set-up of reconstruction)
             else:
+                _, time_series_tr, _, time_series_va = ln.k_fold_cross_val_split(i, time_series, time_series, nfolds=nfolds, val_folds=val_folds)
+                if (not os.path.exists(f"{fold_folder}/time_series_tr.npy"))and(myinput != 'N'):
+                    np.save(f'{fold_folder}/time_series_tr',time_series_tr)
+                    np.save(f'{fold_folder}/time_series_va',time_series_va)
+                    logger.info(f'saved {fold_folder}/time_series_tr.npy')
+                    logger.info(f'saved {fold_folder}/time_series_va.npy')
                 X_tr, Y_tr, X_va, Y_va = ln.k_fold_cross_val_split(i, X, Y, nfolds=nfolds, val_folds=val_folds)
                 if myinput == 'Y': # we also store the year permuation in individual folds so that we can easily access the appropriate years
                     _,_,_,year_permutation_va = ln.k_fold_cross_val_split(i, np.array(year_permutation), np.array(year_permutation)
@@ -744,7 +752,7 @@ def run_vae(folder, myinput='N', XY_run_vae_keywargs=None, k_fold_cross_val_kwar
     try:
         if XY_run_vae_keywargs is None: # we don't have X and Y yet, need to load them (may take a lot of time!)
         # loading full X can be heavy and unnecessary for reconstruction.py so we choose to work with validation automatically provided that folder already involves a fold: 
-            (X, Y, year_permutation, lat, lon), mask = ln.prepare_data_and_mask(load_data_kwargs=load_data_kwargs, prepare_XY_kwargs=prepare_XY_kwargs) # Here I follow the same structure as Alessandro has, otherwise we could use prepare_data_kwargs
+            (X, Y, year_permutation, lat, lon, time_series), mask  = ln.prepare_data_and_mask(load_data_kwargs=load_data_kwargs, prepare_XY_kwargs=prepare_XY_kwargs) # Here I follow the same structure as Alessandro has, otherwise we could use prepare_data_kwargs
             LON, LAT = np.meshgrid(lon,lat)
         else: # we already have X and Y yet, no need to load them
             logger.info(f"loading from provided XY_run_vae_keywargs")
@@ -767,7 +775,7 @@ def run_vae(folder, myinput='N', XY_run_vae_keywargs=None, k_fold_cross_val_kwar
                 Y_load = np.load(f'{folder.parent}/Y.npy')
             # TODO: Check optionally that the files are consistent
 
-        history_vae, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, vae, X_va, Y_va, X_tr, Y_tr, score = k_fold_cross_val(folder, myinput, mask, X, Y, year_permutation,**k_fold_cross_val_kwargs)
+        history_vae, N_EPOCHS, INITIAL_EPOCH, checkpoint_path, vae, X_va, Y_va, X_tr, Y_tr, score = k_fold_cross_val(folder, myinput, mask, X, Y, time_series, year_permutation,**k_fold_cross_val_kwargs)
         
     except Exception as e:
             logger.critical(f'Run on {folder = } failed due to {repr(e)}')
@@ -800,9 +808,11 @@ def kwargator(thefun):
     '''
     thefun_kwargs_default = ln.get_default_params(thefun, recursive=True)
     thefun_kwargs_default = ut.set_values_recursive(thefun_kwargs_default,
-                                            {'myinput':'Y', 'fields': ['t2m_inter_filtered','zg500_inter','mrso_inter_filtered'], 'label_field' : 't2m_inter', 'year_list': 'range(500)', 'T' : 15, 'A_weights' : [3,0,0, 3,0,0, 3,0,0, 3,0,0, 3,0,0],
-                                               'print_summary' : False, 'k1': 0.5 , 'k2':0.5, 'field_weights': [20., 1., 20.],'mask_area':'France', 'usemask' : True, 'Z_DIM': 8, #16, #8, #64,
-                                                'N_EPOCHS': 10,'batch_size': 128, 'checkpoint_every': 1, 'lr': 5e-4, 'epoch_tol': None, 'lr_min' : 5e-4, 'lat_start' : 0, 'lat_end' : 24, 'lon_start' : 98, 'lon_end' : 18, 
+                                            {'return_time_series' : True, 'myinput':'Y', 
+                                             'fields': ['t2m_inter_filtered','zg500_inter','mrso_inter_filtered'], 'label_field' : 't2m_inter', 'year_list': 'range(100)', 
+                                             'T' : 15, 'A_weights' : [3,0,0, 3,0,0, 3,0,0, 3,0,0, 3,0,0],
+                                               'print_summary' : False, 'k1': 0.9 , 'k2':0.1, 'field_weights': [20., 1., 20.],'mask_area':'France', 'usemask' : True, 'Z_DIM': 8, #16, #8, #64,
+                                                'N_EPOCHS': 2,'batch_size': 128, 'checkpoint_every': 1, 'lr': 5e-4, 'epoch_tol': None, 'lr_min' : 5e-4, 'lat_start' : 0, 'lat_end' : 24, 'lon_start' : 98, 'lon_end' : 18, 
                                                 #'lat_start' : 4, 'lat_end' : 22, 'lon_start' : 101, 'lon_end' : 15, 
                                                 'time_start' : 15, 'label_period_start' : 30,  'time_end' : 134, 'label_period_end' : 120,
                                                 #'lat_0' : 0, 'lat_1' : 24, 'lon_0' : (64-28), 'lon_1' : (64+15), 'coef_out' : 0.1, 'coef_in' : 1, 
