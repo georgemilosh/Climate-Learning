@@ -198,8 +198,9 @@ def create_model(input_shape, filters_per_field=[1,1,1], batch_normalization=Fal
         Whether to normalize the gradient to the norm of the projection pattern. This avoids the tendency to simply push all the values in the pattern to zero, by default True
     dense_units : list[int], optional
         Number of neurons for each hidden layer of the classification network. The last layer must have 2 neurons, by default [8,2]
-    dense_activations : list[str], optional
-        Activation functions at the end of each layer. Must have the same length of `dense_units` and the last layer must have None activation, by default ['relu', None]
+    dense_activations : str or list[str], optional
+        Activation functions at the end of each layer. If not a string, must have the same length as `dense_units` and the last layer must have None activation. By default ['relu', None]
+        If string, it will broadcasted to all layers except the last which will have activation=None
     dense_dropouts : list[float], optional
         Dropout rates for each layer. If False or None it is disabled, by default False
 
@@ -225,6 +226,8 @@ def create_model(input_shape, filters_per_field=[1,1,1], batch_normalization=Fal
     for j,arg in enumerate(args):
         if not isinstance(arg, list):
             args[j] = [arg]*len(dense_units)
+            if j==0:
+                args[j][-1] = None
         elif len(arg) != len(dense_units):
             raise ValueError(f'Invalid length for argument {arg}')
     logger.info(f'dense args = {args}')
