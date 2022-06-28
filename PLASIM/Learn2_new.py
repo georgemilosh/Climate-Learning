@@ -108,9 +108,12 @@ level   name                events
 42                          Folder name of the run and progressive number among the scheduled runs
                             Single run completes
 
+44                          Non default arguments of the run
+
 45                          Added and removed telegram logger
                             Tell number of scheduled runs
                             Skipping already performed run
+                            Average score of the run
 
 49                          All runs completed
 
@@ -2673,17 +2676,18 @@ class Trainer():
         with open(f'{self.root_folder}/{folder}/log.log', 'a') as logfile:
             logfile.write(f'{run_id = }\n\n')
             logfile.write('Non default parameters:\n')
-            for k,v in kwargs.items():
-                logfile.write(f'\t{k} = {v}\n')
+            logfile.write(ut.dict2str(kwargs))
             logfile.write('\n')
             if tl_info:
                 logfile.write('Transfer learning from:\n')
-                for k,v in tl_info.items():
-                        logfile.write(f'\t{k} = {v}\n')
+                logfile.write(ut.dict2str(tl_info))
                 logfile.write('\n')
             else:
                 logfile.write('No transfer learning\n\n')
             logfile.write('\n\n\n')
+
+        # log kwargs
+        logger.log(44, ut.dict2str(kwargs))
 
         # run
         score, info = None, {}
