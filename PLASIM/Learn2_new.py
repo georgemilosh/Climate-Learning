@@ -741,7 +741,7 @@ for h in [200,300,500,850]: # geopotential heights
 @ut.execution_time  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function
 def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', area='France', filter_area='France',
-              lon_start=-64, lon_end=64, lat_start=0, lat_end=22, mylocal='/local/gmiloshe/PLASIM/',fields=['t2m','zg500','mrso_filtered']):
+              lon_start=-64, lon_end=64, lat_start=0, lat_end=22, mylocal='/local/gmiloshe/PLASIM/',fields=['t2m','zg500','mrso_filtered'], preprefix='ANO_'):
     '''
     Loads the data into Plasim_Fields objects
 
@@ -772,6 +772,8 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
         list of field names to be loaded. Add '_filtered' to the name to have the values of the field outside `filter_area` set to zero.
         Add '_ghost' to the name of the field to load it but not use it for learning.
         This happens when you need to compute the labels on a field that won't be fed to the network.
+    preprefix: str, optional
+        The name of the input file starts with preprefix. In practice it is either null or 'ANO' which indicates precomputed anomalies
 
     Returns
     -------
@@ -785,7 +787,7 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
     if dataset_years == 1000:
         dataset_suffix = ''
     elif dataset_years == 8000:
-        dataset_suffix = '_LONG'
+        dataset_suffix = 'LONG'
     else:
         raise ValueError(f'Invalid number of {dataset_years = }')
 
@@ -802,10 +804,17 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
 
     if sampling == '3hrs': 
         prefix = ''
-        file_suffix = f'../Climate/Data_Plasim{dataset_suffix}/'
+        if dataset_suffix == '':
+            file_suffix = f'../Climate/Data_Plasim/'
+        else:
+            file_suffix = f'../Climate/Data_Plasim_{dataset_suffix}/'
     else:
-        prefix = f'ANO{dataset_suffix}_'
-        file_suffix = f'Data_Plasim{dataset_suffix}/'
+        if dataset_suffix == '':
+            prefix = f'{preprefix}{dataset_suffix}'
+            file_suffix = f'Data_Plasim{dataset_suffix}/'
+        else:
+            prefix = f'{preprefix}{dataset_suffix}_'
+            file_suffix = f'Data_Plasim_{dataset_suffix}/'
 
     # load the fields
     _fields = {}

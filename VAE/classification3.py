@@ -100,16 +100,19 @@ def classify(fold_folder, evaluate_epoch, vae, X_tr, z_tr, Y_tr, X_va, z_va, Y_v
     logger.info(f"==classify of classification.py==")
     #logger.info(f"{X_va[23,15,65,0] = }, {z_va[23,14] = }, {Y_va[23] = }") # Just testing if data is processed properly (potentially remove this line)
     #logger.info(f"{X_tr[23,15,65,0] = }, {z_tr[23,14] = }, {Y_tr[23] = }") # Just testing if data is processed properly (potentially remove this line)
-    #if evaluate_epoch>999:
-    #    checkpoints = list(range(0,10,1))+list(range(10,100,10))+list(range(100,1000,100))+list(range(1000,evaluate_epoch+1,1000))
-    #elif evaluate_epoch>99: # because we want range to reach the last evaluate_epoch
-    #    checkpoints = list(range(0,10,1))+list(range(10,100,10))+list(range(100,evaluate_epoch+1,100))
-    #elif evaluate_epoch>9: # because we want range to reach the last evaluate_epoch
-    #    checkpoints = list(range(0,10,1))+list(range(10,evaluate_epoch+1,10))
-    #else:
-    #    checkpoints = list(range(0,evaluate_epoch+1,1))
-    #checkpoints = checkpoints[1:]
-    checkpoints = [10,100,1000]
+    
+    if evaluate_epoch>999:
+        checkpoints = list(range(0,10,1))+list(range(10,100,10))+list(range(100,1000,100))+list(range(1000,evaluate_epoch+1,1000))
+    elif evaluate_epoch>99: # because we want range to reach the last evaluate_epoch
+        checkpoints = list(range(0,10,1))+list(range(10,100,10))+list(range(100,evaluate_epoch+1,100))
+    elif evaluate_epoch>9: # because we want range to reach the last evaluate_epoch
+        checkpoints = list(range(0,10,1))+list(range(10,evaluate_epoch+1,10))
+    else:
+        checkpoints = list(range(0,evaluate_epoch+1,1))
+    checkpoints = checkpoints[1:]
+    
+    #checkpoints = [1,10,100,1000]
+    #checkpoints = [1,10,50,100]
     score = []
     # labels = ['Log_L2','Log_L1','kNN_uni','vae.class']
     labels = ['Log_L2','kNN_uni']
