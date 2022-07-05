@@ -2135,7 +2135,11 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
         for field in fields.values():
             #logger.info(f"{field.area_integral =}")=
             temp = (field.area_integral.to_numpy().reshape(field.years,-1))[year_permutation]
-            time_series.append((temp[:,time_start+tau:time_end+tau-T+1]).flatten()) 
+            # flatten the time axis dropping the organizatin in years
+            if flatten_time_axis:
+                time_series.append((temp[:,time_start+tau:time_end+tau-T+1]).flatten()) 
+            else:
+                time_series.append((temp[:,time_start+tau:time_end+tau-T+1])) 
         
         logger.info(f"{time_series = }")
         time_series = np.array(time_series).T
