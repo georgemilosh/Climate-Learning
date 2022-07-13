@@ -858,7 +858,7 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
 
 @ut.execution_time
 @ut.indent_logger(logger)
-def assign_labels(field, time_start=30, time_end=120, T=14, percent=5, threshold=None, label_period_start=None, label_period_end=None, A_weights=None):
+def assign_labels(field, time_start=30, time_end=120, T=14, percent=5, threshold=None, label_period_start=None, label_period_end=None, A_weights=None, return_threshold=False):
     '''
     Given a field of anomalies it computes the `T` days forward convolution of the integrated anomaly and assigns label 1 to anomalies above a given `threshold`.
     If `threshold` is not provided, then it is computed from `percent`, namely to identify the `percent` most extreme anomalies.
@@ -882,6 +882,8 @@ def assign_labels(field, time_start=30, time_end=120, T=14, percent=5, threshold
         if provided the first day after the end of the period of interst for the label threshold determination
     A_weights: list, optional
         if provided will influence how running mean is computed
+    return_threshold: bool, optional
+        if provided as True the output also involves threshold_new
 
     Returns:
     --------
@@ -909,6 +911,8 @@ def assign_labels(field, time_start=30, time_end=120, T=14, percent=5, threshold
         field.A = A # This is a placeholder variable that can be used as a running mean save. Problem is that our routines do not output it and rewritting could cause issues with backward compatibility
     labels, threshold = ef.is_over_threshold(field.to_numpy(A), threshold=threshold_new, percent=percent)
     logger.info(f"{threshold_new = }")
+    if return_threshold:
+        return np.array(labels, dtype=int), threshold_new
     return np.array(labels, dtype=int)
 
 @ut.execution_time
@@ -942,7 +946,7 @@ def make_X(fields, time_start=30, time_end=120, T=14, tau=0):
 
 @ut.execution_time
 @ut.indent_logger(logger)
-def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0, percent=5, threshold=None, label_period_start=None, label_period_end=None, A_weights=None):
+def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0, percent=5, threshold=None, label_period_start=None, label_period_end=None, A_weights=None, return_threshold=False):
     '''
     Combines `make_X` and `assign_labels`
 
@@ -989,8 +993,12 @@ def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0,
             lf = fields[f'{label_field}_ghost']
         except KeyError:
             raise KeyError(f'Unable to find label field {label_field} among the provided fields {list(fields.keys())}')
-    Y = assign_labels(lf, time_start=time_start, time_end=time_end, T=T, percent=percent, threshold=threshold, label_period_start=label_period_start, label_period_end=label_period_end, A_weights=A_weights)
-    return X,Y
+    if return_threshold:
+        Y, threshold_new = assign_labels(lf, time_start=time_start, time_end=time_end, T=T, percent=percent, threshold=threshold, label_period_start=label_period_start, label_period_end=label_period_end, A_weights=A_weights, return_threshold=return_threshold)
+        return X,Y,threshold_new
+    else:
+        Y = assign_labels(lf, time_start=time_start, time_end=time_end, T=T, percent=percent, threshold=threshold, label_period_start=label_period_start, label_period_end=label_period_end, A_weights=A_weights)
+        return X,Y
 
 @ut.execution_time
 @ut.indent_logger(logger)
@@ -2054,8 +2062,15 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
     f = list(fields.values())[0] # take the first field
     lat = np.copy(f.field.lat.data) # 1d array
     lon = np.copy(f.field.lon.data) # 1d array
-
-    X,Y = make_XY(fields, **make_XY_kwargs)
+    if ut.keys_exists(make_XY_kwargs, 'return_threshold'):
+        return_threshold = ut.extract_nested(make_XY_kwargs, 'return_threshold')
+    else:
+        return_threshold = False
+    print(f"{return_threshold = }")
+    if return_threshold:
+        X,Y, threshold = make_XY(fields, **make_XY_kwargs)
+    else:
+        X,Y = make_XY(fields, **make_XY_kwargs)
     time_start = ut.extract_nested(make_XY_kwargs, 'time_start') # We need to extract these values to limit the season of Y which matters for balancing folds (see below)
     time_end = ut.extract_nested(make_XY_kwargs, 'time_end')
     label_period_start = ut.extract_nested(make_XY_kwargs, 'label_period_start')
@@ -2144,9 +2159,15 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
         logger.info(f"{time_series = }")
         time_series = np.array(time_series).T
         logger.info(f"{time_series.shape = }")
-        return X, Y, year_permutation, lat, lon, time_series
+        if return_threshold:
+            return X, Y, year_permutation, lat, lon, time_series, threshold
+        else:
+            return X, Y, year_permutation, lat, lon, time_series
     
-    return X, Y, year_permutation, lat, lon
+    if return_threshold:
+        return X, Y, year_permutation, lat, lon,  threshold
+    else:
+        return X, Y, year_permutation, lat, lon
 
 
 @ut.execution_time
