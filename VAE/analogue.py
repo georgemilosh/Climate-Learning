@@ -1,6 +1,6 @@
 # George Miloshevich 2022
-# This routine is written for two parameters: input folder for VAE weights and the given epoch. It shows us how good the classification of the VAE works
-# The new usage classification3.py <folder> <epochs>
+# This routine is written for two parameters: input folder for VAE weights and the given epoch. It computes the analogs based on the projected states using VAE
+# The new usage analogue.py <folder> <epochs>
 #   example <epochs> = [10,100,1000]
 import os, sys
 import shutil
@@ -147,9 +147,14 @@ def classify(fold_folder, evaluate_epoch, vae, X_tr, z_tr, Y_tr, X_va, z_va, Y_v
                 logger.info(f"Before undersampling: {len(Y_tr) = }, {len(Y_va) = }, {np.sum(Y_tr==1) = }, {np.sum(Y_va==1) = }")    
                 #z_tr, Y_tr = ln.undersample(z_tr, Y_tr, u=u)  
                 #logger.info(f"After undersampling: {len(Y_tr) = }, {len(Y_va) = }, {np.sum(Y_tr==1) = }, {np.sum(Y_va==1) = }")    
+                """ # It seems strange I was dumping the matrices each checkpoint, they are growing dictionaries after all...
                 open_file = open(f'{fold_folder}/analogues.pkl', "wb")
                 pickle.dump({'dist_tr' : dist_tr, 'ind_new_tr' : ind_new_tr, 'dist_va' : dist_va, 'ind_new_va' : ind_new_va}, open_file)
                 open_file.close()
+                """
+        open_file = open(f'{fold_folder}/analogues.pkl', "wb")
+        pickle.dump({'dist_tr' : dist_tr, 'ind_new_tr' : ind_new_tr, 'dist_va' : dist_va, 'ind_new_va' : ind_new_va}, open_file)
+        open_file.close()
     logger.info(f"{Style.RESET_ALL}")
     return 0
 
