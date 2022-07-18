@@ -17,7 +17,6 @@ from imblearn.combine import SMOTEENN
 from imblearn.pipeline import Pipeline
 from operator import mul
 from functools import reduce
-from sklearn.decomposition import PCA
 
 def custom_CNN(model_input_dim): # This CNN I took from https://www.tensorflow.org/tutorials/images/cnn
     model = models.Sequential()
@@ -74,12 +73,13 @@ def bottom_layers(input_1):
     x = layers.Dropout(0.2)(x)
     return layers.Dense(2)(x)
 
+
 from tensorflow.keras.regularizers import l2
 import math
-def create_regularized_model(factor, mysize):
+def create_regularized_model(factor, rate, inputshape=(1,)):
     model = tf.keras.models.Sequential([
         #tf.keras.layers.Flatten(input_shape=(8, 8)),     # if the model has a tensor input
-        tf.keras.layers.Input(shape=(mysize,)),                 # if the model has a flat input
+        tf.keras.layers.Input(shape=inputshape),                 # if the model has a flat input
         tf.keras.layers.Dense(2, kernel_regularizer=l2(factor))
     ])
     return model
@@ -96,7 +96,7 @@ def PrepareData(creation = []):  # if we do not specify creation it automacially
     else:
         T = 14
 
-    tau = -20 #-5  # lag
+    tau = 0 #-5  # lag
     usepipelines = False # if True => Dataset.from_tensor_slices will be used. This is a more advanced method but it takes more RAM and there is a possiblity for memory leaks when repeating training for cross-validation
     fullmetrics = True # If True MCC and confusion matrix will be evaluated during training. This makes training slower!
 
@@ -124,7 +124,7 @@ def PrepareData(creation = []):  # if we do not specify creation it automacially
     oversampling_factor = 1 # oversampling_factor = 1 means that oversampling will not be performed
     thefield = 't2m' # Important: this is the field that is used to determine the extrema (important for undersampling) and therefore the label space
     BATCH_SIZE = 1024 # choose this for training so that the chance of encountering positive batches is nonnegligeable
-    NUM_EPOCHS = 40 #1000 #20 #200 #50 # number of epochs the training involves
+    NUM_EPOCHS = 100 #1000 #20 #200 #50 # number of epochs the training involves
     saveweightseveryblaepoch = 1 # If set to 0 the model will not save weights as it is being trained, otherwise this number will tell us how many epochs it weights until saving
     if saveweightseveryblaepoch > 0:
         ckpt = 'ckpt'
@@ -133,8 +133,11 @@ def PrepareData(creation = []):  # if we do not specify creation it automacially
 
     #checkpoint_name = myscratch+'training/stack_CNN_equalmixed_'+ckpt+'_'+thefield+'France_'+'_with_mrsoArea_'+sampling+'_u'+str(undersampling_factor)+'o'+str(oversampling_factor)+'_LONG'+str(num_years)+'yrs_'+'_per_'+str(percent)+'_tau_'+str(tau)
     #checkpoint_name = myscratch+'training/stack_CNNdeepwide2maxpool_equalmix_'+ckpt+'_'+thefield+'France_'+'_with_t2m_zg500_mrsoFrance_'+sampling+'_22by128_u'+str(undersampling_factor)+'o'+str(oversampling_factor)+'_LONG'+str(num_years)+'yrs_'+'_per_'+str(percent)+'_tau_'+str(tau)
-    checkpoint_name = myscratch+'training/stackWout0s_PCA64L2LOG1e-2_equalmix_'+ckpt+'_'+thefield+'France_'+'_with_t2m_zg500_mrsoFrance_'+sampling+'_18by42_u'+str(undersampling_factor)+'o'+str(oversampling_factor)+'_LONG'+str(num_years)+'yrs_'+'_per_'+str(percent)+'_tau_'+str(tau)
+    #checkpoint_name = myscratch+'training/stack_CNN_equalmix_'+ckpt+'_'+thefield+'France_'+'_with_zg500_t2mmrsoFrance_'+sampling+'_22by128_u'+str(undersampling_factor)+'o'+str(oversampling_factor)+'_LONG'+str(num_years)+'yrs_'+'_per_'+str(percent)+'_finetune_tau_'+str(tau)
     #checkpoint_name = myscratch+'training/test'
+    checkpoint_name_root = myscratch+'training/stack_CNN_equalmixed_'+ckpt+'_'+thefield+'T'+str(T)+'France_'+'_with_zg500_t2mmrsoFrance_'+sampling+'lr5e-5_u'+str(undersampling_factor)+'o'+str(oversampling_factor)+'_'+str(num_years)+'yrs_'+'_per_'+str(percent)+'_finetune_tau_'
+    checkpoint_name = checkpoint_name_root+str(tau)
+    checkpoint_name_previous = checkpoint_name_root+str(tau+1)
 
     print("creation = ", creation)
     if creation == []: # If we are not running from the same directory
@@ -156,14 +159,14 @@ def PrepareData(creation = []):  # if we do not specify creation it automacially
         shutil.copy(myscratch+'Recalc_Tau_Metrics.py', checkpoint_name)
         shutil.copy(myscratch+'Metrics.py', checkpoint_name)
 
-    lat_from = [4,4]     # 18x42
-    lat_to   = [22,22]
-    lon_from = [101,0]
-    lon_to   = [128,15]
-    #lat_from =  [0,0]   # 22x128
-    #lat_to =    [22,22]
-    #lon_from =  [64, 0]
-    #lon_to =    [128, 64]
+    #lat_from = [4,4]     # 18x42
+    #lat_to   = [22,22]
+    #lon_from = [101,0]
+    #lon_to   = [128,15]
+    lat_from =  [0,0]   # 22x128
+    lat_to =    [22,22]
+    lon_from =  [64, 0]
+    lon_to =    [128, 64]
 
 
     print([percent, T, Model, area, undersampling_factor, lat_from, lat_to, lon_from, lon_to, thefield])
@@ -237,6 +240,7 @@ def PrepareData(creation = []):  # if we do not specify creation it automacially
             filter_mask[filter_lat_from[myiter]:filter_lat_to[myiter],filter_lon_from[myiter]:filter_lon_to[myiter]] = 1
                 
     mrso.var = mrso.var*filter_mask # applying the filter to set to zero all values outside the domain
+
     
     if creation == []: # If we are not running from the same directory
         filename_mixing = t2m.PreMixing(new_mixing, 'PostprocLONG',num_years)  # perform mixing (mix batches and years but not days of the same year!)  # NEW MIXING MEANS ALSO NEW UNDERSAMPLING!
@@ -271,6 +275,9 @@ def PrepareData(creation = []):  # if we do not specify creation it automacially
     
     A, A_reshape, threshold, list_extremes, convseq =  t2m.ComputeTimeAverage(time_start,time_end,T,tau, percent)
     
+    # ===== Applying filter to the temperature field: ====
+    t2m.var = t2m.var*filter_mask # applying the filter to set to zero all values outside the domain
+    
     print("threshold = ",threshold)
     print(A.dtype)
     # Below we reshape into time by flattened array
@@ -284,13 +291,13 @@ def PrepareData(creation = []):  # if we do not specify creation it automacially
 
 
     # Below we reshape into time by flattened array
-    Xs = [t2m.ReshapeInto2Dseries(time_start, time_end,lat_from1,lat_to1,lon_from1,lon_to1,T,tau) for lat_from1,lat_to1, lon_from1, lon_to1 in zip(lat_from,lat_to,lon_from,lon_to)] # here we extract the portion of the globe
+    #Xs = [t2m.ReshapeInto2Dseries(time_start, time_end,lat_from1,lat_to1,lon_from1,lon_to1,T,tau) for lat_from1,lat_to1, lon_from1, lon_to1 in zip(lat_from,lat_to,lon_from,lon_to)] # here we extract the portion of the globe
     #                   If only 2m temperature is used the following command is to be used: (1D representation)
     #
     #X = np.concatenate(Xs, axis=1)
     #                   If we want to include soil moisture integrated over the area the following command is to be used:
     #   (1D representation)
-    X = np.c_[t2m.abs_area_int_reshape[:,np.newaxis],mrso.abs_area_int_reshape[:,np.newaxis],np.concatenate(Xs, axis=1)]
+    #X = np.c_[mrso.abs_area_int_reshape[:,np.newaxis],np.concatenate(Xs, axis=1)]
     #
     # Below we reshape into a timex 2D array (space)
 
@@ -303,22 +310,21 @@ def PrepareData(creation = []):  # if we do not specify creation it automacially
     ##Xs = [zg500.ReshapeInto2Dseries(time_start, time_end,lat_from1,lat_to1,lon_from1,lon_to1,T,tau,dim=2) for lat_from1,lat_to1, lon_from1, lon_to1 in zip(lat_from,lat_to,lon_from,lon_to)] # here we extract the portion of the globe
     ##Xs = [mrso.ReshapeInto2Dseries(time_start, time_end,lat_from1,lat_to1,lon_from1,lon_to1,T,tau,dim=2) for lat_from1,lat_to1, lon_from1, lon_to1 in zip(lat_from,lat_to,lon_from,lon_to)] # here we extract the portion of the globe
     ##Xs = [t2m.ReshapeInto2Dseries(time_start, time_end,lat_from1,lat_to1,lon_from1,lon_to1,T,tau,dim=2) for lat_from1,lat_to1, lon_from1, lon_to1 in zip(lat_from,lat_to,lon_from,lon_to)] # here we extract the portion of the globe
-    #X = np.concatenate(Xs, axis=2)
-    #X = X[:,:,:,np.newaxis]
-    print(f"{X.shape = }")
+    ##X = np.concatenate(Xs, axis=2)
+    ##X = X[:,:,:,np.newaxis]
 
     # =================Use this if many fields need to be used:============
 
-    #Xs = [zg500.ReshapeInto2Dseries(time_start, time_end,lat_from1,lat_to1,lon_from1,lon_to1,T,tau,dim=2) for lat_from1,lat_to1, lon_from1, lon_to1 in zip(lat_from,lat_to,lon_from,lon_to)] # here we extract the portion of the globe
-    #X = np.concatenate(Xs, axis=2)
+    Xs = [t2m.ReshapeInto2Dseries(time_start, time_end,lat_from1,lat_to1,lon_from1,lon_to1,T,tau,dim=2) for lat_from1,lat_to1, lon_from1, lon_to1 in zip(lat_from,lat_to,lon_from,lon_to)] # here we extract the portion of the globe
+    X = np.concatenate(Xs, axis=2)
     
-    
+
     ## Without Coarse Graining:
-    #Xs = [zg500.ReshapeInto2Dseries(time_start, time_end,lat_from1,lat_to1,lon_from1,lon_to1,T,tau,dim=2) for lat_from1,lat_to1, lon_from1, lon_to1 in zip(lat_from,lat_to,lon_from,lon_to)] # here we extract the portion of the globe
-    #X= np.concatenate([X[:,:,:,np.newaxis], np.concatenate(Xs, axis=2)[:,:,:,np.newaxis]], axis=3)
+    Xs = [zg500.ReshapeInto2Dseries(time_start, time_end,lat_from1,lat_to1,lon_from1,lon_to1,T,tau,dim=2) for lat_from1,lat_to1, lon_from1, lon_to1 in zip(lat_from,lat_to,lon_from,lon_to)] # here we extract the portion of the globe
+    X= np.concatenate([X[:,:,:,np.newaxis], np.concatenate(Xs, axis=2)[:,:,:,np.newaxis]], axis=3)
     
-    #Xs = [mrso.ReshapeInto2Dseries(time_start, time_end,lat_from1,lat_to1,lon_from1,lon_to1,T,tau,dim=2) for lat_from1,lat_to1, lon_from1, lon_to1 in zip(lat_from,lat_to,lon_from,lon_to)] # here we extract the portion of the globe
-    #X= np.concatenate([X, np.concatenate(Xs, axis=2)[:,:,:,np.newaxis]], axis=3)
+    Xs = [mrso.ReshapeInto2Dseries(time_start, time_end,lat_from1,lat_to1,lon_from1,lon_to1,T,tau,dim=2) for lat_from1,lat_to1, lon_from1, lon_to1 in zip(lat_from,lat_to,lon_from,lon_to)] # here we extract the portion of the globe
+    X= np.concatenate([X, np.concatenate(Xs, axis=2)[:,:,:,np.newaxis]], axis=3)
     
     ## Use below for fused networks
     #X = [X, mrso.abs_area_int_reshape[:,np.newaxis]]#, t2m.abs_area_int_reshape[:,np.newaxis]]
@@ -362,7 +368,7 @@ def PrepareData(creation = []):  # if we do not specify creation it automacially
     #X = zg500.ComputeFFTnoPad(time_start, time_end,T,tau,'real',(18,42))
     del t2m.var
     gc.collect() # Garbage collector which removes some extra references to the object
-    usepipelines = A_reshape, threshold
+    usepipelines = A_reshape, threshold, checkpoint_name_previous, tau
     undersampling_factor = [undersampling_factor, oversampling_factor]
                                 
     return X, list_extremes, thefield, sampling, percent, usepipelines, undersampling_factor, new_mixing,  saveweightseveryblaepoch, NUM_EPOCHS, BATCH_SIZE, checkpoint_name, fullmetrics
@@ -396,6 +402,23 @@ if __name__ == '__main__':
 
 
     mylabels = np.array(list_extremes)
+    checkpoint_name_previous = usepipelines[2]
+    tau = usepipelines[3]
+
+    if tau < 0: # else tau = 0 is assumed to be the first training we perform
+
+        # Here we insert analysis of the previous tau with the assessment of the ideal checkpoint
+        history = np.load(checkpoint_name_previous+'/batch_'+str(0)+'_history.npy', allow_pickle=True).item()
+        if ('val_CustomLoss' in history.keys()):
+            print( "'val_CustomLoss' in history.keys()")
+            historyCustom = []
+            for i in range(10): # preemptively compute the optimal score
+                historyCustom.append(np.load(checkpoint_name_previous+'/batch_'+str(i)+'_history.npy', allow_pickle=True).item()['val_CustomLoss'])
+            historyCustom = np.mean(np.array(historyCustom),0)
+            opt_checkpoint = np.argmin(historyCustom) # We will use optimal checkpoint in this case!
+        else:
+            print( "'val_CustomLoss' not in history.keys()")
+            sys.exit("Aborting the program!")
 
 
     my_MCC = np.zeros(10,)
@@ -409,8 +432,12 @@ if __name__ == '__main__':
     for i in range(10):
         print("===============================")
         print("cross validation i = ", str(i))
-    
-        test_indices, train_indices, train_true_labels_indices, train_false_labels_indices, filename_permutation = TrainTestSplitIndices(i,X, mylabels, 1, sampling, new_mixing, thefield, percent) # 1 implies undersampling_rate=1 indicating that we supress the manual undersampling
+        if isinstance(X, list):
+            print("X is a list")
+            test_indices, train_indices, train_true_labels_indices, train_false_labels_indices, filename_permutation = TrainTestSplitIndices(i,X[0], mylabels, 1, sampling, new_mixing, thefield, percent) # 1 implies undersampling_rate=1 indicating that we supress the manual undersampling
+        else:
+            print("X is not a list")
+            test_indices, train_indices, train_true_labels_indices, train_false_labels_indices, filename_permutation = TrainTestSplitIndices(i,X, mylabels, 1, sampling, new_mixing, thefield, percent) # 1 implies undersampling_rate=1 indicating that we supress the manual undersampling
         print("# events in the train sample after TrainTestSp;litIndices: ",  len(train_indices))
         print("original proportion of positive events in the train sample: ",  np.sum(mylabels[train_indices])/len(train_indices))
         
@@ -431,62 +458,116 @@ if __name__ == '__main__':
                 steps = [('u', under)]
         pipeline = Pipeline(steps=steps) # The Pipeline can then be applied to a dataset, performing each transformation in turn and returning a final dataset with the accumulation of the transform applied to it, in this case oversampling followed by undersampling.
         # To make use of the in-built pipelines we need to transform the X into the required dimensions
-       
-        XTrain_indicesShape = X[train_indices].shape
-        print("Original dimension of the train set is X[train_indices].shape = ", XTrain_indicesShape)
-        #X_train, Y_train = pipeline.fit_resample(X[train_indices].reshape(XTrain_indicesShape[0],XTrain_indicesShape[1]*XTrain_indicesShape[2]*XTrain_indicesShape[3]),  mylabels[train_indices])
-        #X_train = X_train.reshape(X_train.shape[0],XTrain_indicesShape[1],XTrain_indicesShape[2],XTrain_indicesShape[3])
-        XTrain_indicesShape = list(XTrain_indicesShape)
-        print("XTrain_indicesShape = ", XTrain_indicesShape)
-        X_train, Y_train = pipeline.fit_resample(X[train_indices].reshape(tuple([XTrain_indicesShape[0],np.prod(XTrain_indicesShape[1:])])),  mylabels[train_indices])
-        XTrain_indicesShape[0] = X_train.shape[0]
-        print("XTrain_indicesShape = ", XTrain_indicesShape)
-        X_train = X_train.reshape(tuple(XTrain_indicesShape))
+        if isinstance(X, list): # if list we are dealing with fused (combined) approach (at least partially)
+            XTrain_indicesShape = [Xloop[train_indices].shape for Xloop in X] # each element of X has a specific shape
+            XTrain_indicesLength = [reduce(mul, XTrain_indicesShapeIter[1:]) for XTrain_indicesShapeIter in XTrain_indicesShape] # each shape is converted to an integer
+            XTrain_indicesLengthAccumulate = list(itertools.accumulate(XTrain_indicesLength))
+            XTrain_indicesLengthAccumulate.insert(0,0)
+            print("Original dimension of the train set is X[train_indices].shape = ", XTrain_indicesShape)
+            print("Original dimension of the train set is XTrain_indicesLength = ", XTrain_indicesLength)
+            print("Original dimension of the train set is XTrain_indicesLengthAccumulate = ", XTrain_indicesLengthAccumulate)
+            X_train, Y_train = pipeline.fit_resample(np.concatenate([Xloop[train_indices].reshape(Train_indicesShapeloop[0], XTrain_indicesLengthloop) for Xloop, Train_indicesShapeloop, XTrain_indicesLengthloop in zip(X, XTrain_indicesShape, XTrain_indicesLength)], axis=1), mylabels[train_indices])
+            print("post-pipeline X_train.shape = ", X_train.shape)
+            # Next step is to unpack the X into its intended dimension
+            for myiter in range(len(XTrain_indicesShape)): # number of samples has changed
+                temp = list(XTrain_indicesShape[myiter])
+                temp[0] = X_train.shape[0]
+                XTrain_indicesShape[myiter] = tuple(temp)#.insert(0,X_train.shape[0]))
+                 
+            print("XTrain_indicesShape = ", XTrain_indicesShape)
+            X_train = [X_train[:,XTrain_indicesLengthAccumulate1: XTrain_indicesLengthAccumulate2].reshape(XTrain_indicesShapeloop) for XTrain_indicesLengthAccumulate1, XTrain_indicesLengthAccumulate2, XTrain_indicesShapeloop in zip(XTrain_indicesLengthAccumulate[:-1],XTrain_indicesLengthAccumulate[1:],XTrain_indicesShape)] 
+        else: # If X is not a list we expect it to be an array useful for fully stacked approach
+            XTrain_indicesShape = X[train_indices].shape
+            print("Original dimension of the train set is X[train_indices].shape = ", XTrain_indicesShape)
+            #X_train, Y_train = pipeline.fit_resample(X[train_indices].reshape(XTrain_indicesShape[0],XTrain_indicesShape[1]*XTrain_indicesShape[2]*XTrain_indicesShape[3]),  mylabels[train_indices])
+            #X_train = X_train.reshape(X_train.shape[0],XTrain_indicesShape[1],XTrain_indicesShape[2],XTrain_indicesShape[3])
+            XTrain_indicesShape = list(XTrain_indicesShape)
+            print("XTrain_indicesShape = ", XTrain_indicesShape)
+            X_train, Y_train = pipeline.fit_resample(X[train_indices].reshape(tuple([XTrain_indicesShape[0],np.prod(XTrain_indicesShape[1:])])),  mylabels[train_indices])
+            XTrain_indicesShape[0] = X_train.shape[0]
+            print("XTrain_indicesShape = ", XTrain_indicesShape)
+            X_train = X_train.reshape(tuple(XTrain_indicesShape))
 
         Y_test = mylabels[test_indices]
         neg = train_false_labels_indices.shape[0]
         pos = train_true_labels_indices.shape[0]
         
-        print("====Dimensions of the data before entering the neural net===")
-        print("dimension of the train set is X[train_indices].shape = ", X_train.shape)
-        X_mean = np.mean(X_train,0)
-        X_std = np.std(X_train,0)
-        X_std[X_std==0] = 1 # If there is no variance we shouldn't divide by zero
+        if isinstance(X, list): # If list we need to renormalize it for each instance of the list
+            for Xdim in range(len(X)):
+                print("dimension of the train set is X[", Xdim, "][train_indices].shape = ", X[Xdim][train_indices].shape)
+            print("# of the true labels = ", np.sum(mylabels[train_indices]))
+            print("effective sampling rate for rare events is ", np.sum(mylabels[train_indices])/X[0][train_indices].shape[0])
 
-        X_test = (X[test_indices]-X_mean)/X_std
-        Y_test = mylabels[test_indices]
+            X_mean = [np.mean(Xloop[train_indices], 0) for Xloop in X]
+            for X_meanloop in X_mean:
+                print("X_meanloop.shape = ", X_meanloop.shape)
+            X_std = [np.std(Xloop[train_indices],0) for Xloop in X]
+            for X_stdloop in X_std:
+                print("X_stdloop.shape = ", X_stdloop.shape)
+                X_stdloop[X_stdloop==0] = 1 # If there is no variance we shouldn't divide by zero
+             
+            X_test = [] # Normalization applied here
+            for iteration in range(len(X_std)):
+                X_test.append( (X[iteration][test_indices]-X_mean[iteration])/X_std[iteration] )
+                X_train[iteration] = (X_train[iteration]-X_mean[iteration])/X_std[iteration]
+            print("====Dimensions of the data before entering the neural net===")
+            print("unpacked normalized X_train.shape = ", [X_trainloop.shape for X_trainloop in X_train])
+            print("X_test.shape = ", [X_testloop.shape for X_testloop in X_test])
+        else: # If not a list we expect an array and thus much more straightforward normalization
+            print("====Dimensions of the data before entering the neural net===")
+            print("dimension of the train set is X[train_indices].shape = ", X_train.shape)
+            X_mean = np.mean(X_train,0)
+            X_std = np.std(X_train,0)
+            X_std[X_std==0] = 1 # If there is no variance we shouldn't divide by zero
 
-        X_train = (X_train-X_mean)/X_std
-        
-        X_train = X_train.reshape(X_train.shape[0],-1)
-        X_test = X_test.reshape(X_test.shape[0],-1)
-        
-        print("X_train.shape = ", X_train.shape, " ,X_test.shape = ", X_test.shape)
+            X_test = (X[test_indices]-X_mean)/X_std
+            Y_test = mylabels[test_indices]
+
+            X_train = (X_train-X_mean)/X_std
+
+
          
         print("Y_train.shape = ", Y_train.shape)
         print("Y_test.shape = ", Y_test.shape)
-        n_components = 64
-        pca1 = PCA(n_components=n_components, svd_solver='randomized', whiten=True).fit(X_train)
-        print("pca1.explained_variance_ratio_ = ", np.sum(pca1.explained_variance_ratio_))
-        X_train = pca1.transform(X_train)
-        X_test = pca1.transform(X_test)
-        
-        print("X_train.shape = ", X_train.shape, " ,X_test.shape = ", X_test.shape)
          
         print("Train set: # of true labels = ", np.sum(Y_train), " ,# of false labels = ", Y_train.shape[0] - np.sum(Y_train))
         print("Train set: effective sampling rate for rare events is ", np.sum(Y_train)/Y_train.shape[0])
         
         np.save(checkpoint_name+'/batch_'+str(i)+'_X_mean', X_mean)
         np.save(checkpoint_name+'/batch_'+str(i)+'_X_std', X_std)
-        
-        #model_input_dim = X.shape[1:] #(X.shape[1],X.shape[2])
-        #model = custom_CNN(model_input_dim) 
-        #model_input_dim = X.shape[1:] #(X.shape[1],X.shape[2])
-        model = create_regularized_model(1e-2, X_train.shape[1])
-        
+
+        if tau < 0:
+            print("opt_checkpoint: ", opt_checkpoint, " ,loading model: ", checkpoint_name_previous)
+            model = (tf.keras.models.load_model(checkpoint_name_previous+'/batch_'+str(i), compile=False)) # if we just want to train
+
+            nb_zeros_c = 4-len(str(opt_checkpoint))
+            cp_checkpoint_name = '/cp-'+nb_zeros_c*'0'+str(opt_checkpoint)+'.ckpt'
+            print("loading weights from ",checkpoint_name_previous+'/batch_'+str(i)+cp_checkpoint_name)
+            model.load_weights(checkpoint_name_previous+'/batch_'+str(i)+cp_checkpoint_name)
+        else:
+
+            if isinstance(X, list):
+                inputs = []
+                for myindex in range(len(X)): # preparing inputs for the probability softmax
+                    model_input_dim = X[myindex].shape[1:]
+                    inputs.append(layers.Input(shape=model_input_dim))
+                print("inputs = ", inputs)
+                x1 = CNN_layers(inputs[0])
+                x2 = layers.Dense(8, activation='relu')(inputs[1])
+                x = layers.Concatenate()([x1, x2])
+                outputs = bottom_layers(x)
+                model = keras.Model(inputs, outputs)
+            else:
+                model_input_dim = X.shape[1:] #(X.shape[1],X.shape[2])
+                model = custom_CNN(model_input_dim) 
+            """
+            model_input_dim = X.shape[1:] #(X.shape[1],X.shape[2])
+            model = create_regularized_model(1e-9, 1)
+            
+            print("model_input_dim = ",model_input_dim)
+            """
 
         tf_sampling = tf.cast([0.5*np.log(undersampling_factor), -0.5*np.log(undersampling_factor)], tf.float32)
-        #print("model_input_dim = ",model_input_dim)
         model.summary()
         if fullmetrics:
             #METRICS=['accuracy',MCCMetric(2),ConfusionMatrixMetric(2)]   # the last two make the code run longer but give precise discrete prediction benchmarks
@@ -494,7 +575,7 @@ if __name__ == '__main__':
         else:
             METRICS=['loss']
         model.compile(
-            optimizer=tf.keras.optimizers.Adam(learning_rate = 1e-3),
+            optimizer=tf.keras.optimizers.Adam(learning_rate = 5e-5),
             #optimizer=tf.keras.optimizers.Adam(),
             loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True), #If the predicted labels are not converted to a probability distribution by the last layer of the model (using sigmoid or softmax activation functions), we need to inform these three Cross-Entropy functions by setting their from_logits = True.
             #One advantage of using sparse categorical cross-entropy is it saves storage in memory as well as time in computation because it simply uses a single integer for a class, rather than a whole one-hot vector. This works despite the fact that the neural network has an one-hot vector output  
@@ -534,18 +615,7 @@ if __name__ == '__main__':
         print('RAM memory:', my_memory[i][3])
 
 
-        Y_pred = model.predict(X_test)
-
-        np.save(checkpoint_name+'/batch_'+str(i)+'_Y_test.npy',Y_test)
-        np.save(checkpoint_name+'/batch_'+str(i)+'_Y_pred.npy',Y_pred)
-        Y_pred_prob = my_probability_model.predict(X_test)
-        print("Y_pred[0,0] = ", Y_pred[0,0], " ,Y_pred[0,1] = ", Y_pred[0,1])
-        print("Y_pred_prob[0,0] = ", Y_pred_prob[0,0], " ,Y_pred_prob[0,1] = ", Y_pred_prob[0,1])
-        np.save(checkpoint_name+'/batch_'+str(i)+'_Y_pred_prob.npy',Y_pred_prob)
-        # Compute the benchmarks
-
-        my_MCC[i], my_entropy[i], my_skill[i], my_BS[i], my_WBS[i], my_freq[i] = ComputeMetrics(Y_test, Y_pred_prob, percent)
-        del X_test, Y_test, Y_pred, Y_pred_prob
+        del X_test, Y_test
         tf.keras.backend.clear_session()
         gc.collect() # Garbage collector which removes some extra references to the object
 

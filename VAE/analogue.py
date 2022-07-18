@@ -141,8 +141,7 @@ def classify(fold_folder, evaluate_epoch, vae, X_tr, z_tr, Y_tr, X_va, z_va, Y_v
                 logger.info(f"{ind_new_va[checkpoint] = }")
                 
                 logger.info(f"{z_tr.shape = }, {z_va.shape = }, {Zminus3.shape = }" )
-                
-
+                logger.info(f"{ind_new_va[checkpoint].shape = },  {ind_new_tr[checkpoint].shape = }")
 
                 logger.info(f"Before undersampling: {len(Y_tr) = }, {len(Y_va) = }, {np.sum(Y_tr==1) = }, {np.sum(Y_va==1) = }")    
                 #z_tr, Y_tr = ln.undersample(z_tr, Y_tr, u=u)  
