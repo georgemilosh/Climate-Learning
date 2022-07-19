@@ -25,50 +25,99 @@ def module_from_file(module_name, file_path): #The code that imports the file wh
             spec.loader.exec_module(module)
             return module
 
+extra_parameter=1 # extra parameters I add in sys.argv
+
 fig = plt.figure(figsize=(8,4))
-plt.style.use('seaborn-whitegrid')
+#plt.style.use('seaborn-whitegrid')
 ax1 = plt.subplot(121)
 ax2 = plt.subplot(122)
 #ax3 = plt.subplot(143)
 #ax4 = plt.subplot(144)
 
-linestyles=['-', '--', '-.', ':']
-linestylescycle = cycle(linestyles)
-linestylesnext = next(linestylescycle)
 
-markerstyles=['1','2','3','4']
-markerstylescycle = cycle(markerstyles)
-markerstylesnext = next(markerstylescycle)
+ax1.grid(axis='x', color='0.9')
+ax1.grid(axis='y', color='0.9')
+ax2.grid(axis='x', color='0.9')
+ax2.grid(axis='y', color='0.9')
 
-print('Number of curves to output ',len(sys.argv) - 2)
+title = sys.argv[-extra_parameter]
+extra_parameter=extra_parameter+1
+facealpha=0.1
+#widthstyles=[4,3,2,1]
+print(" processing sys.argv[-extra_parameter] = ", sys.argv[-extra_parameter])
+str_widthstyles = sys.argv[-extra_parameter].replace('[', ' ').replace(']', ' ').replace(',', ' ').split()
+widthstyles = [str(s) for s in str_widthstyles]
+extra_parameter=extra_parameter+1
+print("widthstyles = ", widthstyles)
 
-if '[' in sys.argv[-1]: #checking for multiple inputs
+#labels=['$z_G$','$t_M$','$s_M$','$s_L$']
+print(" processing sys.argv[-extra_parameter] = ", sys.argv[-extra_parameter])
+str_labels = sys.argv[-extra_parameter].replace('[', ' ').replace(']', ' ').replace(',', ' ').split()
+labels = [str(s) for s in str_labels]
+extra_parameter=extra_parameter+1
+print("labels = ", labels)
+
+
+#markerstyles=['1','2','3','4']
+
+print(" processing sys.argv[-extra_parameter] = ", sys.argv[-extra_parameter])
+str_markerstyles = sys.argv[-extra_parameter].replace('[', ' ').replace(']', ' ').replace(',', ' ').split()
+markerstyles = [str(s) for s in str_markerstyles]
+extra_parameter=extra_parameter+1
+print("markerstyles = ", markerstyles)
+
+#hatches=['/', '\', '|', '-', '+', 'x', 'o', 'O', '.', '*']
+print(" processing sys.argv[-extra_parameter] = ", sys.argv[-extra_parameter])
+str_hatches = sys.argv[-extra_parameter].replace('[', ' ').replace(']', ' ').replace(',', ' ').split()
+hatches = [str(s) for s in str_hatches]
+extra_parameter=extra_parameter+1
+print("hatches = ", hatches)
+
+#linestyles=['-','--','-.',':']
+print(" processing sys.argv[-extra_parameter] = ", sys.argv[-extra_parameter])
+str_linestyles = sys.argv[-extra_parameter].replace('[', ' ').replace(']', ' ').replace(',', ' ').split()
+linestyles = [str(s) for s in str_linestyles]
+extra_parameter=extra_parameter+1
+print("linestyles = ", markerstyles)
+
+#colors=['tab:blue','tab:orange','tab:green','tab:red']
+print(" processing sys.argv[-extra_parameter] = ", sys.argv[-extra_parameter])
+str_colors = sys.argv[-extra_parameter].replace('[', ' ').replace(']', ' ').replace(',', ' ').split()
+colors = [str(s) for s in str_colors]
+extra_parameter=extra_parameter+1
+print("colors = ", colors)
+
+print(len(labels),len(markerstyles),len(hatches),len(linestyles),len(colors),len(widthstyles))
+
+print('Number of curves to output ',len(sys.argv) - 1 - extra_parameter)
+
+if '[' in sys.argv[-extra_parameter]: #checking for multiple inputs
     #if len(sys.argv[-1]) > 1: # if undersampling_factor is different for each input
-    str_undersampling_factors = sys.argv[-1].replace('[', ' ').replace(']', ' ').replace(',', ' ').split()
+    str_undersampling_factors = sys.argv[-extra_parameter].replace('[', ' ').replace(']', ' ').replace(',', ' ').split()
     undersampling_factors = [float(i) for i in str_undersampling_factors]#[int(i) for i in str_undersampling_factors]
     print("undersampling factors = ", undersampling_factors)
 else:
-    undersampling_factor = float(sys.argv[-1]) #int(sys.argv[-1]) # undersampling_factor is used to re-normalize probabilities
+    undersampling_factor = float(sys.argv[-extra_parameter]) #int(sys.argv[-1]) # undersampling_factor is used to re-normalize probabilities
     print("undersampling factor = ", undersampling_factor)
     
 
-if '[' in sys.argv[-2]:
-    str_checkpoints = sys.argv[-2].replace('[', ' ').replace(']', ' ').replace(',', ' ').split()
+if '[' in sys.argv[-1-extra_parameter]:
+    str_checkpoints = sys.argv[-1-extra_parameter].replace('[', ' ').replace(']', ' ').replace(',', ' ').split()
     checkpoints = [int(i) for i in str_checkpoints]
     print("checkpoints = ", checkpoints)
 else:
-    checkpoint = int(sys.argv[-2])
+    checkpoint = int(sys.argv[-1-extra_parameter])
     print("checkpoint = ", checkpoint)
 
     
-for check_num1, checkpoint_name1 in enumerate(sys.argv[1:-2]):
+for check_num1, checkpoint_name1 in enumerate(sys.argv[1:-1-extra_parameter]):
 #checkpoint_name1 = sys.argv[1]
     print('=========',checkpoint_name1,'=========')
     
-    if '[' in sys.argv[-1]:
+    if '[' in sys.argv[-extra_parameter]:
         #if len(sys.argv[-1]) > 1:
         undersampling_factor = undersampling_factors[check_num1]
-    if '[' in sys.argv[-2]:
+    if '[' in sys.argv[-1-extra_parameter]:
         checkpoint = checkpoints[check_num1]
     
     print("undersampling_factor (r) = ", undersampling_factor)
@@ -246,40 +295,35 @@ for check_num1, checkpoint_name1 in enumerate(sys.argv[1:-2]):
     for i in range(len(sorted_metrics)):
         tau[i], mean_new_MCC[i], std_new_MCC[i], mean_entropy[i], std_entropy[i], mean_BS[i], std_BS[i], mean_skill[i], std_skill[i] = sorted_metrics[i][0], sorted_metrics[i][1][0], sorted_metrics[i][1][1], sorted_metrics[i][1][2], sorted_metrics[i][1][3], sorted_metrics[i][1][4], sorted_metrics[i][1][5], sorted_metrics[i][1][6], sorted_metrics[i][1][7]
 
-    
-    ax1.errorbar(-np.array(tau), mean_new_MCC, yerr = std_new_MCC, capsize = 3, elinewidth = 1, capthick = 1, linestyle=linestylesnext, marker=markerstylesnext)
-    #ax1.plot(-np.array(tau), mean_new_MCC, linestyle=linestylesnext, marker=markerstylesnext)
-    ax1.fill_between(-np.array(tau), np.array(mean_new_MCC) - np.array(std_new_MCC), np.array(mean_new_MCC) + np.array(std_new_MCC), alpha=0.1)
-    ax2.errorbar(-np.array(tau), mean_skill, yerr = std_skill, capsize = 3,  elinewidth = 1, capthick = 1, linestyle=linestylesnext, marker=markerstylesnext)
-    #ax2.plot(-np.array(tau), mean_skill, linestyle=linestylesnext, marker=markerstylesnext)
-    ax2.fill_between(-np.array(tau), np.array(mean_skill) - np.array(std_skill), np.array(mean_skill) + np.array(std_skill), alpha=0.1)
-    #ax3.plot(-np.array(tau), mean_BS, linestyle=linestylesnext, marker=markerstylesnext)
-    #ax3.fill_between(-np.array(tau), np.array(mean_BS) - np.array(std_BS), np.array(mean_BS) + np.array(std_BS), alpha=0.1)
-    #ax4.plot(-np.array(tau), mean_entropy, linestyle=linestylesnext, marker=markerstylesnext)
-    #ax4.fill_between(-np.array(tau), np.array(mean_entropy) - np.array(std_entropy), np.array(mean_entropy) + np.array(std_entropy), alpha=0.1)
-    linestylesnext = next(linestylescycle)
-    markerstylesnext = next(markerstylescycle)
+    print(f">>>>>{3*int(widthstyles[check_num1]) = }, {widthstyles[check_num1] = }, {colors[check_num1] = }, {linestyles[check_num1] = }, {markerstyles[check_num1] = }, {labels[check_num1] = } ")
+    ax1.errorbar(-np.array(tau), mean_new_MCC, yerr = std_new_MCC, capsize = 3*int(widthstyles[check_num1]),  elinewidth = int(widthstyles[check_num1]), capthick = 1, color=colors[check_num1], linestyle=linestyles[check_num1], marker=markerstyles[check_num1], label=labels[check_num1])
+    ax1.fill_between(-np.array(tau), np.array(mean_new_MCC) - np.array(std_new_MCC), np.array(mean_new_MCC) + np.array(std_new_MCC), color=colors[check_num1], hatch=hatches[check_num1], alpha=facealpha)
+    ax2.errorbar(-np.array(tau), mean_skill, yerr = std_skill, capsize = 3*int(widthstyles[check_num1]),  elinewidth = int(widthstyles[check_num1]), capthick = 1, color=colors[check_num1], linestyle=linestyles[check_num1], marker=markerstyles[check_num1], label=labels[check_num1])
+    ax2.fill_between(-np.array(tau), np.array(mean_skill) - np.array(std_skill), np.array(mean_skill) + np.array(std_skill), color=colors[check_num1], hatch=hatches[check_num1], alpha=facealpha)
    
 
-ax1.set_title('MCC')
+#ax1.set_title('MCC')
 ax1.set_xlabel(r'$\tau$ (days)')
 ax2.set_xlabel(r'$\tau$ (days)')
-ax2.set_title('normalized cross-entropy skill')
+#ax2.set_title('normalized cross-entropy skill')
 #ax3.set_xlabel(r'$\tau$ (days)')
 #ax3.set_title('Brier Score')
 #ax4.set_title('categorical cross-entropy')
 #ax4.set_xlabel(r'$\tau$ (days)')
 ax1.set_ylim([-0, .5])
 ax2.set_ylim([-0, .5])
-#plt.legend(loc='best')
+
+if labels[0]!='':
+	ax1.legend(loc='best', fancybox=True, shadow=True)
+	ax2.legend(loc='best', fancybox=True, shadow=True)
 #plt.tight_layout()
 end = time.time()
 print("Computation time = ",end - start)
 
 plt.show()
 bbox = ax1.get_tightbbox(fig.canvas.get_renderer())
-fig.savefig("Images/Tau_scan_MCC_norm"+sys.argv[-1]+".png", bbox_inches=bbox.transformed(fig.dpi_scale_trans.inverted()), dpi=200)
+fig.savefig("Images/"+title+"_MCC.png", bbox_inches=bbox.transformed(fig.dpi_scale_trans.inverted()), dpi=200)
 bbox = ax2.get_tightbbox(fig.canvas.get_renderer())
-fig.savefig("Images/Tau_scan_skill_norm"+sys.argv[-1]+".png", bbox_inches=bbox.transformed(fig.dpi_scale_trans.inverted()), dpi=200)
+fig.savefig("Images/"+title+"_Skill.png", bbox_inches=bbox.transformed(fig.dpi_scale_trans.inverted()), dpi=200)
 
-print("saved Images/Tau_scan_MCC_norm"+sys.argv[-1]+".png and Images/Tau_scan_skill_norm"+sys.argv[-1]+".png")
+print("saved Images/"+title+"_MCC.png and Images/"+title+"_Skill.png")
