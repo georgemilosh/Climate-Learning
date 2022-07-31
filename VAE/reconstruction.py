@@ -92,6 +92,11 @@ if (ut.keys_exists(run_vae_kwargs, 'label_period_start') and ut.keys_exists(run_
         summer_days = time_end - time_start - T + 1
 else:
     summer_days = time_end - time_start - T + 1
+    
+if ut.keys_exists(run_vae_kwargs, 'keep_dims'):
+    keep_dims = ut.extract_nested(run_vae_kwargs, 'keep_dims')
+else:
+    keep_dims = None
 #X, lat, lon, vae, Z_DIM, N_EPOCHS, INITIAL_EPOCH, BATCH_SIZE, LEARNING_RATE, checkpoint_path, fold_folder, myinput, history = foo.PrepareDataAndVAE(fold_folder, DIFFERENT_YEARS=year_permutation[:800])
 year_permutation_va = np.load(f'{fold_folder}/year_permutation_va.npy')
 # Select times we want to show for reconstruction
@@ -156,8 +161,12 @@ def vae_generate_images(vae,Z_DIM,n_to_show=10):
     reconst_images = vae.decoder.predict(np.random.normal(0,1,size=(n_to_show,Z_DIM)))
     
     # prerolling has already occured so
-    reconst_images2 = reconst_images[...,2] # remove extra fields 
-    reconst_images1 = reconst_images[...,1] # remove extra fields 
+    if keep_dims is None:
+        reconst_images2 = reconst_images[...,2] # remove extra fields 
+        reconst_images1 = reconst_images[...,1] # remove extra fields 
+    else:# Here we are assuming is only one dimension to the last axis of X
+        reconst_images2 = reconst_images[...,0] # remove extra fields 
+        reconst_images1 = reconst_images[...,0] # remove extra fields 
     reconst_images0 = reconst_images[...,0] # remove extra fields 
     logger.info(f"{reconst_images.shape = }")
     
@@ -212,12 +221,20 @@ def plot_compare(model, images=None):
     mean, logvar, z_sample = model.encoder(images)
     reconst_images = model.decoder(z_sample).numpy()
     
-    reconst_images2 = reconst_images[...,2] # remove extra fields 
-    reconst_images1 = reconst_images[...,1] # remove extra fields 
+    if keep_dims is None:
+        reconst_images2 = reconst_images[...,2] # remove extra fields 
+        reconst_images1 = reconst_images[...,1] # remove extra fields 
+    else: # Here we are assuming is only one dimension to the last axis of X
+        reconst_images2 = reconst_images[...,0] # remove extra fields 
+        reconst_images1 = reconst_images[...,0] # remove extra fields 
     reconst_images0 = reconst_images[...,0] # remove extra fields 
     logger.info(f"{reconst_images.shape = }")
-    images2 = images[...,2]
-    images1 = images[...,1]
+    if keep_dims is None:
+        images2 = images[...,2]
+        images1 = images[...,1]
+    else:
+        images2 = images[...,0]
+        images1 = images[...,0]
     images0 = images[...,0]
     logger.info(f"{images0.shape = }")
     
