@@ -133,6 +133,8 @@ def normalize_X(X,folder, myinput='N',mode='pointwise'):
 
         return   1./(1.+np.exp(-(X-X_mean)/X_std)) # (X-X_mean)/X_std # # we have applied sigmoid because variational autoencoder reconstructs with this activation
     elif mode == 'global_logit': # normalizing by global variance but the output is not passed through the sigmoid
+                                 # This feature was introduced to treat simple analog chain, where training vae is cosmetic
+                                 # This feature can also be used for training vae when reconstruction loss is L2, rather than binary cross entropy
         logger.info("===Normalizing X===")
         if myinput != 'N': # mean and std have to be computed
             X_mean = np.mean(X,tuple(list(range(len(X.shape)-1)))) # Equivalent to np.max(X,(0,1,...,last-1))

@@ -45,6 +45,8 @@
 **/VAE/tests.old.old/**
 **/VAE/Images/**
 **/VAE/models/**
+**/VAE/xforanalogs/**
+**/VAE/xmodels/**
 **/gmiloshe/MachineLearning/**
 **/PINNS/**
 **/PLASIM/Images_Linear/**
@@ -61,4 +63,3 @@
 **/PLASIM/test3/**
 **/PLASIM/test/**
 **/PLASIM/newtest/**
-
