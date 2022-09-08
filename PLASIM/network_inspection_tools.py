@@ -13,6 +13,14 @@ ut = ln.ut
 tf = ln.tf
 keras = ln.keras
 
+def get_runs(folder: str) -> dict:
+    '''
+    Retrieves all completed runs from a folder
+    '''
+    runs = ut.json2dict(f'{folder}/runs.json')
+    runs = {k:v for k,v in runs.items() if v['status'] == 'COMPLETED'}
+    return runs
+
 def make_groups(runs: dict, variable: str = 'tau', config_dict_flat: dict = None) -> list[dict]:
     '''
     Divides the runs into groups according to one variable. Basically is ln.group_by_varying with some extra steps.
