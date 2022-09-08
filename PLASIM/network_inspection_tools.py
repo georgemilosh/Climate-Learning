@@ -215,9 +215,9 @@ def optimal_activation(model, class_idx=1, seed=None,
     pass
     # TODO (if worth)
 
-############
-# Plotting #
-############
+#####################
+# Committo analysis #
+#####################
 
 def committor_histogram(q: np.ndarray, nbins: int = 50, weights: np.ndarray = None, normalize: bool = True) -> Tuple[np.ndarray, np.ndarray]:
     '''
@@ -318,3 +318,51 @@ def consistency_check(q: np.ndarray, Y: np.ndarray, nbins: int = 50) -> Tuple[np
         acc[i] = np.mean(Y[(q >= bin_edges[i])*(q < bin_edges[i+1])]) # fraction of positive events when q is inside bin i
 
     return 0.5*(bin_edges[1:] + bin_edges[:-1]), acc
+
+def loss_contributions(q: np.ndarray, Y: np.ndarray, nbins: int = 50) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    '''
+    Decomposes the loss contribution in frequency of the outputted committor and loss per committor value.
+    Can be used for the consistency check as well.
+
+    Parameters
+    ----------
+    q : np.ndarray
+        predicted committor values
+    Y : np.ndarray
+        labels
+    nbins : int, optional
+        number of bins, by default 50
+
+    Returns
+    -------
+    x : np.ndarray
+        bin centers
+    f : np.ndarray
+        normalized frequency of the committor. np.sum(f) = 1
+    a : np.ndarray
+        average number of positive labels per committor bin
+    e : np.ndarray
+        loss per committor bin
+
+    Raises
+    ------
+    ValueError
+        If mismatched shapes
+    '''
+    if q.shape != Y.shape:
+        raise ValueError('Shape mismatch')
+    N = len(Y)
+    bin_edges = np.linspace(0,1,nbins+1)
+    q_bin_centers = 0.5*(bin_edges[1:] + bin_edges[:-1])
+    acc = np.zeros(nbins, dtype=float)
+    freq = np.zeros(nbins, dtype=float)
+    for i in range(nbins):
+        mask = (q >= bin_edges[i])*(q < bin_edges[i+1])
+        freq[i] = np.sum(mask)/N # fraction of points with this particular committor value
+        acc[i] = np.mean(Y[mask]) if freq[i] else np.nan # fraction of positive events when q is inside bin i
+
+    err = ut.entropy(acc,q_bin_centers) # loss per committor bin
+
+    return q_bin_centers, freq, acc, err
+        
+
