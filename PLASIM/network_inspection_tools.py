@@ -13,6 +13,14 @@ ut = ln.ut
 tf = ln.tf
 keras = ln.keras
 
+import sys
+from pathlib import Path
+path_to_root = str(Path(__file__).resolve().parent.parent)
+if not path_to_root in sys.path:
+    sys.path.append(path_to_root)
+
+import general_purpose.uplotlib as uplt
+
 def make_groups(runs: dict, variable: str = 'tau', config_dict_flat: dict = None) -> list[dict]:
     '''
     Divides the runs into groups according to one variable. Basically is ln.group_by_varying with some extra steps.
@@ -335,12 +343,12 @@ def loss_contributions(q: np.ndarray, Y: np.ndarray, nbins: int = 50) -> Tuple[n
 
     Returns
     -------
-    x : np.ndarray
+    x : np.ndarray[float]
         bin centers
-    f : np.ndarray
+    f : np.ndarray[float]
         normalized frequency of the committor. np.sum(f) = 1
-    a : np.ndarray
-        average number of positive labels per committor bin
+    a : np.ndarray[ufloat]
+        average number of positive labels per committor bin with errorbar
     e : np.ndarray
         loss per committor bin
 
@@ -362,6 +370,8 @@ def loss_contributions(q: np.ndarray, Y: np.ndarray, nbins: int = 50) -> Tuple[n
         acc[i] = np.mean(Y[mask]) if freq[i] else np.nan # fraction of positive events when q is inside bin i
 
     err = ut.entropy(acc,q_bin_centers) # loss per committor bin
+
+    acc = uplt.ufloatify(acc, np.sqrt(2*acc*(1-acc)/(freq*N))) # add errorbars
 
     return q_bin_centers, freq, acc, err
         
