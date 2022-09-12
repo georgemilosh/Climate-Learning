@@ -335,7 +335,7 @@ def consistency_check(q: np.ndarray, Y: np.ndarray, nbins: int = 50) -> Tuple[np
 
     return 0.5*(bin_edges[1:] + bin_edges[:-1]), acc
 
-def loss_contributions(q: np.ndarray, Y: np.ndarray, nbins: int = 50) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+def loss_contributions(q: np.ndarray, Y: np.ndarray, nbins: int = 50, bin_edges: np.ndarray = None) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     '''
     Decomposes the loss contribution in frequency of the outputted committor and loss per committor value.
     Can be used for the consistency check as well.
@@ -348,6 +348,8 @@ def loss_contributions(q: np.ndarray, Y: np.ndarray, nbins: int = 50) -> Tuple[n
         labels
     nbins : int, optional
         number of bins, by default 50
+    bin_edges : np.ndarray, optional
+        array of bin edges. If provided overrides nbins
 
     Returns
     -------
@@ -368,7 +370,10 @@ def loss_contributions(q: np.ndarray, Y: np.ndarray, nbins: int = 50) -> Tuple[n
     if q.shape != Y.shape:
         raise ValueError('Shape mismatch')
     N = len(Y)
-    bin_edges = np.linspace(0,1,nbins+1)
+    if bin_edges is None:
+        bin_edges = np.linspace(0,1,nbins+1)
+    else:
+        nbins = len(bin_edges) - 1
     q_bin_centers = 0.5*(bin_edges[1:] + bin_edges[:-1])
     acc = np.zeros(nbins, dtype=float)
     freq = np.zeros(nbins, dtype=float)
