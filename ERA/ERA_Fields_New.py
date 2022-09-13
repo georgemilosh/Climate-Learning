@@ -1449,7 +1449,7 @@ class Plasim_Field:
 
         logger.info(f'Opening field {self.name}')
 
-        self.field = xr.open_dataset(Path(self.mylocal) / self.filename)[name]
+        self.field = xr.open_dataset(ut.first_valid_path(self.mylocal,self.filename))[name]
 
         self.field = discard_all_dimensions_but(self.field, dims_to_keep=['time', 'lon', 'lat'])
         
@@ -2091,24 +2091,24 @@ def discard_all_dimensions_but(xa:xr.DataArray, dims_to_keep:list):
 def get_lsm(mylocal,Model):
     if Model != 'Plasim':
         raise NotImplementedError()
-    lsm = xr.open_dataset(mylocal+'Data_Plasim_inter/CONTROL_lsmask.nc').lsm
+    lsm = xr.open_dataset(ut.first_valid_path(mylocal, 'Data_Plasim_inter/CONTROL_lsmask.nc')).lsm
     lsm = discard_all_dimensions_but(lsm, ['lon', 'lat'])
     return lsm
 
 def get_cell_area(mylocal,Model):
     if Model != 'Plasim':
         raise NotImplementedError()
-    cell_area = xr.open_dataset(mylocal+'Data_Plasim_inter/CONTROL_gparea.nc').cell_area
+    cell_area = xr.open_dataset(ut.first_valid_path(mylocal, 'Data_Plasim_inter/CONTROL_gparea.nc')).cell_area
     cell_area = discard_all_dimensions_but(cell_area, ['lon', 'lat'])
     return cell_area
 
 def ExtractAreaWithMask(mylocal,Model,area): # extract land sea mask and multiply it by cell area
     # Load the land area mask
-    dataset = Dataset(mylocal+'Data_Plasim_inter/CONTROL_lsmask.nc')
+    dataset = Dataset(ut.first_valid_path(mylocal,'Data_Plasim_inter/CONTROL_lsmask.nc'))
     lsm = dataset.variables['lsm'][0]
     dataset.close()
     # Load the areas of each cell
-    dataset = Dataset(mylocal+'Data_Plasim_inter/CONTROL_gparea.nc')
+    dataset = Dataset(ut.first_valid_path(mylocal,'Data_Plasim_inter/CONTROL_gparea.nc'))
     cell_area = dataset.variables["cell_area"][:]
     dataset.close()
     # mask_ocean = np.array(lsm) # unused
