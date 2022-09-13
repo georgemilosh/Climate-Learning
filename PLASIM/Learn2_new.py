@@ -739,7 +739,7 @@ for h in [200,300,500,850]: # geopotential heights
 @ut.execution_time  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function
 def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', area='France', filter_area='France',
-              lon_start=-64, lon_end=64, lat_start=0, lat_end=22, mylocal='/local/gmiloshe/PLASIM/',fields=['t2m','zg500','mrso_filtered']):
+              lon_start=-64, lon_end=64, lat_start=0, lat_end=22, mylocal=['/local/gmiloshe/PLASIM/'],fields=['t2m','zg500','mrso_filtered']):
     '''
     Loads the data into Plasim_Fields objects
 
@@ -764,8 +764,9 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
         longitude and latitude extremes of the data expressed in indices (model specific)
         If `lon_start` >= `lon_end` the selection will start from `lon_start`, go over the end of the array and then continue from the beginning up to `lon_end`.
         Providing `lon_start` = `lon_end` will result in the longitude being rolled by `lon_start` steps
-    mylocal : str or Path, optional
-        path the the data storage. For speed it is better if it is a local path.
+    mylocal : list[str or Path], optional
+        paths to the data storage. The program will look for each data file in the first path, if not found it will look in the next one and so on.
+        For speed it is better if they are local paths.
     fields : list, optional
         list of field names to be loaded. Add '_filtered' to the name to have the values of the field outside `filter_area` set to zero.
         Add '_ghost' to the name of the field to load it but not use it for learning.
@@ -776,6 +777,8 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
     _fields: dict
         dictionary of ERA_Fields.Plasim_Field objects
     '''
+    if isinstance(mylocal, str) or isinstance(mylocal, Path):
+        mylocal = [mylocal]
 
     if area != filter_area:
         logger.warn(f'Fields will be filtered on a different area ({filter_area}) than the region of interest ({area}). If {area} is not a subset of {filter_area} the area integral will be different with and without filtering.')
@@ -821,9 +824,23 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
         if field_name not in fields_infos:
             raise KeyError(f'Unknown field {field_name}')
         f_infos = fields_infos[field_name]
+        filename = f"{file_suffix}{prefix}{f_infos['filename_suffix']}.nc"
+
+        # look for the file using the list of mylocals
+        logger.info(f'{field_name}: looking for file')
+        found = False
+        for ml in mylocal:
+            logger.info(f'Looking in {ml}')
+            if os.path.exists(Path(ml) / filename):
+                found = True
+                logger.log(25, f'{field_name} found in {ml}')
+                break
+        if not found:
+            raise FileNotFoundError(f'Could not find {field_name} in any of the specified paths')
+
         # create the field object
-        field = ef.Plasim_Field(f_infos['name'], f"{file_suffix}{prefix}{f_infos['filename_suffix']}.nc", f_infos['label'], Model,
-                                years=dataset_years, mylocal=mylocal)
+        field = ef.Plasim_Field(f_infos['name'], filename, f_infos['label'], Model,
+                                years=dataset_years, mylocal=ml)
         # select years
         field.select_years(year_list)
         # select longitude and latitude
