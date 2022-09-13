@@ -739,7 +739,7 @@ for h in [200,300,500,850]: # geopotential heights
 @ut.execution_time  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function
 def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', area='France', filter_area='France',
-              lon_start=-64, lon_end=64, lat_start=0, lat_end=22, mylocal='/local/gmiloshe/PLASIM/',fields=['t2m','zg500','mrso_filtered']):
+              lon_start=-64, lon_end=64, lat_start=0, lat_end=22, mylocal=['/local/gmiloshe/PLASIM/'],fields=['t2m','zg500','mrso_filtered']):
     '''
     Loads the data into Plasim_Fields objects
 
@@ -776,7 +776,7 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
     _fields: dict
         dictionary of ERA_Fields.Plasim_Field objects
     '''
-
+    
     if area != filter_area:
         logger.warn(f'Fields will be filtered on a different area ({filter_area}) than the region of interest ({area}). If {area} is not a subset of {filter_area} the area integral will be different with and without filtering.')
 
