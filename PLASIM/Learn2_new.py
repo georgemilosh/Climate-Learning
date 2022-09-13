@@ -764,8 +764,9 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
         longitude and latitude extremes of the data expressed in indices (model specific)
         If `lon_start` >= `lon_end` the selection will start from `lon_start`, go over the end of the array and then continue from the beginning up to `lon_end`.
         Providing `lon_start` = `lon_end` will result in the longitude being rolled by `lon_start` steps
-    mylocal : str or Path, optional
-        path the the data storage. For speed it is better if it is a local path.
+    mylocal : list[str or Path], optional
+        paths to the data storage. The program will look for each data file in the first path, if not found it will look in the next one and so on.
+        For speed it is better if they are local paths.
     fields : list, optional
         list of field names to be loaded. Add '_filtered' to the name to have the values of the field outside `filter_area` set to zero.
         Add '_ghost' to the name of the field to load it but not use it for learning.
