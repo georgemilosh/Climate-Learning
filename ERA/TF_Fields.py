@@ -104,7 +104,7 @@ class VAE(tf.keras.Model): # Class of variational autoencoder
         coefficient of the classifier which compares the labels to the first component of the latent space
     '''
     def __init__(self, *args, k1=1, k2=1, from_logits=False, field_weights=None, 
-            lat_0=None, lat_1=None, lon_0=None, lon_1=None, coef_out=1, coef_in=0, coef_class=0, class_type='stochastic', mask_area=None, Z_DIM=2, N_EPOCHS=2, print_summary=True, **kwargs):
+            lat_0=None, lat_1=None, lon_0=None, lon_1=None, coef_out=1, coef_in=0, coef_class=0, loss_type=None, class_type='stochastic', mask_area=None, Z_DIM=2, N_EPOCHS=2, print_summary=True, **kwargs):
         super(VAE, self).__init__(**kwargs)
         self.encoder = args[0]
         self.decoder = args[1]
@@ -133,8 +133,10 @@ class VAE(tf.keras.Model): # Class of variational autoencoder
         self.field_weights = field_weights # Choose which fields the reconstruction loss cares about
         #self.mask_weights = mask_weights # Choose which grid points the reconstruction loss cares about  # This idea didn't work due to some errors
         self.bce = tf.keras.losses.BinaryCrossentropy(from_logits=from_logits)
-        #self.bce = Custom_BCE # Trying how custom binary cross entropy compares
-        #print("VAE: self.from_logits = ", self.from_logits)
+        if loss_type is None: # Assuming Bernoulli variables
+            self.rec_loss_form = self.bce
+        else: # assuming Gaussian variables, for future compatibility write 'L2'
+            self.rec_loss_form = tf.losses.MeanSquaredError()
 
     @property
     def metrics(self):
@@ -176,9 +178,9 @@ class VAE(tf.keras.Model): # Class of variational autoencoder
             factor = self.k1*self.encoder_input_shape[1]*self.encoder_input_shape[2] # this factor is designed for consistency with the previous defintion of the loss (see commented section below)
             # We should try tf.reduce_mean([0.1,0.1,0.4]*tf.cast([bce(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis],sample_weight=np.ones((2,4,3))) for i in range(3)], dtype=np.float32))
             if self.field_weights is None: # I am forced to use this awkward way of apply field weights since I cannot use the new version of tensorflow where axis parameter can be given
-                reconstruction_loss = self.coef_out*factor*tf.reduce_mean([tf.reduce_mean(self.bce(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis])) for i in range(reconstruction.shape[3])] ) + self.coef_in*factor*tf.reduce_mean([tf.reduce_mean(self.bce(data[...,self.lat_0:self.lat_1,self.lon_0:self.lon_1,i][..., np.newaxis], reconstruction[...,self.lat_0:self.lat_1,self.lon_0:self.lon_1,i][..., np.newaxis])) for i in range(reconstruction.shape[3])] )
-            else:  # The idea behind adding [..., np.newaxis] is to be able to use sample_weight in self.bce on three dimensional input
-                reconstruction_loss = self.coef_out*factor*tf.reduce_mean([self.field_weights[i]*tf.reduce_mean(self.bce(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis])) for i in range(reconstruction.shape[3])]) + self.coef_in*factor*tf.reduce_mean([self.field_weights[i]*tf.reduce_mean(self.bce(data[...,self.lat_0:self.lat_1,self.lon_0:self.lon_1,i][..., np.newaxis], reconstruction[...,self.lat_0:self.lat_1,self.lon_0:self.lon_1,i][..., np.newaxis])) for i in range(reconstruction.shape[3])])
+                reconstruction_loss = self.coef_out*factor*tf.reduce_mean([tf.reduce_mean(self.rec_loss_form(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis])) for i in range(reconstruction.shape[3])] ) + self.coef_in*factor*tf.reduce_mean([tf.reduce_mean(self.rec_loss_form(data[...,self.lat_0:self.lat_1,self.lon_0:self.lon_1,i][..., np.newaxis], reconstruction[...,self.lat_0:self.lat_1,self.lon_0:self.lon_1,i][..., np.newaxis])) for i in range(reconstruction.shape[3])] )
+            else:  # The idea behind adding [..., np.newaxis] is to be able to use sample_weight in self.rec_loss_form on three dimensional input
+                reconstruction_loss = self.coef_out*factor*tf.reduce_mean([self.field_weights[i]*tf.reduce_mean(self.rec_loss_form(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis])) for i in range(reconstruction.shape[3])]) + self.coef_in*factor*tf.reduce_mean([self.field_weights[i]*tf.reduce_mean(self.rec_loss_form(data[...,self.lat_0:self.lat_1,self.lon_0:self.lon_1,i][..., np.newaxis], reconstruction[...,self.lat_0:self.lat_1,self.lon_0:self.lon_1,i][..., np.newaxis])) for i in range(reconstruction.shape[3])])
             # there is probably a more efficient way to do the line above: we are adding the full region plus a sub region.
             kl_loss = -0.5 * (1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var))
             kl_loss = self.k2*tf.reduce_mean(tf.reduce_sum(kl_loss, axis=1))
