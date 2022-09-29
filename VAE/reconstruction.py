@@ -92,7 +92,11 @@ if (ut.keys_exists(run_vae_kwargs, 'label_period_start') and ut.keys_exists(run_
         summer_days = time_end - time_start - T + 1
 else:
     summer_days = time_end - time_start - T + 1
-    
+if ut.keys_exists(run_vae_kwargs, 'normalization_mode'):
+    normalization_mode = ut.extract_nested(run_vae_kwargs, 'normalization_mode')
+else:
+    normalization_mode = None
+
 if ut.keys_exists(run_vae_kwargs, 'keep_dims'):
     keep_dims = ut.extract_nested(run_vae_kwargs, 'keep_dims')
 else:
@@ -170,7 +174,10 @@ def vae_generate_images(vae,Z_DIM,n_to_show=10):
     reconst_images0 = reconst_images[...,0] # remove extra fields 
     logger.info(f"{reconst_images.shape = }")
     
-    levels = np.linspace(0, 1, 64)
+    if normalization_mode == 'global_logit':
+        levels = np.linspace(-2,2,64)
+    else:
+        levels = np.linspace(0, 1, 64)
     logger.info(f"{levels = }"
                )
     fig2 = plt.figure(figsize=(25, 10))
@@ -240,7 +247,10 @@ def plot_compare(model, images=None):
     
     n_to_show = 2*images0.shape[0]
     
-    levels = np.linspace(0, 1, 64)
+    if normalization_mode == 'global_logit':
+        levels = np.linspace(-2,2,64)
+    else:
+        levels = np.linspace(0, 1, 64)
     logger.info(f"{levels = }")
     fig2 = plt.figure(figsize=(25, 10))
     spec2 = gridspec.GridSpec(ncols=5, nrows=2, figure=fig2)
