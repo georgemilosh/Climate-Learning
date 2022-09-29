@@ -214,7 +214,7 @@ def ComputeSkill(folder, q, percent, chain_step):
                     temp2 = skill[j][k]
                 temp2[i] = []
                 for l in range(temp[i].shape[1]): # loof over the tau dimension
-                    logger.info(f'{Y_va.shape = },{temp[i][:,l].shape = }, {label_period_start-time_start-3*l = }, {n_days-T+1-3*l = }, {n_days = }  ')
+                    #logger.info(f'{Y_va.shape = },{temp[i][:,l].shape = }, {label_period_start-time_start-3*l = }, {n_days-T+1-3*l = }, {n_days = }  ')
                     entropy = tf.keras.losses.BinaryCrossentropy(from_logits=False)(Y_va, (temp[i][:,l].reshape(-1,n_days)[:,(label_period_start-time_start-3*l):(n_days-T+1-3*l)]).reshape(-1)).numpy() # the goal is to extract only the summer heatwaves, but the committor is computed from mid may to the end of August. For tau = 0 we should have from June1 to August15 and for increasing tau this window has to shift towards earlier dates
                     maxskill = -(percent/100.)*np.log(percent/100.)-(1-percent/100.)*np.log(1-percent/100.)
                     temp2[i].append((maxskill-entropy)/maxskill)
@@ -255,9 +255,19 @@ nfolds = ut.extract_nested(run_vae_kwargs, 'nfolds')
 n_days = time_end-time_start-T+1   
 logger.info(f"{Style.RESET_ALL}")
 
+extra_day=1
+if ut.keys_exists(run_vae_kwargs, 'A_weights'):
+    A_weights = ut.extract_nested(run_vae_kwargs, 'A_weights')
+    if A_weights is not None:
+        extra_day = A_weights[0] # We need to see if the labels were interpolated to see how much the algorithm should jump each summer
+if extra_day == 3:
+    delay = np.arange(6)
+else:
+    delay = 3*np.arange(6)
+
 RunFolds_kwargs_default = ln.get_default_params(RunFolds, recursive=True)
 RunFolds_kwargs_default = ut.set_values_recursive(
-    RunFolds_kwargs_default, {'num_Traj' : 10000, 'chain_step' : 3, 'delay' : np.arange(6), 'neighbors' : [1,2,3,5,10,20,50,100], 
+    RunFolds_kwargs_default, {'num_Traj' : 100000, 'chain_step' : extra_day, 'delay' : delay, 'neighbors' : [1,2,3,5,10,20,50,100], 
                               'T' : T, 'allowselfanalogs' : True, 'input_set' : 'va', 'bulk_set' : 'tr'}  )
 
 chain_step = ut.extract_nested(RunFolds_kwargs_default, 'chain_step')  

@@ -1,8 +1,9 @@
 # George Miloshevich 2022
 # This routine is written for one parameter: input folder for VAE weights, coefficients that control the weight of geopotential referred to as checkpoints and the max number of nearest neighbors  
 # It computes the analogs using the distance based on local temperature, soil moisture and North Atlantic geopotential where the latter passes through an autoencoder
-# The new usage analogue_george.py <folder> <coefficients><NN>
+# The new usage analogue_george.py <folder> <coefficients> <NN>
 #   example <coefficients> = [0,1,10]
+# example: python analogue_george.py ./xforanalogsL2loss/ZGonlyNA24by48/Z16/yrs500/interT15fw20.1.20skip2epochs100 0.1,1,10 100
 # <NN> = 100
 import os, sys
 import shutil
