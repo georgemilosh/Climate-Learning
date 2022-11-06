@@ -123,7 +123,7 @@ level   name                events
 from copy import deepcopy
 import os as os
 from pathlib import Path
-from stat import S_IREAD
+from stat import S_IREAD, S_IROTH, S_IRGRP
 import sys
 import traceback
 import warnings
@@ -2607,7 +2607,7 @@ class Trainer():
 
             # make the config file read-only after the first successful run
             if os.access(self.config_file, os.W_OK): # the file is writeable
-                os.chmod(self.config_file, S_IREAD)
+                os.chmod(self.config_file, S_IREAD|S_IROTH|S_IRGRP) # we make the file readable by all users
         
         except Exception as e:
             logger.critical(f'Run on {folder = } failed due to {repr(e)}')
