@@ -2548,8 +2548,26 @@ class Trainer():
 
             self.prepare_XY(self.fields, **prepare_XY_kwargs) # compute self.X, self.Y, self.year_permutation, self.lat, self.lon
 
+            # save year permutation
             if self.year_permutation is not None:
                 np.save(f'{folder}/year_permutation.npy',self.year_permutation)
+
+            # save area integral and A
+            label_field = ut.extract_nested(prepare_XY_kwargs, 'label_field')
+            try:
+                lf = self.fields[label_field]
+            except KeyError:
+                try:
+                    lf = self.fields[f'{label_field}_ghost']
+                except KeyError:
+                    logger.error(f'Unable to find label field {label_field} among the provided fields {list(self.fields.keys())}')
+                    raise KeyError
+            
+            np.save(f'{folder}/area_integral.npy', lf.to_numpy(lf.area_integral))
+            ta = lf.to_numpy(lf._time_average)
+            np.save(f'{folder}/time_average.npy', ta)
+            np.save(f'{folder}/time_average_permuted.npy', ta[self.year_permutation])
+            
 
             # do kfold
             score, info = k_fold_cross_val(folder, self.X, self.Y, **k_fold_cross_val_kwargs)
