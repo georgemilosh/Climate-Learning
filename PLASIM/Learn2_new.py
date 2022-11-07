@@ -2567,6 +2567,9 @@ class Trainer():
             ta = lf.to_numpy(lf._time_average)
             np.save(f'{folder}/time_average.npy', ta)
             np.save(f'{folder}/time_average_permuted.npy', ta[self.year_permutation])
+
+            # save labels
+            np.save(f'{folder}/labels_permuted.npy', self.Y)
             
 
             # do kfold
