@@ -1465,6 +1465,7 @@ class Plasim_Field:
         self.land_area_weights.data /= np.sum(self.land_area_weights.data)
 
         self._area_integral = None
+        self._time_average = None
 
     @ut.execution_time
     def select_years(self, year_list=None):
@@ -1625,7 +1626,8 @@ class Plasim_Field:
             time average
         '''
         cut_area_integral = self.area_integral.sel(time=self.area_integral.time.dt.dayofyear.isin(np.arange(day_start, day_end)))
-        return running_mean(cut_area_integral, T, mode='forward')
+        self._time_average = running_mean(cut_area_integral, T, mode='forward') # cache the time average
+        return self._time_average
 
         
 
