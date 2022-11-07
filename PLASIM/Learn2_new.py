@@ -1976,7 +1976,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
                 Y_pred.append(keras.layers.Softmax()(model(X_va[b*batch_size:(b+1)*batch_size])).numpy())
             Y_pred = np.concatenate(Y_pred)
             Y_pred_unbiased = ut.unbias_probabilities(Y_pred, u=u)
-            np.save(f'{folder}/Y_pred_unbiased.npy', Y_pred_unbiased)
+            np.save(f'{fold_folder}/Y_pred_unbiased.npy', Y_pred_unbiased)
         
 
     score_mean = np.mean(scores)
