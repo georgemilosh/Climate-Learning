@@ -12,7 +12,8 @@ from tensorflow.keras.regularizers import l2
 from tensorflow.keras import datasets, layers, models 
 from tensorflow.keras import backend as K
 import matplotlib.pyplot as plt
-
+from sklearn.decomposition import PCA
+import pickle
 
 
 
@@ -24,6 +25,45 @@ def Custom_BCE(y_true,y_pred):
     p2 = ( 1 - y_true ) * tf.math.log( 1 -  tf.clip_by_value( y_pred , tf.keras.backend.epsilon() , 1 - tf.keras.backend.epsilon() ) + tf.keras.backend.epsilon() )
     return -tf.reduce_mean( p1 + p2 )
 
+#####################################################
+########### PCA Autoencoder  ################        
+##################################################### 
+
+class PCAencoder(PCA):
+    """_summary_
+
+    Args:
+        PCA (_type_): _description_
+    """
+    
+    def predict(self,*args,**kwargs):
+        _X = self.transform(args[0].reshape(args[0].shape[0],-1))
+        return _X, _X, _X # PCA expects the input of type fit(X) such that X is 2 dimensional and encoder generally has three outputs that we will set to the same number
+        
+    def summary(self):
+        print(f'We are computing PCA')
+
+class PCAer:
+    """_summary_
+        Essentially decorator class that keeps the inputs and outputs maximally similar to autoencoder so that we could using the same routines
+    """
+    def __init__(self, Z_DIM):
+        self.k1 = 'pca'
+        self.k2 = 'pca'
+        self.Z_DIM = Z_DIM
+        self.encoder = PCAencoder(n_components=Z_DIM, svd_solver="randomized", whiten=True)
+    def fit(self,*args, **kwargs):
+        print(f'{args[0].shape = }')
+        result_fit = self.encoder.fit(args[0].reshape(args[0].shape[0],-1)) # PCA expects the input of type fit(X) such that X is 2 dimensional
+        print(f'{np.sum(self.encoder.explained_variance_ratio_) = }')
+        return result_fit 
+    def score(self,*args,**kwargs):
+        return self.encoder.score(args[0].reshape(args[0].shape[0],-1))
+    def save(self,folder):
+        with open(folder+'/encoder.pkl', 'wb') as file_pi:
+            pickle.dump(self.encoder, file_pi)
+    def summary(self):
+        print(f'PCA with {self.Z_DIM} components')
 
 #####################################################
 ########### Variational Autoencoder  ################        

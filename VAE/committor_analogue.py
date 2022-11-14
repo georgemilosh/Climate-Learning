@@ -267,7 +267,7 @@ else:
 
 RunFolds_kwargs_default = ln.get_default_params(RunFolds, recursive=True)
 RunFolds_kwargs_default = ut.set_values_recursive(
-    RunFolds_kwargs_default, {'num_Traj' : 100000, 'chain_step' : extra_day, 'delay' : delay, 'neighbors' : [1,2,3,5,10,20,50,100], 
+    RunFolds_kwargs_default, {'num_Traj' : 10000, 'chain_step' : extra_day, 'delay' : delay, 'neighbors' : [1,2,3,5,10,20,50,100], 
                               'T' : T, 'allowselfanalogs' : True, 'input_set' : 'va', 'bulk_set' : 'tr'}  )
 
 chain_step = ut.extract_nested(RunFolds_kwargs_default, 'chain_step')  

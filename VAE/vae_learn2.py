@@ -22,14 +22,13 @@ from pathlib import Path
 from colorama import Fore # support colored output in terminal
 from colorama import Style
 from functools import partial # this one we use for the scheduler
+
 if __name__ == '__main__':
     logger = logging.getLogger()
     logger.handlers = [logging.StreamHandler(sys.stdout)]
 else:
     logger = logging.getLogger(__name__)
 logger.level = logging.INFO
-
-
 
 ## user defined modules
 # I go back to absolute paths becuase otherwise I have trouble using reconstruction.py on this file later when it will be called from the folder it creates
@@ -218,6 +217,7 @@ def create_or_load_vae(folder, INPUT_DIM, myinput, filter_mask, VAE_kwargs=None,
     mask_area = VAE_kwargs_local.pop('mask_area') # because vae_kwargs_local must be passed to tff.VAE constructor and we still need vae_kwargs for other folds
     Z_DIM = VAE_kwargs_local.pop('Z_DIM')
     N_EPOCHS = VAE_kwargs_local.pop('N_EPOCHS')
+    k1 = VAE_kwargs_local.pop('k1')
     print_summary = VAE_kwargs_local.pop('print_summary')
     
     print(f"{INPUT_DIM[:-1] = }")
@@ -234,20 +234,22 @@ def create_or_load_vae(folder, INPUT_DIM, myinput, filter_mask, VAE_kwargs=None,
     
     
     logger.info("==Building encoder==")
-    _, _, shape_before_flattening, encoder  = tff.build_encoder_skip(input_dim = INPUT_DIM, output_dim = Z_DIM, **build_encoder_skip_kwargs)
-    classifier = tff.create_classifier(Z_DIM, **create_classifier_kwargs)
-    if print_summary:
-        encoder.summary()
-    logger.info("==Building decoder==") 
-    logger.info(f"{filter_mask.shape = }")
-    # logger.info(f"{filter_mask = }")
-    _, _, decoder = tff.build_decoder_skip(mask=filter_mask, input_dim = Z_DIM, shape_before_flattening = shape_before_flattening, **build_decoder_skip_kwargs)
-    if print_summary:
-        decoder.summary()
-
-
-    logger.info("==Attaching decoder and encoder and compiling==")
-    vae = tff.VAE(encoder, decoder, classifier, **VAE_kwargs) #, mask_weights=mask_weights)
+    if k1 == 'pca':
+        vae = tff.PCAer(Z_DIM)
+    else: # Not PCA so we do the standard autoencoder
+        _, _, shape_before_flattening, encoder  = tff.build_encoder_skip(input_dim = INPUT_DIM, output_dim = Z_DIM, **build_encoder_skip_kwargs)
+        classifier = tff.create_classifier(Z_DIM, **create_classifier_kwargs)
+        if print_summary:
+            encoder.summary()
+        logger.info("==Building decoder==") 
+        logger.info(f"{filter_mask.shape = }")
+        # logger.info(f"{filter_mask = }")
+        _, _, decoder = tff.build_decoder_skip(mask=filter_mask, input_dim = Z_DIM, shape_before_flattening = shape_before_flattening, **build_decoder_skip_kwargs)
+        if print_summary:
+            decoder.summary()
+        logger.info("==Attaching decoder and encoder and compiling==")
+        vae = tff.VAE(encoder, decoder, classifier, **VAE_kwargs) #, mask_weights=mask_weights)
+        
     if print_summary:
         logger.info(f'{vae.k1 = },{vae.k2 = } ')
     
@@ -258,20 +260,25 @@ def create_or_load_vae(folder, INPUT_DIM, myinput, filter_mask, VAE_kwargs=None,
         history_vae = []
     else: # the run has to be continued
         history_vae = np.load(f'{folder}/history_vae', allow_pickle=True)
-        INITIAL_EPOCH = len(history_vae['loss'])
-        logger.info(f'==loading the model: {folder}')
-        #N_EPOCHS = N_EPOCHS + INITIAL_EPOCH 
-        checkpoint_path = tf.train.latest_checkpoint(folder)
-        logger.info(f'loading weights {checkpoint_path = }')
-        vae.load_weights(checkpoint_path).expect_partial()
+        if hasattr(vae,'load_weights'):
+            INITIAL_EPOCH = len(history_vae['loss'])
+            logger.info(f'==loading the model: {folder}')
+            #N_EPOCHS = N_EPOCHS + INITIAL_EPOCH 
+            checkpoint_path = tf.train.latest_checkpoint(folder)
+            logger.info(f'loading weights {checkpoint_path = }')
+            vae.load_weights(checkpoint_path).expect_partial()
+        else:
+            INITIAL_EPOCH = 0 # there are no epochs if autoencoder is not used, e.g. if computing PCA components
+            vae.encoder = pickle.load(open(f'{folder}/encoder.pkl', 'rb')) # see description of the class PCAer for PCAer.save method
         
     logger.info(f'{INITIAL_EPOCH = }')
 
     INPUT_DIM_withnone = list(INPUT_DIM)
     INPUT_DIM_withnone.insert(0,None)
     
-    vae.build(tuple(INPUT_DIM_withnone)) 
-    vae.compute_output_shape(tuple(INPUT_DIM_withnone))
+    if hasattr(vae,'build'):
+        vae.build(tuple(INPUT_DIM_withnone)) 
+        vae.compute_output_shape(tuple(INPUT_DIM_withnone))
     if print_summary:
         vae.summary()
     ckpt_path_callback=ln.make_checkpoint_callback(str(folder)+"/cp_vae-{epoch:04d}.ckpt", checkpoint_every=checkpoint_every)
@@ -430,7 +437,7 @@ def k_fold_cross_val(folder, myinput, mask, X, Y, time_series, year_permutation,
                 logger.info(f"{X_va[5,5,5,1] = }, {Y_va[5] = }, {X_tr[5,5,5,1] = }, {Y_tr[5] = }")
             logger.info(f"{create_or_load_vae_kwargs = }")
             
-            if keep_dims is not None:
+            if keep_dims is not None: # In this case we only apply autoencoder to a single field, the other fields will be treated as area integrals
                 logger.info(f"{type(keep_dims) = }, {keep_dims = }")
                 if not reconstruction: # either training or classification, in both cases we need training set
                     logger.info(f"{type(X_tr) = }, {X_tr.shape = }")
@@ -441,14 +448,17 @@ def k_fold_cross_val(folder, myinput, mask, X, Y, time_series, year_permutation,
                 logger.info(f"recomputing: {INPUT_DIM = }")
             
             vae, history_vae, N_EPOCHS, INITIAL_EPOCH, ckpt_path_callback = create_or_load_vae(fold_folder, INPUT_DIM, myinput, mask, **create_or_load_vae_kwargs)
-
-
-            logger.info(f"{len(vae.trainable_weights) = }, {len(vae.encoder.trainable_weights) = }, {len(vae.decoder.trainable_weights) = }")
             
-            for inner_layer in vae.encoder.layers:
-                if inner_layer.name == 'encoder_conv_0':
-                    logger.info(f"vae.encoder layers: {inner_layer.name = }")
-                    logger.info(f"{inner_layer.weights[0][0,0,0,:] = }")
+            
+
+            if hasattr(vae, 'trainable_weights'):
+                logger.info(f"{len(vae.trainable_weights) = }, {len(vae.encoder.trainable_weights) = }, {len(vae.decoder.trainable_weights) = }")
+            
+            if hasattr(vae.encoder, 'layers'):
+                for inner_layer in vae.encoder.layers:
+                    if inner_layer.name == 'encoder_conv_0':
+                        logger.info(f"vae.encoder layers: {inner_layer.name = }")
+                        logger.info(f"{inner_layer.weights[0][0,0,0,:] = }")
             if hasattr(vae, 'classifier'):
                 for inner_layer in vae.classifier.layers:
                     logger.info(f"vae.classifier layers: {inner_layer.name = }")
@@ -463,14 +473,16 @@ def k_fold_cross_val(folder, myinput, mask, X, Y, time_series, year_permutation,
             else: # myinput='N' is useful when loading this function in reconstruction.py or classification for instance
                 history_loss = np.load(f"{fold_folder}/history_vae", allow_pickle=True)['loss']
             # logger.info(f"After training: {vae.classifier.trainable_weights = }")
-            logger.info(f"{len(vae.trainable_weights) = }, {len(vae.encoder.trainable_weights) = }, {len(vae.decoder.trainable_weights) = }")
+            if hasattr(vae, 'trainable_weights'):
+                logger.info(f"{len(vae.trainable_weights) = }, {len(vae.encoder.trainable_weights) = }, {len(vae.decoder.trainable_weights) = }")
             
             #for trainable_weights in vae.encoder.trainable_weights:
             #    logger.info(f"vae.encoder layers: {trainable_weights = }")
-            for inner_layer in vae.encoder.layers:
-                if inner_layer.name == 'encoder_conv_0':
-                    logger.info(f"vae.encoder layers: {inner_layer.name = }")
-                    logger.info(f"{inner_layer.weights[0][0,0,0,:] = }")
+            if hasattr(vae.encoder, 'layers'):
+                for inner_layer in vae.encoder.layers:
+                    if inner_layer.name == 'encoder_conv_0':
+                        logger.info(f"vae.encoder layers: {inner_layer.name = }")
+                        logger.info(f"{inner_layer.weights[0][0,0,0,:] = }")
             """
             for layer in vae.layers:
                 logger.info(f"for layer in vae.layers: {layer.name = }, {layer = }")
@@ -494,6 +506,7 @@ def k_fold_cross_val(folder, myinput, mask, X, Y, time_series, year_permutation,
            
 
             if not reconstruction: # either training or classification, in both cases we need training set
+
                 z_mean_tr,_,z_tr = vae.encoder.predict(X_tr)
                 z_mean_va,_,z_va = vae.encoder.predict(X_va)
                 logger.info("Evaluating classification")
@@ -530,9 +543,9 @@ def k_fold_cross_val(folder, myinput, mask, X, Y, time_series, year_permutation,
                     checkpoint_path = str(fold_folder)+f"/cp_vae-{evaluate_epoch:04d}.ckpt" # TODO: convert checkpoints to f-strings
                 logger.info(f"==loading the model: {checkpoint_path}")
                 # vae = tf.keras.models.load_model(fold_folder, compile=False)
-
-                vae.load_weights(f'{checkpoint_path}').expect_partial()
-                logger.info(f'{checkpoint_path} weights loaded')
+                if hasattr(vae, 'load_weights'):
+                    vae.load_weights(f'{checkpoint_path}').expect_partial()
+                    logger.info(f'{checkpoint_path} weights loaded')
             if classification:
                 score.append(classify(fold_folder, evaluate_epoch, vae, X_tr, z_tr, Y_tr, X_va, z_va, Y_va, u)) 
             else:
@@ -640,14 +653,17 @@ def train_vae(X, Y, vae, cp_callback, folder, myinput, N_EPOCHS, INITIAL_EPOCH, 
     logger.info(f"{scheduler_kwargs = }")
     #cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=ckpt_path_callback,save_weights_only=True,verbose=1)
     scheduler_callback = tf.keras.callbacks.LearningRateScheduler(partial(scheduler, **scheduler_kwargs))
-    vae.compile(optimizer=tf.keras.optimizers.Adam())
+    
+    if hasattr(vae,'compile'): # Not pca
+        vae.compile(optimizer=tf.keras.optimizers.Adam())
 
     logger.info(f"== fit ==")
     logger.info(f'{ X.shape = }, {N_EPOCHS = }, {INITIAL_EPOCH = }, {batch_size = }')
     logger.info(f'{cp_callback = }')
-    vae.summary()
+ 
     my_history_vae = vae.fit(X, Y, epochs=N_EPOCHS, initial_epoch=INITIAL_EPOCH, batch_size=batch_size, shuffle=True, callbacks=[cp_callback,scheduler_callback, PrintLR(**dict(model=vae)),term], verbose=2) # train on the last 9 folds
     # Note that we need verbose=2 statement or else @ut.indent_logger(logger) causes errors
+    
     if myinput == 'C':
         if ('loss' in my_history_vae.history.keys()): # problems if the fold already contains the checkpoint = N_EPOCHS
             logger.info("we merge the history_vae dictionaries")
@@ -656,8 +672,11 @@ def train_vae(X, Y, vae, cp_callback, folder, myinput, N_EPOCHS, INITIAL_EPOCH, 
             for key in history_vae:
                 history_vae[key] = history_vae[key]+my_history_vae.history[key]
     else:
-        history_vae = my_history_vae.history
-    logger.info(f" { len(history_vae['loss']) = }")
+        if vae.k1 != 'pca':
+            history_vae = my_history_vae.history
+        else:
+            history_vae = { 'loss' : vae.score(X) } # To compute average log likelihood if sklearn was used instead of autoencoder
+    # logger.info(f" { len(history_vae['loss']) = }")
 
     vae.save(folder)
     with open(folder+'/history_vae', 'wb') as file_pi:
@@ -838,44 +857,44 @@ def kwargator(thefun):
     thefun_kwargs_default = ut.set_values_recursive(thefun_kwargs_default,
                                             {'return_time_series' : True, 'return_threshold' : True,'myinput':'Y', 'keep_dims' : [1], #'normalization_mode' : 'global_logit',
                                              'fields': ['t2m_inter_filtered','zg500_inter','mrso_inter_filtered'], 'label_field' : 't2m_inter', 'year_list': 'range(500)', 'T' : 15, 'A_weights' : [3,0,0, 3,0,0, 3,0,0, 3,0,0, 3,0,0],
-                                               'print_summary' : False, 'k1': 0.9 , 'k2':0.1, 'field_weights': [20., 1., 20.],'mask_area':'France', 'usemask' : False, 'Z_DIM': 64, #16, #8, #64,
+                                               'print_summary' : False, 'k1': 0.9 , 'k2':0.1, 'field_weights': [20., 1., 20.],'mask_area':'France', 'usemask' : False, 'Z_DIM': 16, #16, #8, #64,
                                                 'N_EPOCHS': 10,'batch_size': 128, 'checkpoint_every': 1, 'lr': 5e-4, 'epoch_tol': None, 'lr_min' : 5e-4, 'lat_start' : 0, 'lat_end' : 24, 'lon_start' : 98, 'lon_end' : 18, 
                                                 #'lat_start' : 4, 'lat_end' : 22, 'lon_start' : 101, 'lon_end' : 15, 
                                                 'time_start' : 15, 'label_period_start' : 30,  'time_end' : 134, 'label_period_end' : 120,
                                                 #'lat_0' : 0, 'lat_1' : 24, 'lon_0' : (64-28), 'lon_1' : (64+15), 'coef_out' : 0.1, 'coef_in' : 1, 
                                                 # 'coef_class' : 0.1, 'class_type' : 'mean', 'L2factor' : 1e-9,
                                                 'print_summary' : True,
-                                                #'encoder_conv_filters' : [32,64,64,64],
-                                                #'encoder_conv_kernel_size' : [3,3,3,3, 64],
-                                                #'encoder_conv_strides' : [2,2,2,1],
-                                                #'encoder_conv_padding' : ["same","same","same","valid"], 
-                                                #'encoder_conv_activation' : ["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"],
-                                                #'encoder_use_batch_norm' : [False,False,False,False,False], 
-                                                #'encoder_use_dropout':[0,0,0,0,0],
-                                                #'decoder_conv_filters' : [64,64,32,1],  #3], # Use 3 if working with 3 fields
-                                                #'decoder_conv_kernel_size' : [3,3,3,3,64],
-                                                #'decoder_conv_strides' : [1,2,2,2],
-                                                #'decoder_conv_padding' : ["valid","same","same","same"], 
-                                                #'decoder_conv_activation' : ["LeakyRelu","LeakyRelu","LeakyRelu","sigmoid","LeakyRelu"],
+                                                'encoder_conv_filters' : [32,64,64,64],
+                                                'encoder_conv_kernel_size' : [3,3,3,3, 64],
+                                                'encoder_conv_strides' : [2,2,2,1],
+                                                'encoder_conv_padding' : ["same","same","same","valid"], 
+                                                'encoder_conv_activation' : ["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"],
+                                                'encoder_use_batch_norm' : [False,False,False,False,False], 
+                                                'encoder_use_dropout':[0,0,0,0,0],
+                                                'decoder_conv_filters' : [64,64,32,1],  #3], # Use 3 if working with 3 fields
+                                                'decoder_conv_kernel_size' : [3,3,3,3,64],
+                                                'decoder_conv_strides' : [1,2,2,2],
+                                                'decoder_conv_padding' : ["valid","same","same","same"], 
+                                                'decoder_conv_activation' : ["LeakyRelu","LeakyRelu","LeakyRelu","sigmoid","LeakyRelu"],
                                                 #'decoder_conv_skip' : None, 
-                                                #'decoder_use_batch_norm' : [False,False,False,False,False], 
-                                                #'decoder_use_dropout' : [0,0,0,0,0]
-                                               'encoder_conv_filters':             [16, 16, 16, 32, 32,  32,   64, 64],
-                                                        'encoder_conv_kernel_size':[5,  5,  5,  5,   5,   5,   5,  3], #  [5,  5,  5,  5,   5,   5,   5,  3, 64]
-                                                        'encoder_conv_strides'    :[2,  1,  1,  2,   1,   1,   2,  1],
-                                                        'encoder_conv_padding':["same","same","same","same","same","same","same","valid"],
-                                                        'encoder_conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"], # ["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"]
-                                                        'encoder_conv_skip': [[0,2],[3,5]], # None,
-                                                        'encoder_use_batch_norm' : [True,True,True,True,True,True,True,True], # [True,True,True,True,True,True,True,True,True]
-                                                        'encoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25], #[0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25]
-                                                'decoder_conv_filters':[64,32,32,32,16,16,16,1], #3], # Use 3 if working with 3 fields
-                                                        'decoder_conv_kernel_size':[3, 5, 5, 5, 5, 5, 5, 5], # [3, 5, 5, 5, 5, 5, 5, 5, 64]
-                                                            'decoder_conv_strides':[1, 2, 1, 1, 2, 1, 1, 2],
-                                                            'decoder_conv_padding':["valid","same","same","same","same","same","same","same"],
-                                                         'decoder_conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","sigmoid"], # ["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","sigmoid","LeakyRelu"]
-                                                               'decoder_conv_skip': [[1,3],[4,6]], # None,
-                                                            'decoder_use_batch_norm' : [True,True,True,True,True,True,True,True], #[True,True,True,True,True,True,True,True,True]
-                                                            'decoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25] # [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25]
+                                                'decoder_use_batch_norm' : [False,False,False,False,False], 
+                                                'decoder_use_dropout' : [0,0,0,0,0]
+                                               #'encoder_conv_filters':             [16, 16, 16, 32, 32,  32,   64, 64],
+                                               #         'encoder_conv_kernel_size':[5,  5,  5,  5,   5,   5,   5,  3], #  [5,  5,  5,  5,   5,   5,   5,  3, 64]
+                                               #         'encoder_conv_strides'    :[2,  1,  1,  2,   1,   1,   2,  1],
+                                               #         'encoder_conv_padding':["same","same","same","same","same","same","same","valid"],
+                                               #         'encoder_conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"], # ["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"]
+                                               #         'encoder_conv_skip': [[0,2],[3,5]], # None,
+                                               #         'encoder_use_batch_norm' : [True,True,True,True,True,True,True,True], # [True,True,True,True,True,True,True,True,True]
+                                               #         'encoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25], #[0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25]
+                                               # 'decoder_conv_filters':[64,32,32,32,16,16,16,1], #3], # Use 3 if working with 3 fields
+                                               #         'decoder_conv_kernel_size':[3, 5, 5, 5, 5, 5, 5, 5], # [3, 5, 5, 5, 5, 5, 5, 5, 64]
+                                               #             'decoder_conv_strides':[1, 2, 1, 1, 2, 1, 1, 2],
+                                               #             'decoder_conv_padding':["valid","same","same","same","same","same","same","same"],
+                                               #          'decoder_conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","sigmoid"], # ["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","sigmoid","LeakyRelu"]
+                                               #                'decoder_conv_skip': [[1,3],[4,6]], # None,
+                                               #             'decoder_use_batch_norm' : [True,True,True,True,True,True,True,True], #[True,True,True,True,True,True,True,True,True]
+                                               #             'decoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25] # [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25]
                                               })
 
     logger.info(ut.dict2str(thefun_kwargs_default)) # a nice way of printing nested dictionaries
