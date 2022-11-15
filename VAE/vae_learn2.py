@@ -469,7 +469,7 @@ def k_fold_cross_val(folder, myinput, mask, X, Y, time_series, year_permutation,
             #logger.info(f"Before training: {vae_trainable_weights = }")
             # logger.info(f"Before training: {vae.classifier.trainable_weights = }")
             if myinput!='N': 
-                history_loss = train_vae(X_tr, Y_tr, vae, ckpt_path_callback, fold_folder, myinput, N_EPOCHS, INITIAL_EPOCH, history_vae, **train_vae_kwargs)
+                history_loss = train_vae(X_tr, Y_tr, X_va, Y_va, vae, ckpt_path_callback, fold_folder, myinput, N_EPOCHS, INITIAL_EPOCH, history_vae, **train_vae_kwargs)
             else: # myinput='N' is useful when loading this function in reconstruction.py or classification for instance
                 history_loss = np.load(f"{fold_folder}/history_vae", allow_pickle=True)['loss']
             # logger.info(f"After training: {vae.classifier.trainable_weights = }")
@@ -638,18 +638,23 @@ class scheduler(tf.keras.optimizers.schedules.LearningRateSchedule):
 
 @ut.execution_time  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function: logger indent causes: IndexError: string index out of range
-def train_vae(X, Y, vae, cp_callback, folder, myinput, N_EPOCHS, INITIAL_EPOCH, history_vae, batch_size=128, scheduler_kwargs=None):
+def train_vae(X_tr, Y_tr, X_va, Y_va, vae, cp_callback, folder, myinput, N_EPOCHS, INITIAL_EPOCH, history_vae, batch_size=128, scheduler_kwargs=None, validation_data=None):
     '''
     Trains the model
 
     Parameters
     ----------
+    batch_size: (int)
+    validation_data: 
+        if None, the validation data will be empty, if not, the X_va and Y_va will actually be used
     
     '''
+    if validation_data is not None:
+        validation_data=(X_va,Y_va)
     term = TerminateOnNaN()  # fail during training on NaN loss
     if scheduler_kwargs == None:
         scheduler_kwargs = {}
-    logger.info(f"{np.max(X) = }, {np.min(X) = }")
+    logger.info(f"{np.max(X_tr) = }, {np.min(X_tr) = }")
     logger.info(f"{scheduler_kwargs = }")
     #cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=ckpt_path_callback,save_weights_only=True,verbose=1)
     scheduler_callback = tf.keras.callbacks.LearningRateScheduler(partial(scheduler, **scheduler_kwargs))
@@ -658,10 +663,10 @@ def train_vae(X, Y, vae, cp_callback, folder, myinput, N_EPOCHS, INITIAL_EPOCH, 
         vae.compile(optimizer=tf.keras.optimizers.Adam())
 
     logger.info(f"== fit ==")
-    logger.info(f'{ X.shape = }, {N_EPOCHS = }, {INITIAL_EPOCH = }, {batch_size = }')
+    logger.info(f'{X_tr.shape = }, {N_EPOCHS = }, {INITIAL_EPOCH = }, {batch_size = }')
     logger.info(f'{cp_callback = }')
- 
-    my_history_vae = vae.fit(X, Y, epochs=N_EPOCHS, initial_epoch=INITIAL_EPOCH, batch_size=batch_size, shuffle=True, callbacks=[cp_callback,scheduler_callback, PrintLR(**dict(model=vae)),term], verbose=2) # train on the last 9 folds
+    
+    my_history_vae = vae.fit(X_tr, Y_tr, validation_data=validation_data, epochs=N_EPOCHS, initial_epoch=INITIAL_EPOCH, batch_size=batch_size, shuffle=True, callbacks=[cp_callback,scheduler_callback, PrintLR(**dict(model=vae)),term], verbose=2) # train on the last 9 folds
     # Note that we need verbose=2 statement or else @ut.indent_logger(logger) causes errors
     
     if myinput == 'C':
@@ -675,7 +680,7 @@ def train_vae(X, Y, vae, cp_callback, folder, myinput, N_EPOCHS, INITIAL_EPOCH, 
         if vae.k1 != 'pca':
             history_vae = my_history_vae.history
         else:
-            history_vae = { 'loss' : vae.score(X) } # To compute average log likelihood if sklearn was used instead of autoencoder
+            history_vae = { 'loss' : vae.score(X_tr) } # To compute average log likelihood if sklearn was used instead of autoencoder
     # logger.info(f" { len(history_vae['loss']) = }")
 
     vae.save(folder)
@@ -856,14 +861,14 @@ def kwargator(thefun):
     thefun_kwargs_default = ln.get_default_params(thefun, recursive=True)
     thefun_kwargs_default = ut.set_values_recursive(thefun_kwargs_default,
                                             {'return_time_series' : True, 'return_threshold' : True,'myinput':'Y', 'keep_dims' : [1], #'normalization_mode' : 'global_logit',
-                                             'fields': ['t2m_inter_filtered','zg500_inter','mrso_inter_filtered'], 'label_field' : 't2m_inter', 'year_list': 'range(500)', 'T' : 15, 'A_weights' : [3,0,0, 3,0,0, 3,0,0, 3,0,0, 3,0,0],
+                                             'fields': ['t2m_inter_filtered','zg500_inter','mrso_inter_filtered'], 'label_field' : 't2m_inter', 'year_list': 'range(10)', 'T' : 15, 'A_weights' : [3,0,0, 3,0,0, 3,0,0, 3,0,0, 3,0,0],
                                                'print_summary' : False, 'k1': 0.9 , 'k2':0.1, 'field_weights': [20., 1., 20.],'mask_area':'France', 'usemask' : False, 'Z_DIM': 16, #16, #8, #64,
-                                                'N_EPOCHS': 10,'batch_size': 128, 'checkpoint_every': 1, 'lr': 5e-4, 'epoch_tol': None, 'lr_min' : 5e-4, 'lat_start' : 0, 'lat_end' : 24, 'lon_start' : 98, 'lon_end' : 18, 
+                                                'N_EPOCHS': 1000,'batch_size': 128, 'checkpoint_every': 10, 'lr': 5e-4, 'epoch_tol': None, 'lr_min' : 5e-4, 'lat_start' : 0, 'lat_end' : 24, 'lon_start' : 98, 'lon_end' : 18, 
                                                 #'lat_start' : 4, 'lat_end' : 22, 'lon_start' : 101, 'lon_end' : 15, 
                                                 'time_start' : 15, 'label_period_start' : 30,  'time_end' : 134, 'label_period_end' : 120,
                                                 #'lat_0' : 0, 'lat_1' : 24, 'lon_0' : (64-28), 'lon_1' : (64+15), 'coef_out' : 0.1, 'coef_in' : 1, 
                                                 # 'coef_class' : 0.1, 'class_type' : 'mean', 'L2factor' : 1e-9,
-                                                'print_summary' : True,
+                                                'print_summary' : True, 'validation_data': None,
                                                 'encoder_conv_filters' : [32,64,64,64],
                                                 'encoder_conv_kernel_size' : [3,3,3,3, 64],
                                                 'encoder_conv_strides' : [2,2,2,1],
