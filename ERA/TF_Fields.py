@@ -221,12 +221,14 @@ class VAE(tf.keras.Model): # Class of variational autoencoder
         reconstruction = self.decoder(z)
         factor = self.k1*self.encoder_input_shape[1]*self.encoder_input_shape[2] # this factor is designed for consistency with the previous defintion of the loss (see commented section below)
         # We should try tf.reduce_mean([0.1,0.1,0.4]*tf.cast([bce(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis],sample_weight=np.ones((2,4,3))) for i in range(3)], dtype=np.float32))
-        if self.field_weights is None: # I am forced to use this awkward way of apply field weights since I cannot use the new version of tensorflow where axis parameter can be given
+        if self.field_weights is None: # I am forced to use this awkward way to apply field weights since I cannot use the new version of tensorflow where axis parameter can be given
             reconstruction_loss = self.coef_out*factor*tf.reduce_mean([tf.reduce_mean(self.rec_loss_form(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis])) for i in range(reconstruction.shape[3])] ) 
-            + self.coef_in*factor*tf.reduce_mean([tf.reduce_mean(self.rec_loss_form(data[...,self.lat_0:self.lat_1,self.lon_0:self.lon_1,i][..., np.newaxis], reconstruction[...,self.lat_0:self.lat_1,self.lon_0:self.lon_1,i][..., np.newaxis])) for i in range(reconstruction.shape[3])] )
+            if self.coef_in != 0: # This only matters if we want loss which depends on geographical areas
+                reconstruction_loss += self.coef_in*factor*tf.reduce_mean([tf.reduce_mean(self.rec_loss_form(data[...,self.lat_0:self.lat_1,self.lon_0:self.lon_1,i][..., np.newaxis], reconstruction[...,self.lat_0:self.lat_1,self.lon_0:self.lon_1,i][..., np.newaxis])) for i in range(reconstruction.shape[3])] )
         else:  # The idea behind adding [..., np.newaxis] is to be able to use sample_weight in self.rec_loss_form on three dimensional input
             reconstruction_loss = self.coef_out*factor*tf.reduce_mean([self.field_weights[i]*tf.reduce_mean(self.rec_loss_form(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis])) for i in range(reconstruction.shape[3])])
-            + self.coef_in*factor*tf.reduce_mean([self.field_weights[i]*tf.reduce_mean(self.rec_loss_form(data[...,self.lat_0:self.lat_1,self.lon_0:self.lon_1,i][..., np.newaxis], reconstruction[...,self.lat_0:self.lat_1,self.lon_0:self.lon_1,i][..., np.newaxis])) for i in range(reconstruction.shape[3])])
+            if self.coef_in != 0: # This only matters if we want loss which depends on geographical areas
+                reconstruction_loss +=  self.coef_in*factor*tf.reduce_mean([self.field_weights[i]*tf.reduce_mean(self.rec_loss_form(data[...,self.lat_0:self.lat_1,self.lon_0:self.lon_1,i][..., np.newaxis], reconstruction[...,self.lat_0:self.lat_1,self.lon_0:self.lon_1,i][..., np.newaxis])) for i in range(reconstruction.shape[3])])
         # there is probably a more efficient way to do the line above: we are adding the full region plus a sub region.
         kl_loss = -0.5 * (1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var))
         kl_loss = self.k2*tf.reduce_mean(tf.reduce_sum(kl_loss, axis=1))

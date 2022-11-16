@@ -861,45 +861,45 @@ def kwargator(thefun):
     thefun_kwargs_default = ln.get_default_params(thefun, recursive=True)
     thefun_kwargs_default = ut.set_values_recursive(thefun_kwargs_default,
                                             {'return_time_series' : True, 'return_threshold' : True,'myinput':'Y', 'keep_dims' : [1], #'normalization_mode' : 'global_logit',
-                                             'fields': ['t2m_inter_filtered','zg500_inter','mrso_inter_filtered'], 'label_field' : 't2m_inter', 'year_list': 'range(10)', 'T' : 15, 'A_weights' : [3,0,0, 3,0,0, 3,0,0, 3,0,0, 3,0,0],
-                                               'print_summary' : False, 'k1': 0.9 , 'k2':0.1, 'field_weights': [20., 1., 20.],'mask_area':'France', 'usemask' : False, 'Z_DIM': 16, #16, #8, #64,
-                                                'N_EPOCHS': 1000,'batch_size': 128, 'checkpoint_every': 10, 'lr': 5e-4, 'epoch_tol': None, 'lr_min' : 5e-4, 'lat_start' : 0, 'lat_end' : 24, 'lon_start' : 98, 'lon_end' : 18, 
+                                             'fields': ['t2m_inter_filtered','zg500_inter','mrso_inter_filtered'], 'label_field' : 't2m_inter', 'year_list': 'range(500)', 'T' : 15, 'A_weights' : [3,0,0, 3,0,0, 3,0,0, 3,0,0, 3,0,0],
+                                               'print_summary' : False, 'k1': 18 , 'k2':0.1, 'field_weights': None,'mask_area':'France', 'usemask' : False, 'Z_DIM': 16, #16, #8, #64,
+                                                'N_EPOCHS': 100,'batch_size': 128, 'checkpoint_every': 10, 'lr': 1e-3, 'epoch_tol': None, 'lr_min' : 5e-4, 'lat_start' : 0, 'lat_end' : 24, 'lon_start' : 98, 'lon_end' : 18, 
                                                 #'lat_start' : 4, 'lat_end' : 22, 'lon_start' : 101, 'lon_end' : 15, 
                                                 'time_start' : 15, 'label_period_start' : 30,  'time_end' : 134, 'label_period_end' : 120,
                                                 #'lat_0' : 0, 'lat_1' : 24, 'lon_0' : (64-28), 'lon_1' : (64+15), 'coef_out' : 0.1, 'coef_in' : 1, 
                                                 # 'coef_class' : 0.1, 'class_type' : 'mean', 'L2factor' : 1e-9,
-                                                'print_summary' : True, 'validation_data': None,
-                                                'encoder_conv_filters' : [32,64,64,64],
-                                                'encoder_conv_kernel_size' : [3,3,3,3, 64],
-                                                'encoder_conv_strides' : [2,2,2,1],
-                                                'encoder_conv_padding' : ["same","same","same","valid"], 
-                                                'encoder_conv_activation' : ["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"],
-                                                'encoder_use_batch_norm' : [False,False,False,False,False], 
-                                                'encoder_use_dropout':[0,0,0,0,0],
-                                                'decoder_conv_filters' : [64,64,32,1],  #3], # Use 3 if working with 3 fields
-                                                'decoder_conv_kernel_size' : [3,3,3,3,64],
-                                                'decoder_conv_strides' : [1,2,2,2],
-                                                'decoder_conv_padding' : ["valid","same","same","same"], 
-                                                'decoder_conv_activation' : ["LeakyRelu","LeakyRelu","LeakyRelu","sigmoid","LeakyRelu"],
-                                                #'decoder_conv_skip' : None, 
-                                                'decoder_use_batch_norm' : [False,False,False,False,False], 
-                                                'decoder_use_dropout' : [0,0,0,0,0]
-                                               #'encoder_conv_filters':             [16, 16, 16, 32, 32,  32,   64, 64],
-                                               #         'encoder_conv_kernel_size':[5,  5,  5,  5,   5,   5,   5,  3], #  [5,  5,  5,  5,   5,   5,   5,  3, 64]
-                                               #         'encoder_conv_strides'    :[2,  1,  1,  2,   1,   1,   2,  1],
-                                               #         'encoder_conv_padding':["same","same","same","same","same","same","same","valid"],
-                                               #         'encoder_conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"], # ["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"]
-                                               #         'encoder_conv_skip': [[0,2],[3,5]], # None,
-                                               #         'encoder_use_batch_norm' : [True,True,True,True,True,True,True,True], # [True,True,True,True,True,True,True,True,True]
-                                               #         'encoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25], #[0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25]
-                                               # 'decoder_conv_filters':[64,32,32,32,16,16,16,1], #3], # Use 3 if working with 3 fields
-                                               #         'decoder_conv_kernel_size':[3, 5, 5, 5, 5, 5, 5, 5], # [3, 5, 5, 5, 5, 5, 5, 5, 64]
-                                               #             'decoder_conv_strides':[1, 2, 1, 1, 2, 1, 1, 2],
-                                               #             'decoder_conv_padding':["valid","same","same","same","same","same","same","same"],
-                                               #          'decoder_conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","sigmoid"], # ["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","sigmoid","LeakyRelu"]
-                                               #                'decoder_conv_skip': [[1,3],[4,6]], # None,
-                                               #             'decoder_use_batch_norm' : [True,True,True,True,True,True,True,True], #[True,True,True,True,True,True,True,True,True]
-                                               #             'decoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25] # [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25]
+                                                'print_summary' : True, 'validation_data': True,
+                                               # 'encoder_conv_filters' : [32,64,64,64],
+                                               # 'encoder_conv_kernel_size' : [3,3,3,3],
+                                               # 'encoder_conv_strides' : [2,2,2,1],
+                                               # 'encoder_conv_padding' : ["same","same","same","valid"], 
+                                               # 'encoder_conv_activation' : ["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"],
+                                               # 'encoder_use_batch_norm' : [False,False,False,False], 
+                                               # 'encoder_use_dropout':[0,0,0,0],
+                                               # 'decoder_conv_filters' : [64,64,32,1],  #3], # Use 3 if working with 3 fields
+                                               # 'decoder_conv_kernel_size' : [3,3,3,3],
+                                               # 'decoder_conv_strides' : [1,2,2,2],
+                                               # 'decoder_conv_padding' : ["valid","same","same","same"], 
+                                               # 'decoder_conv_activation' : ["LeakyRelu","LeakyRelu","LeakyRelu","sigmoid"],
+                                               # #'decoder_conv_skip' : None, 
+                                               # 'decoder_use_batch_norm' : [False,False,False,False], 
+                                               # 'decoder_use_dropout' : [0,0,0,0]
+                                               'encoder_conv_filters':             [16, 16, 16, 32, 32,  32,   64, 64],
+                                                        'encoder_conv_kernel_size':[5,  5,  5,  5,   5,   5,   5,  3], #  [5,  5,  5,  5,   5,   5,   5,  3, 64]
+                                                        'encoder_conv_strides'    :[2,  1,  1,  2,   1,   1,   2,  1],
+                                                        'encoder_conv_padding':["same","same","same","same","same","same","same","valid"],
+                                                        'encoder_conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"], # ["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"]
+                                                        'encoder_conv_skip': [[0,2],[3,5]], # None,
+                                                        'encoder_use_batch_norm' : [True,True,True,True,True,True,True,True], # [True,True,True,True,True,True,True,True,True]
+                                                        'encoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25], #[0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25]
+                                                'decoder_conv_filters':[64,32,32,32,16,16,16,1], #3], # Use 3 if working with 3 fields
+                                                        'decoder_conv_kernel_size':[3, 5, 5, 5, 5, 5, 5, 5], # [3, 5, 5, 5, 5, 5, 5, 5, 64]
+                                                            'decoder_conv_strides':[1, 2, 1, 1, 2, 1, 1, 2],
+                                                            'decoder_conv_padding':["valid","same","same","same","same","same","same","same"],
+                                                         'decoder_conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","sigmoid"], # ["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","sigmoid","LeakyRelu"]
+                                                               'decoder_conv_skip': [[1,3],[4,6]], # None,
+                                                            'decoder_use_batch_norm' : [True,True,True,True,True,True,True,True], #[True,True,True,True,True,True,True,True,True]
+                                                            'decoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25] # [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25]
                                               })
 
     logger.info(ut.dict2str(thefun_kwargs_default)) # a nice way of printing nested dictionaries
