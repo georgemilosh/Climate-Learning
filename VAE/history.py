@@ -11,6 +11,10 @@ nfolds = int(sys.argv[2])
 # we must now number of folds in advance
 
 folder = sys.argv[1]
+if len(sys.argv)>3:
+    limiting_fraction = int(sys.argv[3]) # tells the plot what fraction of x to show
+else:
+    limiting_fraction = 10
 
 fig, ax1 = plt.subplots()
 fig.subplots_adjust(right=0.68)
@@ -38,11 +42,14 @@ for i in range(nfolds):
         metric[key].append(history[key])
         print(epochs)
 ln1, ln2, ln3, ln4, ln1_va, ln2_va, ln3_va, ln4_va = [], [], [], [], [], [], [], []
+epochs = epochs[len(epochs)//limiting_fraction:]
 for key in history:
     metric[key] = np.array(metric[key])
     print(f'{metric[key].shape = }')
     meanskilarray = np.mean(metric[key],0)
     stdskillarray = np.std(metric[key],0)
+    meanskilarray = meanskilarray[len(meanskilarray)//limiting_fraction:]
+    stdskillarray = stdskillarray[len(stdskillarray)//limiting_fraction:]
     print(f'{meanskilarray.shape = }')
     
 
@@ -93,6 +100,7 @@ ax1.set_xlabel("Epochs")
 ax1.set_ylabel("loss")
 ax2.set_ylabel("reconstruction_loss")
 ax3.set_ylabel("kl_loss")
+ax1.set_xlim([epochs[len(epochs)//10],epochs[-1]])
 ax2.grid()
 fig.savefig(f"Images/history.png", bbox_inches='tight', dpi=200)
 plt.show()
