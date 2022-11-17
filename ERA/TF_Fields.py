@@ -47,14 +47,29 @@ class PCAer:
     """_summary_
         Essentially decorator class that keeps the inputs and outputs maximally similar to autoencoder so that we could using the same routines
     """
-    def __init__(self, Z_DIM):
+    def __init__(self, *args, k1=1, k2=1, from_logits=False, field_weights=None, 
+            lat_0=None, lat_1=None, lon_0=None, lon_1=None, coef_out=1, coef_in=0, coef_class=0, loss_type=None, class_type='stochastic', mask_area=None, Z_DIM=2, N_EPOCHS=2, print_summary=True, **kwargs):
         self.k1 = 'pca'
         self.k2 = 'pca'
         self.Z_DIM = Z_DIM
         self.encoder = PCAencoder(n_components=Z_DIM, svd_solver="randomized", whiten=True)
+        self.shape = None # is created when calling method fit()
+        self.bce = tf.keras.losses.BinaryCrossentropy(from_logits=from_logits)
+        self.field_weights = field_weights
+        self.lat_0 = lat_0 # parameters for weighting the reconstruction loss geographically
+        self.lat_1 = lat_1 # parameters for weighting the reconstruction loss geographically
+        self.lon_0 = lon_0 # parameters for weighting the reconstruction loss geographically
+        self.lon_1 = lon_1 
+        self.coef_out = coef_out # The full grid coefficient for reconstruction loss
+        self.coef_in = coef_in # The inner grid coefficient (lat_0:lat_1, lon_0:lon_1) for reconstruction loss
+        if loss_type is None: # Assuming Bernoulli variables
+            self.rec_loss_form = self.bce
+        else: # assuming Gaussian variables, for future compatibility write 'L2'
+            self.rec_loss_form = tf.losses.MeanSquaredError()
     def fit(self,*args, **kwargs):
         print(f'{args[0].shape = }')
         result_fit = self.encoder.fit(args[0].reshape(args[0].shape[0],-1)) # PCA expects the input of type fit(X) such that X is 2 dimensional
+        self.shape = self.shape = args[0].shape[0]
         print(f'{np.sum(self.encoder.explained_variance_ratio_) = }')
         return result_fit 
     def score(self,*args,**kwargs):
@@ -62,6 +77,13 @@ class PCAer:
     def save(self,folder):
         with open(folder+'/encoder.pkl', 'wb') as file_pi:
             pickle.dump(self.encoder, file_pi)
+    def decoder(self,X):
+        return self.encoder.inverse_transform(X).reshape(self.shape)
+    def compute_loss(self,data,factor=None):
+        if factor == None:
+            factor = 18*data.shape[1]*data.shape[2] # 18 because we don't have access to k1 value any more and for consistency we choose 18
+        reconstruction = self.decoder(data)
+        return compute_loss(data,self.rec_loss_form,self.coef_out,self.coef_in,self.field_weights,self.lat_0,self.lat_1,self.lon_0,self.lon_1,factor)
     def summary(self):
         print(f'PCA with {self.Z_DIM} components')
 
@@ -107,6 +129,17 @@ class Sampling(tf.keras.layers.Layer):  # Normal distribution sampling for the e
         dim = tf.shape(z_mean)[1]
         epsilon = tf.keras.backend.random_normal(shape=(batch, dim))
         return z_mean + tf.exp(0.5 * z_log_var) * epsilon
+
+def compute_loss(data,reconstruction,rec_loss_form,coef_out,coef_in,field_weights,lat_0,lat_1,lon_0,lon_1,factor):
+    if field_weights is None: # I am forced to use this awkward way to apply field weights since I cannot use the new version of tensorflow where axis parameter can be given
+        reconstruction_loss = coef_out*factor*tf.reduce_mean([tf.reduce_mean(rec_loss_form(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis])) for i in range(reconstruction.shape[3])] ) 
+        if coef_in != 0: # This only matters if we want loss which depends on geographical areas
+            reconstruction_loss += coef_in*factor*tf.reduce_mean([tf.reduce_mean(rec_loss_form(data[...,lat_0:lat_1,lon_0:lon_1,i][..., np.newaxis], reconstruction[...,lat_0:lat_1,lon_0:lon_1,i][..., np.newaxis])) for i in range(reconstruction.shape[3])] )
+    else:  # The idea behind adding [..., np.newaxis] is to be able to use sample_weight in self.rec_loss_form on three dimensional input
+        reconstruction_loss = coef_out*factor*tf.reduce_mean([field_weights[i]*tf.reduce_mean(rec_loss_form(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis])) for i in range(reconstruction.shape[3])])
+        if coef_in != 0: # This only matters if we want loss which depends on geographical areas
+            reconstruction_loss +=  coef_in*factor*tf.reduce_mean([field_weights[i]*tf.reduce_mean(rec_loss_form(data[...,lat_0:lat_1,lon_0:lon_1,i][..., np.newaxis], reconstruction[...,lat_0:lat_1,lon_0:lon_1,i][..., np.newaxis])) for i in range(reconstruction.shape[3])])
+    return reconstruction_loss
     
 class VAE(tf.keras.Model): # Class of variational autoencoder
     '''
@@ -219,16 +252,9 @@ class VAE(tf.keras.Model): # Class of variational autoencoder
         z_mean, z_log_var, z, zz = self.call_encoder_classifier(data)
 
         reconstruction = self.decoder(z)
-        factor = self.k1*self.encoder_input_shape[1]*self.encoder_input_shape[2] # this factor is designed for consistency with the previous defintion of the loss (see commented section below)
+        factor = self.k1*self.encoder_input_shape[1]*self.encoder_input_shape[2] # this factor is designed for consistency with the previous defintion of the loss
         # We should try tf.reduce_mean([0.1,0.1,0.4]*tf.cast([bce(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis],sample_weight=np.ones((2,4,3))) for i in range(3)], dtype=np.float32))
-        if self.field_weights is None: # I am forced to use this awkward way to apply field weights since I cannot use the new version of tensorflow where axis parameter can be given
-            reconstruction_loss = self.coef_out*factor*tf.reduce_mean([tf.reduce_mean(self.rec_loss_form(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis])) for i in range(reconstruction.shape[3])] ) 
-            if self.coef_in != 0: # This only matters if we want loss which depends on geographical areas
-                reconstruction_loss += self.coef_in*factor*tf.reduce_mean([tf.reduce_mean(self.rec_loss_form(data[...,self.lat_0:self.lat_1,self.lon_0:self.lon_1,i][..., np.newaxis], reconstruction[...,self.lat_0:self.lat_1,self.lon_0:self.lon_1,i][..., np.newaxis])) for i in range(reconstruction.shape[3])] )
-        else:  # The idea behind adding [..., np.newaxis] is to be able to use sample_weight in self.rec_loss_form on three dimensional input
-            reconstruction_loss = self.coef_out*factor*tf.reduce_mean([self.field_weights[i]*tf.reduce_mean(self.rec_loss_form(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis])) for i in range(reconstruction.shape[3])])
-            if self.coef_in != 0: # This only matters if we want loss which depends on geographical areas
-                reconstruction_loss +=  self.coef_in*factor*tf.reduce_mean([self.field_weights[i]*tf.reduce_mean(self.rec_loss_form(data[...,self.lat_0:self.lat_1,self.lon_0:self.lon_1,i][..., np.newaxis], reconstruction[...,self.lat_0:self.lat_1,self.lon_0:self.lon_1,i][..., np.newaxis])) for i in range(reconstruction.shape[3])])
+        reconstruction_loss = compute_loss(data,reconstruction,self.rec_loss_form,self.coef_out,self.coef_in,self.field_weights,self.lat_0,self.lat_1,self.lon_0,self.lon_1,factor)
         # there is probably a more efficient way to do the line above: we are adding the full region plus a sub region.
         kl_loss = -0.5 * (1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var))
         kl_loss = self.k2*tf.reduce_mean(tf.reduce_sum(kl_loss, axis=1))
