@@ -72,7 +72,7 @@ def CommOnePoint(day,ther,dela, Temp_va, Temp_tr, nn, n_Traj, numsteps, Markov_s
         Temp_va (_float_):      vector containing historical (temperature) time series in validation set
         Temp_tr (_float_):      vector containing historical (temperature) time series in training set
         nn (_int_):             number of nearest neighbors to look for
-        n_Traj (_int_):         number of days in the trajectory (how long the trajectory will be)
+        n_Traj (_int_):         Number of MC samples that start from the same day (number of trajectories).
         numsteps (_int_):       numbe of steps in the A(t) event (e.g. 15 days with 3 day jumps gives 5)
         Markov_step (_int_):    step in the Markov chain (how many days)
         Matr_va (_ndarray_):    T matrix between validation where we start and training set
@@ -177,7 +177,7 @@ def RunNeighbors(Matr_va,Matr_tr, time_series_va, time_series_tr, days, threshol
         time_series_tr (_float_):   Vector containing historical (temperature) time series in training set
         days (_int_):               Vector of days to start the simulation from
         threshold (_float_):        Vector describing the set of thresholds
-        num_Traj (int, optional):   Number of days in the trajectory (how long the trajectory will be). Defaults to 100.
+        num_Traj (int, optional):   Number of MC samples that start from the same day (number of trajectories). Defaults to 100.
         T (int, optional):          Number of days in A(t) event. Defaults to 15.
         chain_step (int, optional): How many days the Markov chain jumps over each iteration. Defaults to 3.
         neighbors (list, optional): Number of nearest neihbors. Defaults to [10].

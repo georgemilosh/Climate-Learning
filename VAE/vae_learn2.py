@@ -862,7 +862,7 @@ def kwargator(thefun):
     thefun_kwargs_default = ut.set_values_recursive(thefun_kwargs_default,
                                             {'return_time_series' : True, 'return_threshold' : True,'myinput':'Y', 'keep_dims' : [1], 'normalization_mode' : 'global_logit', 'loss_type' : 'L2',
                                              'fields': ['t2m_inter_filtered','zg500_inter','mrso_inter_filtered'], 'label_field' : 't2m_inter', 'year_list': 'range(500)', 'T' : 15, 'A_weights' : [3,0,0, 3,0,0, 3,0,0, 3,0,0, 3,0,0],
-                                               'print_summary' : False, 'k1': 18 , 'k2':1, 'field_weights': None,'mask_area':'France', 'usemask' : False, 'Z_DIM': 16, #16, #8, #64,
+                                               'print_summary' : False, 'k1': 18 , 'k2':18, 'field_weights': None,'mask_area':'France', 'usemask' : False, 'Z_DIM': 16, #16, #8, #64,
                                                 'N_EPOCHS': 10,'batch_size': 128, 'checkpoint_every': 1, 'lr': 1e-3, 'epoch_tol': None, 'lr_min' : 5e-4, 'lat_start' : 0, 'lat_end' : 24, #'lon_start' : 98, 'lon_end' : 18,
                                                 #'lat_start' : 4, 'lat_end' : 22, 'lon_start' : 101, 'lon_end' : 15, 
                                                 'time_start' : 15, 'label_period_start' : 30,  'time_end' : 134, 'label_period_end' : 120,
