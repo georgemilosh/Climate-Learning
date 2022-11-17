@@ -1,5 +1,6 @@
 # George Miloshevich 2022
-# This routine is written for one parameter: input folder for VAE weights. It shows us how good the committor of the VAE works
+#   Adapted from earlier version of Dario Lucente
+# This routine is written for one parameter: input folder for VAE weights/ whether VAE is used for dimensionality reduction can vary. It shows us how good the committor of the analog Markov chain works
 # The new usage committor.py <folder> 
 import os, sys
 import pickle
@@ -59,8 +60,25 @@ ut.indentation_sep = '    '
 import numba as nb
 from numba import jit,guvectorize,set_num_threads
 #Function for computing the committor at one point. Input: day=point where committor is computed (state of markov chain), ther= vector of threshold, dela= vector of delays, nn= number of neighbors, Matr=Matix which contains indeces of Markov chain, res= vector where results are stored
-@guvectorize([(nb.int64,nb.float64[:],nb.int64[:],nb.float64[:],nb.float64[:],nb.int64,nb.int64,nb.int64,nb.int64,nb.int64[:,:],nb.int64[:,:],nb.float64[:,:])],'(),(n),(m),(p),(q),(),(),(),(),(k,o),(l,j)->(n,m)',nopython=True,target="parallel")
+@guvectorize([(nb.int64,nb.float64[:],nb.int64[:],nb.float64[:],nb.float64[:],nb.int64,
+               nb.int64,nb.int64,nb.int64,nb.int64[:,:],nb.int64[:,:],nb.float64[:,:])],
+             '(),(n),(m),(p),(q),(),(),(),(),(k,o),(l,j)->(n,m)',nopython=True,target="parallel") # to enable numba parallelism
 def CommOnePoint(day,ther,dela, Temp_va, Temp_tr, nn, n_Traj, numsteps, Markov_step, Matr_va, Matr_tr,res): # a day implies the temporal coordinates in days of the input from the 0-th year of the 1000 year long dataset
+    """ Compute committor 
+    Args:
+        day (_int_):            day in the validation set where the Markov chain will start
+        ther (_float_):         vector descrbing the set of thresholds
+        dela (_float_):         vector describing the set of time delays (lead times)
+        Temp_va (_float_):      vector containing historical (temperature) time series in validation set
+        Temp_tr (_float_):      vector containing historical (temperature) time series in training set
+        nn (_int_):             number of nearest neighbors to look for
+        n_Traj (_int_):         number of days in the trajectory (how long the trajectory will be)
+        numsteps (_int_):       numbe of steps in the A(t) event (e.g. 15 days with 3 day jumps gives 5)
+        Markov_step (_int_):    step in the Markov chain (how many days)
+        Matr_va (_ndarray_):    T matrix between validation where we start and training set
+        Matr_tr (_ndarray_):    T matrix inside the training set
+        res (_float_):          stores the committor (return), this is how numba vectorization forces the output to be treated
+    """
     wrong_index = 0 # This checks that during input or execution we were always working with indecies that exist in the considered matrices and we don't go below or above
     if (day >= Matr_va.shape[0]) or (day < 0): # We don't allow inputs that are outside of the range of Matr_va. 
         #print("day > Matr_va.shape[0]")
@@ -70,7 +88,7 @@ def CommOnePoint(day,ther,dela, Temp_va, Temp_tr, nn, n_Traj, numsteps, Markov_s
             for l_2 in range(len(dela)):
                 res[l_1][l_2] = np.nan # we simply  don't have corresponding index
     if nn > Matr_va.shape[1]:
-        wrong_index = 1 # manual debugging
+        wrong_index = 1 # manual debugging: use to monitor if we get out of the Matr_tr allowed set
         print("We don't allow inputs that are outside of the range of Matr_va")
     else:
         #print("day <= Matr_va.shape[0]")
@@ -90,7 +108,7 @@ def CommOnePoint(day,ther,dela, Temp_va, Temp_tr, nn, n_Traj, numsteps, Markov_s
                     if (s >= Matr_tr.shape[0]) or (s < 0):
                         wrong_index = 1
                     if nn > Matr_tr.shape[1]:
-                        wrong_index = 1 # manual debugging
+                        wrong_index = 1 # manual debugging: use to monitor if we get out of the Matr_tr allowed set
                 for l_2 in range(len(dela)): 
                     if(j>=dela[l_2] and j<dela[l_2]+numsteps):
                         for l_1 in range(len(ther)):
@@ -125,6 +143,17 @@ def CommOnePoint(day,ther,dela, Temp_va, Temp_tr, nn, n_Traj, numsteps, Markov_s
 @ut.execution_time  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function     
 def RemoveSelfAnalogs(Matr_tr,n_days):
+    """_summary_
+
+    Args:
+        Matr_tr (_ndarray_):        T matrix inside the training set
+        n_days (_float_):           Keeps track of length of the year (summer) which is expected to be set to time_end-time_start-T+1
+                                    We need this object to handle properly the indices and convert between index and year/calendar day   
+
+    Returns:
+        ndarray: The new matrix of analogs where self analogs have been shuffled away to the end (columns) of 
+        the matrix and then removed, note that there will be missing values if we look for such far away neighbors
+    """
     selfanalogues = ((np.arange(Matr_tr.shape[0]//n_days)[np.newaxis].T*np.ones((Matr_tr.shape[0]//n_days,n_days))).astype(int)).flatten()[np.newaxis].T # This is a matrix of years related to the raw index
     sameyear = selfanalogues*np.ones((selfanalogues.shape[0],Matr_tr.shape[1]))==Matr_tr//n_days # A conditional matrix showing if the entry belongs to the same year 
     noselfanalogs = (np.where(sameyear,-1,Matr_tr)) # We set to -1 all the entries that are analogs of the same year
@@ -139,6 +168,23 @@ def RemoveSelfAnalogs(Matr_tr,n_days):
 @ut.execution_time  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function
 def RunNeighbors(Matr_va,Matr_tr, time_series_va, time_series_tr, days, threshold, num_Traj=100, T=15, chain_step=3, neighbors=[10], delay=np.arange(6)):
+    """Loop through the list of nearest neighbors and run  q[nn] = CommOnePoint
+
+    Args:
+        Matr_va (_ndarray_):        T matrix between validation where we start and training set
+        Matr_tr (_ndarray_):        T matrix inside the training set
+        time_series_va (_float_):   Vector containing historical (temperature) time series in validation set
+        time_series_tr (_float_):   Vector containing historical (temperature) time series in training set
+        days (_int_):               Vector of days to start the simulation from
+        threshold (_float_):        Vector describing the set of thresholds
+        num_Traj (int, optional):   Number of days in the trajectory (how long the trajectory will be). Defaults to 100.
+        T (int, optional):          Number of days in A(t) event. Defaults to 15.
+        chain_step (int, optional): How many days the Markov chain jumps over each iteration. Defaults to 3.
+        neighbors (list, optional): Number of nearest neihbors. Defaults to [10].
+        dela (_float_, optional):   vector describing the set of time delays (lead times
+    Returns:
+        _type_: _description_
+    """
     N_Steps = T//chain_step
     logger.info(f'{num_Traj = }, {N_Steps = }, {chain_step = }, {T = }, {neighbors = }, {delay = }, {threshold = }')
     q = {}
@@ -151,6 +197,25 @@ def RunNeighbors(Matr_va,Matr_tr, time_series_va, time_series_tr, days, threshol
 @ut.execution_time  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function
 def RunCheckpoints(ind_new_va,ind_new_tr,time_series_va, time_series_tr, threshold, n_days, allowselfanalogs=False, RunNeighbors_kwargs = None):
+    """Run each checkpoint: Note that when using only one layer for geopotential ('keep_dims' : [1] in run_vae_kwargs) 
+        it is understood that checkpoint corresond to different values of the geopotential coefficient in the metric
+
+    Args:
+        ind_new_va (darray):        Contains dictionary where each item corresponds to the validation T matrix
+                                    indexed by the key corresponding to checkpoint. For details see header of this summary
+        ind_new_tr (darray):        Contains dictionary where each item corresponds to the training T matrix
+                                    indexed by the key corresponding to checkpoint. For details see header of this summary
+        time_series_va (_float_):   vector containing historical (temperature) time series in validation set
+        time_series_tr (_float_):   vector containing historical (temperature) time series in training set
+        threshold (_float_):        vector descrbing the set of thresholds
+        n_days (_float_):           Keeps track of length of the year (summer) which is expected to be set to time_end-time_start-T+1
+                                    We need this object to handle properly the indices and convert between index and year/calendar day    
+        allowselfanalogs (bool, optional): Deside whether the analogs from the same year are allowed. Defaults to False.
+        RunNeighbors_kwargs (_type_, optional): see kwargs of function RunNeighbors() for explanation. Defaults to None.
+
+    Returns:
+        _type_: _description_
+    """
     if RunNeighbors_kwargs is None:
         RunNeighbors_kwargs = {}
     #logger.info(f'{RunNeighbors_kwargs = }')
@@ -163,12 +228,29 @@ def RunCheckpoints(ind_new_va,ind_new_tr,time_series_va, time_series_tr, thresho
             Matr_tr = RemoveSelfAnalogs(ind_new_tr[checkpoint],n_days)
         Matr_va = ind_new_va[checkpoint]
         logger.info(f"{Matr_va.shape = }")
-        q[checkpoint] = RunNeighbors(Matr_va,Matr_tr, time_series_va, time_series_tr, np.arange(Matr_va.shape[0]), threshold, **RunNeighbors_kwargs)
+        q[checkpoint] = RunNeighbors(Matr_va, Matr_tr, time_series_va, time_series_tr, np.arange(Matr_va.shape[0]), threshold, **RunNeighbors_kwargs)
     return q
 
 @ut.execution_time  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function
 def RunFolds(folder,nfolds, threshold, n_days, nfield=0, input_set='va', bulk_set='tr', RunCheckpoints_kwargs=None):
+    """Loop through folds and run q[fold] = RunCheckpoints
+
+    Args:
+        folder (_string_):          name of the folder where the data are stored
+        nfolds (_int_):             number of folds, which is typically 10
+        threshold (_float_):        vector descrbing the set of thresholds
+        n_days (_float_):           Keeps track of length of the year (summer) which is expected to be set to time_end-time_start-T+1
+                                    We need this object to handle properly the indices and convert between index and year/calendar day    
+        nfield (int, optional):     The time series are stored with an index of a field, typically integrals of (t2m,zg500,mrso). 
+                                    If we pick 0 we get t2m. Defaults to 0.
+        input_set (str, optional):  Tells whether to assign Matr_va to the validation set or not. Defaults to 'va'.
+        bulk_set (str, optional):   Tells whether to assign Matr_tra to the training set or not. . Defaults to 'tr'.
+        RunCheckpoints_kwargs (_type_, optional): See details in RunCheckpoints(). Defaults to None.
+
+    Returns:
+        _darray_: array of committor values
+    """
     #logger.info(f'{RunCheckpoints_kwargs = }')
     if RunCheckpoints_kwargs is None:
         RunCheckpoints_kwargs = {}
