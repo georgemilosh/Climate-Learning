@@ -364,7 +364,7 @@ time_series_va_0 = np.load(f"{folder}/fold_{0}/time_series_va.npy")[:,0]
 open_file = open(f'{folder}/fold_{0}/analogues.pkl', "rb")
 analogues_0 = pickle.load(open_file)
 # We have to compile the numba function before it can be used in parallel
-CommOnePoint(33,threshold,delay,time_series_va_0,time_series_va_0,1,10, 5, chain_step, analogues_0[f'ind_new_va'],analogues_0[f'ind_new_va'])
+CommOnePoint(33,threshold,delay,time_series_va_0,time_series_va_0,[2,3,5,10,20,50],10, 5, chain_step, analogues_0[f'ind_new_va'],analogues_0[f'ind_new_va'])
 q = RunFolds(folder,nfolds, threshold, n_days, **RunFolds_kwargs_default)   
 
 committor, entropy = ComputeSkill(folder, q, percent, chain_step)
