@@ -109,7 +109,7 @@ def DressTrajOnePoint(day, ther,dela, Temp_va, Temp_tr, nn, n_Traj, numsteps, Ma
     """This function calls TrajOnePoint by selecting the right inputs provided to ca.CommOnePoint()
     """
     n_Traj = np.arange(n_Traj)
-    numsteps = np.arange(numsteps)
+    numsteps = np.arange(numsteps) # Note that this overwrites what was prescribed in ca.RunNeighbors(). We want to simulate a day in summer
     print(f'{n_Traj = }')
     return TrajOnePoint(day, nn, n_Traj, numsteps, Markov_step, Matr_tr)
 
@@ -149,9 +149,9 @@ else:
 RunFolds_kwargs_default = ln.get_default_params(ca.RunFolds, recursive=True)
 RunFolds_kwargs_default = ut.set_values_recursive(
     RunFolds_kwargs_default, {'num_Traj' : 10, 'chain_step' : extra_day,  'threshold' : threshold,
-                                'delay' : delay, 'neighbors' : [3,5,10,20,40], 
+                                'delay' : delay, 'neighbors' : [3,5,10,20,40], 'num_steps' : 17,
                               'T' : T, 'allowselfanalogs' : True, 'input_set' : 'va', 'bulk_set' : 'tr',
-                              'start_calendar_day' :15, 'start_day_set' : 'tr'}  )
+                              'start_calendar_day' :(label_period_start-time_start), 'start_day_set' : 'tr'}  )
 
 chain_step = ut.extract_nested(RunFolds_kwargs_default, 'chain_step')  
 logger.info(RunFolds_kwargs_default)
@@ -162,9 +162,9 @@ logger.info(f"{Fore.BLUE}") #  indicates we are inside the routine
 with open(f'{folder}/fold_{0}/analogues.pkl', "rb") as open_file:
     analog = pickle.load(open_file)
 analogues_tr = list(analog['ind_new_tr'].values())[0] # Here we need to load just random analogs for the compilation below
-
+time_series_tr = np.load(f"{folder}/fold_{0}/time_series_tr.npy")[:,0]
 #sec_1 = TrajOnePoint(33, [2,3,5,10,20,50],10, 5, chain_step, analogues_tr) # compiling (maybe we only need this once)
-sec = ca.RunFolds(folder,nfolds, threshold, n_days, **RunFolds_kwargs_default)   
+sec = ca.RunFolds(folder,1, threshold, n_days, **RunFolds_kwargs_default)    # We only run 1 fold
 
 
 logger.info(f"{Style.RESET_ALL}")

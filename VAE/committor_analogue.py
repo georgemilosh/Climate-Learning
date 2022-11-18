@@ -171,7 +171,7 @@ def RemoveSelfAnalogs(Matr_tr,n_days):
         
 @ut.execution_time  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function
-def RunNeighbors(Matr_va,Matr_tr, time_series_va, time_series_tr, days, threshold, num_Traj=100, T=15, chain_step=3, neighbors=[10], delay=np.arange(6)):
+def RunNeighbors(Matr_va,Matr_tr, time_series_va, time_series_tr, days, threshold, num_Traj=100, T=15, chain_step=3, neighbors=[10], delay=np.arange(6), num_steps=None):
     """Loop through the list of nearest neighbors and run  q[nn] = CommOnePoint
 
     Args:
@@ -189,7 +189,10 @@ def RunNeighbors(Matr_va,Matr_tr, time_series_va, time_series_tr, days, threshol
     Returns:
         _type_: _description_
     """
-    N_Steps = T//chain_step
+    if num_steps is None: # default behavior
+        N_Steps = T//chain_step
+    else: # if we want to overwrite the number of steps
+        N_Steps = num_steps
     logger.info(f'{num_Traj = }, {N_Steps = }, {chain_step = }, {T = }, {neighbors = }, {delay = }, {threshold = }')
     q = {}
     for nn in neighbors:
