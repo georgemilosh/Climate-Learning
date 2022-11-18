@@ -62,7 +62,6 @@ from numba import jit,guvectorize,set_num_threads
 @guvectorize([(nb.int64,nb.float64[:],nb.int64[:],nb.float64[:],nb.float64[:],nb.int64,
                nb.int64,nb.int64,nb.int64,nb.int64[:,:],nb.int64[:,:],nb.float64[:,:])],
              '(),(n),(m),(p),(q),(),(),(),(),(k,o),(l,j)->(n,m)',nopython=True,target="parallel") # to enable numba parallelism
-                                                                                                  # if day is a list the output will be neatly dressed accordingly
 def CommOnePoint(day,ther,dela, Temp_va, Temp_tr, nn, n_Traj, numsteps, Markov_step, Matr_va, Matr_tr,res): 
     """ Compute committor 
         Function for computing the committor at one point. Input: day=point where committor is computed 
@@ -71,7 +70,7 @@ def CommOnePoint(day,ther,dela, Temp_va, Temp_tr, nn, n_Traj, numsteps, Markov_s
     Args:
         day (_int_):            day in the validation set where the Markov chain will start
                                 a day implies the temporal coordinates in days of the input from the 0-th year 
-                                of the 1000 year long dataset
+                                of the 1000 year long dataset. if day is a list the output will be neatly dressed accordingly
         ther (_float_):         vector descrbing the set of thresholds
         dela (_float_):         vector describing the set of time delays (lead times)
         Temp_va (_float_):      vector containing historical (temperature) time series in validation set
@@ -196,11 +195,14 @@ def RunNeighbors(Matr_va,Matr_tr, time_series_va, time_series_tr, days, threshol
     for nn in neighbors:
         logger.info(f'{nn = }')
         q[nn] = CommOnePoint(days,threshold,delay,time_series_va,time_series_tr,nn,num_Traj, N_Steps, chain_step, Matr_va,Matr_tr)
+    if hasattr(q[nn],'shape'):
+        logger.info(f'{q[nn].shape = }')
     return q
 
 @ut.execution_time  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function
-def RunCheckpoints(ind_new_va,ind_new_tr,time_series_va, time_series_tr, threshold, n_days, allowselfanalogs=False, RunNeighbors_kwargs = None):
+def RunCheckpoints(ind_new_va,ind_new_tr,time_series_va, time_series_tr, threshold, n_days, 
+                   start_calendar_day=None, start_day_set='va', allowselfanalogs=False, RunNeighbors_kwargs = None):
     """Run each checkpoint: Note that when using only one layer for geopotential ('keep_dims' : [1] in run_vae_kwargs) 
         it is understood that checkpoint corresond to different values of the geopotential coefficient in the metric
 
@@ -213,7 +215,9 @@ def RunCheckpoints(ind_new_va,ind_new_tr,time_series_va, time_series_tr, thresho
         time_series_tr (_float_):   vector containing historical (temperature) time series in training set
         threshold (_float_):        vector descrbing the set of thresholds
         n_days (_float_):           Keeps track of length of the year (summer) which is expected to be set to time_end-time_start-T+1
-                                    We need this object to handle properly the indices and convert between index and year/calendar day    
+                                    We need this object to handle properly the indices and convert between index and year/calendar day  
+        start_calendar_day (_int_, optional): If not None then it is interpreted as a calendar day of days to retain. Defaults to None.
+        start_day_set (str, optional): If we want to start in the training set it is necessary to set it to 'tr'. Defaults to 'va'.
         allowselfanalogs (bool, optional): Deside whether the analogs from the same year are allowed. Defaults to False.
         RunNeighbors_kwargs (_type_, optional): see kwargs of function RunNeighbors() for explanation. Defaults to None.
 
@@ -222,6 +226,7 @@ def RunCheckpoints(ind_new_va,ind_new_tr,time_series_va, time_series_tr, thresho
     """
     if RunNeighbors_kwargs is None:
         RunNeighbors_kwargs = {}
+   
     q = {}
     for checkpoint in ind_new_tr.keys():
         logger.info(f'{checkpoint = }')
@@ -231,8 +236,16 @@ def RunCheckpoints(ind_new_va,ind_new_tr,time_series_va, time_series_tr, thresho
             Matr_tr = RemoveSelfAnalogs(ind_new_tr[checkpoint],n_days)
         Matr_va = ind_new_va[checkpoint]
         logger.info(f"{Matr_va.shape = }")
-        # We have to select days that are consistent with the period of interest: 77 days of summer
-        q[checkpoint] = RunNeighbors(Matr_va, Matr_tr, time_series_va, time_series_tr, np.arange(Matr_va.shape[0]), threshold, **RunNeighbors_kwargs)
+        if start_day_set == 'va': # by default we initialize days from the validation set
+            days = np.arange(Matr_va.shape[0]) # by default we take the whole validation set
+        else:
+            days = np.arange(Matr_tr.shape[0]) # by default we take the whole training set
+        if start_calendar_day is not None:
+            days = days.reshape(-1,n_days)[:,start_calendar_day].reshape(-1)
+            print(f'{days.shape = }')
+        # Note that we will compute committor on all days available (i.e. the ones which have been assign index in the T matrix)
+        # Later we may choose to use only relevant days when evaluating the skill (see ComputeSkill())
+        q[checkpoint] = RunNeighbors(Matr_va, Matr_tr, time_series_va, time_series_tr, days, threshold, **RunNeighbors_kwargs)
     return q
 
 @ut.execution_time  # prints the time it takes for the function to run
@@ -255,16 +268,14 @@ def RunFolds(folder,nfolds, threshold, n_days, nfield=0, input_set='va', bulk_se
     Returns:
         _darray_: array of committor values
     """
-    #logger.info(f'{RunCheckpoints_kwargs = }')
     if RunCheckpoints_kwargs is None:
         RunCheckpoints_kwargs = {}
     q = {}
     for fold in range(nfolds):
         logger.info(f'{fold = }, loading from {folder}/fold_{fold}/analogues.pkl')
         # the rest of the code goes here
-        open_file = open(f'{folder}/fold_{fold}/analogues.pkl', "rb")
-        analogues = pickle.load(open_file)
-        open_file.close()
+        with open(f'{folder}/fold_{fold}/analogues.pkl', "rb") as open_file:
+            analogues = pickle.load(open_file)
         
         time_series = {}
         time_series[bulk_set] = np.load(f"{folder}/fold_{fold}/time_series_{bulk_set}.npy")[:,nfield] # We extract only the temperature
@@ -277,12 +288,13 @@ def RunFolds(folder,nfolds, threshold, n_days, nfield=0, input_set='va', bulk_se
 @ut.execution_time  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function
 def ComputeSkill(folder, q, percent, chain_step):
+    logger.info(f'Using {chain_step}')
     committor = dict()
     skill = dict()
     for i, qfold in q.items():
         Y_va = (np.load(f"{folder}/fold_{i}/Y_va.npy").reshape(-1,n_days)
                 [:,(label_period_start-time_start):(n_days-T+1)]).reshape(-1) # the goal is to extract only the summer heatwaves
-        logger.info(f'Validation on the skill {Y_va.shape = }')
+        logger.info(f'Extraction from {label_period_start-time_start = } to {(n_days-T+1)} and reshape(-1) gives  {Y_va.shape = }')
         for j, qcheckpoints in qfold.items():
             if j not in committor:
                 committor[j] = {}
@@ -300,11 +312,16 @@ def ComputeSkill(folder, q, percent, chain_step):
                 else:
                     temp2 = skill[j][k]
                 temp2[i] = []
-                for l in range(temp[i].shape[1]): # loof over the tau dimension
+                for l in range(temp[i].shape[1]): # loop over the tau dimension
                     #logger.info(f'{Y_va.shape = },{temp[i][:,l].shape = }, {label_period_start-time_start-3*l = }, {n_days-T+1-3*l = }, {n_days = }  ')
-                    entropy = tf.keras.losses.BinaryCrossentropy(from_logits=False)(Y_va, (temp[i][:,l].reshape(-1,n_days)[:,(label_period_start-time_start-3*l):(n_days-T+1-3*l)]).reshape(-1)).numpy() # the goal is to extract only the summer heatwaves, but the committor is computed from mid may to the end of August. For tau = 0 we should have from June1 to August15 and for increasing tau this window has to shift towards earlier dates
+                    # the goal is to extract only the summer heatwaves, but the committor is computed from mid may 
+                    # to the end of August. For tau = 0 we should have from June1 to August15 and for increasing
+                    # tau this window has to shift towards earlier dates
+                    entropy = tf.keras.losses.BinaryCrossentropy(from_logits= 
+                                False)(Y_va, (temp[i][:,l].reshape(-1,n_days)[:,(label_period_start-
+                                time_start-3*l):(n_days-T+1-3*l)]).reshape(-1)).numpy() 
                     maxskill = -(percent/100.)*np.log(percent/100.)-(1-percent/100.)*np.log(1-percent/100.)
-                    temp2[i].append((maxskill-entropy)/maxskill)
+                    temp2[i].append((maxskill-entropy)/maxskill) # Using 3 instead of chain_step is important because tau increments are still 3 days 
                 skill[j][k] = temp2
     logger.info("Computed the skill of the committor")
 
@@ -328,47 +345,52 @@ ln.RunFolds = RunFolds
 
 #from tensorflow.keras.preprocessing.image import ImageDataGenerator
 sys.path.insert(1, '../ERA')
-year_permutation = np.load(f'{folder}/year_permutation.npy')
-run_vae_kwargs = ut.json2dict(f"{folder}/config.json")
-T = ut.extract_nested(run_vae_kwargs, 'T')
-if (ut.keys_exists(run_vae_kwargs, 'label_period_start') and ut.keys_exists(run_vae_kwargs, 'label_period_end')):
-    label_period_start = ut.extract_nested(run_vae_kwargs, 'label_period_start')
-    label_period_end = ut.extract_nested(run_vae_kwargs, 'label_period_end')
-    time_start = ut.extract_nested(run_vae_kwargs, 'time_start')
-    time_end = ut.extract_nested(run_vae_kwargs, 'time_end')
-threshold = np.array([np.load(f'{folder}/threshold.npy')]) #Threshold defining committor. This parameter I don't need, I shall perhaps transform it into epochs for variational autoencoder 
-percent = ut.extract_nested(run_vae_kwargs, 'percent')
-nfolds = ut.extract_nested(run_vae_kwargs, 'nfolds')
-n_days = time_end-time_start-T+1   
-logger.info(f"{Style.RESET_ALL}")
 
-extra_day=1
-if ut.keys_exists(run_vae_kwargs, 'A_weights'):
-    A_weights = ut.extract_nested(run_vae_kwargs, 'A_weights')
-    if A_weights is not None:
-        extra_day = A_weights[0] # We need to see if the labels were interpolated to see how much the algorithm should jump each summer
-if extra_day == 3:
-    delay = np.arange(6)
-else:
-    delay = 3*np.arange(6)
+if __name__ == '__main__': #  so that the functions above can be used in trajectory_analogue.py
+    year_permutation = np.load(f'{folder}/year_permutation.npy')
+    run_vae_kwargs = ut.json2dict(f"{folder}/config.json")
+    T = ut.extract_nested(run_vae_kwargs, 'T')
+    if (ut.keys_exists(run_vae_kwargs, 'label_period_start') and ut.keys_exists(run_vae_kwargs, 'label_period_end')):
+        label_period_start = ut.extract_nested(run_vae_kwargs, 'label_period_start')
+        label_period_end = ut.extract_nested(run_vae_kwargs, 'label_period_end')
+        time_start = ut.extract_nested(run_vae_kwargs, 'time_start')
+        time_end = ut.extract_nested(run_vae_kwargs, 'time_end')
+    threshold = np.array([np.load(f'{folder}/threshold.npy')]) #Threshold defining committor. This parameter I don't need, I shall perhaps transform it into epochs for variational autoencoder 
+    percent = ut.extract_nested(run_vae_kwargs, 'percent')
+    nfolds = ut.extract_nested(run_vae_kwargs, 'nfolds')
+    n_days = time_end-time_start-T+1   
+    logger.info(f"{Style.RESET_ALL}")
 
-RunFolds_kwargs_default = ln.get_default_params(RunFolds, recursive=True)
-RunFolds_kwargs_default = ut.set_values_recursive(
-    RunFolds_kwargs_default, {'num_Traj' : 100, 'chain_step' : extra_day, 'delay' : delay, 'neighbors' : [2,3,5,10,20,50], 
-                              'T' : T, 'allowselfanalogs' : True, 'input_set' : 'va', 'bulk_set' : 'tr'}  )
+    extra_day=1
+    if ut.keys_exists(run_vae_kwargs, 'A_weights'):
+        A_weights = ut.extract_nested(run_vae_kwargs, 'A_weights')
+        if A_weights is not None:
+            extra_day = A_weights[0] # We need to see if the labels were interpolated to see how much the algorithm should jump each summer
+    if extra_day == 3:
+        delay = np.arange(6)
+    else:
+        delay = 3*np.arange(6)
 
-chain_step = ut.extract_nested(RunFolds_kwargs_default, 'chain_step')  
-logger.info(RunFolds_kwargs_default)
-logger.info(f"{Fore.BLUE}") #  indicates we are inside the routine 
-time_series_va_0 = np.load(f"{folder}/fold_{0}/time_series_va.npy")[:,0]
-open_file = open(f'{folder}/fold_{0}/analogues.pkl', "rb")
-analogues_0 = pickle.load(open_file)
-# We have to compile the numba function before it can be used in parallel
-CommOnePoint(33,threshold,delay,time_series_va_0,time_series_va_0,[2,3,5,10,20,50],10, 5, chain_step, analogues_0[f'ind_new_va'],analogues_0[f'ind_new_va'])
-q = RunFolds(folder,nfolds, threshold, n_days, **RunFolds_kwargs_default)   
+    RunFolds_kwargs_default = ln.get_default_params(RunFolds, recursive=True)
+    RunFolds_kwargs_default = ut.set_values_recursive(
+        RunFolds_kwargs_default, {'num_Traj' : 10000, 'chain_step' : extra_day, 'delay' : delay, 'neighbors' : [2,3,5,10,20,50], 
+                                'T' : T, 'allowselfanalogs' : True, 'input_set' : 'va', 'bulk_set' : 'tr'}  )
 
-committor, entropy = ComputeSkill(folder, q, percent, chain_step)
+    chain_step = ut.extract_nested(RunFolds_kwargs_default, 'chain_step')  
+    logger.info(RunFolds_kwargs_default)
+    logger.info(f"{Fore.BLUE}") #  indicates we are inside the routine 
+    time_series_tr_0 = np.load(f"{folder}/fold_{0}/time_series_tr.npy")[:,0]
+    time_series_va_0 = np.load(f"{folder}/fold_{0}/time_series_va.npy")[:,0]
+    with open(f'{folder}/fold_{0}/analogues.pkl', "rb") as open_file:
+        analog = pickle.load(open_file)
+    analogues_va = list(analog['ind_new_va'].values())[0] # Here we need to load just random analogs for the compilation below
+    analogues_tr = list(analog['ind_new_tr'].values())[0]
+    #analogues_tr = (pickle.load(open_file)['ind_new_tr'][10])
 
-logger.info(f"{Style.RESET_ALL}")
+    CommOnePoint(33,threshold,delay,time_series_va_0,time_series_tr_0,[2,3,5,10,20,50],10, 5, chain_step, 
+                analogues_va,analogues_tr) # We have to compile the numba function before it can be used in parallel
+    q = RunFolds(folder,nfolds, threshold, n_days, **RunFolds_kwargs_default)   # Full run
 
-# Construct 2D array for lon-lat:
+    committor, entropy = ComputeSkill(folder, q, percent, chain_step)
+
+    logger.info(f"{Style.RESET_ALL}")
