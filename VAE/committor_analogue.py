@@ -59,14 +59,19 @@ ut.indentation_sep = '    '
 
 import numba as nb
 from numba import jit,guvectorize,set_num_threads
-#Function for computing the committor at one point. Input: day=point where committor is computed (state of markov chain), ther= vector of threshold, dela= vector of delays, nn= number of neighbors, Matr=Matix which contains indeces of Markov chain, res= vector where results are stored
 @guvectorize([(nb.int64,nb.float64[:],nb.int64[:],nb.float64[:],nb.float64[:],nb.int64,
                nb.int64,nb.int64,nb.int64,nb.int64[:,:],nb.int64[:,:],nb.float64[:,:])],
              '(),(n),(m),(p),(q),(),(),(),(),(k,o),(l,j)->(n,m)',nopython=True,target="parallel") # to enable numba parallelism
-def CommOnePoint(day,ther,dela, Temp_va, Temp_tr, nn, n_Traj, numsteps, Markov_step, Matr_va, Matr_tr,res): # a day implies the temporal coordinates in days of the input from the 0-th year of the 1000 year long dataset
+                                                                                                  # if day is a list the output will be neatly dressed accordingly
+def CommOnePoint(day,ther,dela, Temp_va, Temp_tr, nn, n_Traj, numsteps, Markov_step, Matr_va, Matr_tr,res): 
     """ Compute committor 
+        Function for computing the committor at one point. Input: day=point where committor is computed 
+        (state of markov chain), ther= vector of threshold, dela= vector of delays, nn= number of neighbors, 
+        Matr=Matix which contains indeces of Markov chain, res= vector where results are stored
     Args:
         day (_int_):            day in the validation set where the Markov chain will start
+                                a day implies the temporal coordinates in days of the input from the 0-th year 
+                                of the 1000 year long dataset
         ther (_float_):         vector descrbing the set of thresholds
         dela (_float_):         vector describing the set of time delays (lead times)
         Temp_va (_float_):      vector containing historical (temperature) time series in validation set
@@ -190,7 +195,6 @@ def RunNeighbors(Matr_va,Matr_tr, time_series_va, time_series_tr, days, threshol
     q = {}
     for nn in neighbors:
         logger.info(f'{nn = }')
-        q_1 = CommOnePoint(33,threshold,delay,time_series_va,time_series_tr,nn,num_Traj, N_Steps, chain_step, Matr_va,Matr_tr)
         q[nn] = CommOnePoint(days,threshold,delay,time_series_va,time_series_tr,nn,num_Traj, N_Steps, chain_step, Matr_va,Matr_tr)
     return q
 
@@ -218,7 +222,6 @@ def RunCheckpoints(ind_new_va,ind_new_tr,time_series_va, time_series_tr, thresho
     """
     if RunNeighbors_kwargs is None:
         RunNeighbors_kwargs = {}
-    #logger.info(f'{RunNeighbors_kwargs = }')
     q = {}
     for checkpoint in ind_new_tr.keys():
         logger.info(f'{checkpoint = }')
@@ -228,6 +231,7 @@ def RunCheckpoints(ind_new_va,ind_new_tr,time_series_va, time_series_tr, thresho
             Matr_tr = RemoveSelfAnalogs(ind_new_tr[checkpoint],n_days)
         Matr_va = ind_new_va[checkpoint]
         logger.info(f"{Matr_va.shape = }")
+        # We have to select days that are consistent with the period of interest: 77 days of summer
         q[checkpoint] = RunNeighbors(Matr_va, Matr_tr, time_series_va, time_series_tr, np.arange(Matr_va.shape[0]), threshold, **RunNeighbors_kwargs)
     return q
 
@@ -278,6 +282,7 @@ def ComputeSkill(folder, q, percent, chain_step):
     for i, qfold in q.items():
         Y_va = (np.load(f"{folder}/fold_{i}/Y_va.npy").reshape(-1,n_days)
                 [:,(label_period_start-time_start):(n_days-T+1)]).reshape(-1) # the goal is to extract only the summer heatwaves
+        logger.info(f'Validation on the skill {Y_va.shape = }')
         for j, qcheckpoints in qfold.items():
             if j not in committor:
                 committor[j] = {}
@@ -349,13 +354,17 @@ else:
 
 RunFolds_kwargs_default = ln.get_default_params(RunFolds, recursive=True)
 RunFolds_kwargs_default = ut.set_values_recursive(
-    RunFolds_kwargs_default, {'num_Traj' : 10000, 'chain_step' : extra_day, 'delay' : delay, 'neighbors' : [1,2,3,5,10,20,50,100], 
+    RunFolds_kwargs_default, {'num_Traj' : 100, 'chain_step' : extra_day, 'delay' : delay, 'neighbors' : [2,3,5,10,20,50], 
                               'T' : T, 'allowselfanalogs' : True, 'input_set' : 'va', 'bulk_set' : 'tr'}  )
 
 chain_step = ut.extract_nested(RunFolds_kwargs_default, 'chain_step')  
 logger.info(RunFolds_kwargs_default)
 logger.info(f"{Fore.BLUE}") #  indicates we are inside the routine 
-
+time_series_va_0 = np.load(f"{folder}/fold_{0}/time_series_va.npy")[:,0]
+open_file = open(f'{folder}/fold_{0}/analogues.pkl', "rb")
+analogues_0 = pickle.load(open_file)
+# We have to compile the numba function before it can be used in parallel
+CommOnePoint(33,threshold,delay,time_series_va_0,time_series_va_0,1,10, 5, chain_step, analogues_0[f'ind_new_va'],analogues_0[f'ind_new_va'])
 q = RunFolds(folder,nfolds, threshold, n_days, **RunFolds_kwargs_default)   
 
 committor, entropy = ComputeSkill(folder, q, percent, chain_step)
