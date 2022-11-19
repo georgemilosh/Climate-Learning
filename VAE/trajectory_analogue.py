@@ -3,7 +3,6 @@
 import os, sys
 import pickle
 from pathlib import Path
-os.environ['TF_XLA_FLAGS'] = '--tf_xla_enable_xla_devices'  # https://stackoverflow.com/questions/65907365/tensorflow-not-creating-xla-devices-tf-xla-enable-xla-devices-not-set
 
 
 folder = Path(sys.argv[1])  # The name of the folder where the weights have been stored
@@ -42,20 +41,9 @@ from sklearn.metrics import log_loss
 tff = foo.tff # tensorflow routines 
 ut = foo.ut # utilities
 ln = foo.ln #Learn2_new.py
-print("==Checking GPU==")
-import tensorflow as tf
-tf.test.is_gpu_available(
-    cuda_only=False, min_cuda_compute_capability=None
-)
-
-
-print("==Checking CUDA==")
-tf.test.is_built_with_cuda()
 
 import committor_analogue as ca
 
-# set spacing of the indentation
-ut.indentation_sep = '    '
 
 import numba as nb
 from numba import jit,guvectorize,set_num_threads
@@ -149,7 +137,7 @@ else:
 RunFolds_kwargs_default = ln.get_default_params(ca.RunFolds, recursive=True)
 RunFolds_kwargs_default = ut.set_values_recursive(
     RunFolds_kwargs_default, {'num_Traj' : 10, 'chain_step' : extra_day,  'threshold' : threshold,
-                                'delay' : delay, 'neighbors' : [3,5,10,20,40], 'num_steps' : 17,
+                                'delay' : delay, 'neighbors' : [3,5,10,20,40], 'num_steps' : n_days - (label_period_start-time_start),
                               'T' : T, 'allowselfanalogs' : True, 'input_set' : 'va', 'bulk_set' : 'tr',
                               'start_calendar_day' :(label_period_start-time_start), 'start_day_set' : 'tr'}  )
 
@@ -164,9 +152,21 @@ with open(f'{folder}/fold_{0}/analogues.pkl', "rb") as open_file:
 analogues_tr = list(analog['ind_new_tr'].values())[0] # Here we need to load just random analogs for the compilation below
 time_series_tr = np.load(f"{folder}/fold_{0}/time_series_tr.npy")[:,0]
 #sec_1 = TrajOnePoint(33, [2,3,5,10,20,50],10, 5, chain_step, analogues_tr) # compiling (maybe we only need this once)
-sec = ca.RunFolds(folder,1, threshold, n_days, **RunFolds_kwargs_default)    # We only run 1 fold
-
-
+sec = ca.RunFolds(folder,1, threshold, n_days, **RunFolds_kwargs_default)[0]   # We only run 1 fold
 logger.info(f"{Style.RESET_ALL}")
+
+logger.info(sec[10][10].shape)
+
+#logger.info(sec[10][10][0,0])
+
+#logger.info(sec[10][10][0,0]%n_days)
+time_series_synth = {k: {j:time_series_tr[u] for j, u in v.items()} for k, v in sec.items()}
+
+logger.info(time_series_synth[10][10].shape)
+
+#logger.info(time_series_tr[sec[10][10]][0,0])
+
+
+
 
 # Construct 2D array for lon-lat:
