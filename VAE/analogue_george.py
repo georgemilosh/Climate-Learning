@@ -106,6 +106,7 @@ def classify(fold_folder, evaluate_epoch, vae, X_tr, z_tr, Y_tr, X_va, z_va, Y_v
 
     logger.info(f"{Fore.BLUE}")
     logger.info(f"==classify of classification.py==")
+    logger.info(f"{extra_day = }")
     #logger.info(f"{X_va[23,15,65,0] = }, {z_va[23,14] = }, {Y_va[23] = }") # Just testing if data is processed properly (potentially remove this line)
     #logger.info(f"{X_tr[23,15,65,0] = }, {z_tr[23,14] = }, {Y_tr[23] = }") # Just testing if data is processed properly (potentially remove this line)
     
@@ -135,20 +136,20 @@ def classify(fold_folder, evaluate_epoch, vae, X_tr, z_tr, Y_tr, X_va, z_va, Y_v
         dim = zz_tr.shape[1] #dim = z.shape[1]
         siz = zz_tr.shape[0] #siz = z.shape[0]
         logger.info(f"{zz_tr.shape = }, {siz = }, {T = }, {time_start = }, {time_end = }")
-        #Zminus3 = z.reshape(siz//(time_end-time_start-T+1),time_end-time_start-T+1,-1)[:,:-3,:] # Remove last 3 days that makrov chain cannot access
-        Zminus3 = zz_tr.reshape(siz//(time_end-time_start-T+1),time_end-time_start-T+1,-1)[:,:-3,:] # Remove last 3 days that makrov chain cannot access
+        #Zminus3 = z.reshape(siz//(time_end-time_start-T+1),time_end-time_start-T+1,-1)[:,:-extra_day,:] # Remove last 3 days that makrov chain cannot access
+        Zminus3 = zz_tr.reshape(siz//(time_end-time_start-T+1),time_end-time_start-T+1,-1)[:,:-extra_day,:] # Remove last 3 days that makrov chain cannot access
         logger.info(f"{Zminus3.shape = }")
         logger.info("computing KDTree...")
         tree = cKDTree(Zminus3.reshape(-1,dim))
         #dist[checkpoint], ind[checkpoint] = tree.query(z, k=NN,n_jobs = 3)
         dist_tr[checkpoint], ind_tr[checkpoint] = tree.query(zz_tr, k=NN,n_jobs = cpucount//2)
         logger.info(f"{ind_tr[checkpoint] = }")
-        ind_new_tr[checkpoint] = ind_tr[checkpoint] // (time_end-time_start-T+1 - 3)*(3) + ind_tr[checkpoint]
+        ind_new_tr[checkpoint] = ind_tr[checkpoint] // (time_end-time_start-T+1 - extra_day)*(extra_day) + ind_tr[checkpoint]
         logger.info(f"{ind_new_tr[checkpoint] = }")
 
         dist_va[checkpoint], ind_va[checkpoint] = tree.query(zz_va, k=NN,n_jobs = cpucount//2)
         logger.info(f"{ind_va[checkpoint] = }")
-        ind_new_va[checkpoint] = ind_va[checkpoint] // (time_end-time_start-T+1 - 3)*(3) + ind_va[checkpoint]
+        ind_new_va[checkpoint] = ind_va[checkpoint] // (time_end-time_start-T+1 - extra_day)*(extra_day) + ind_va[checkpoint]
         logger.info(f"{ind_new_va[checkpoint] = }")
         
         logger.info(f"{zz_tr.shape = }, {zz_va.shape = }, {Zminus3.shape = }" )
@@ -177,6 +178,14 @@ else:
     run_vae_kwargs = ut.set_values_recursive(run_vae_kwargs, {'myinput' : 'N', 'evaluate_epoch' :1}) # backward compatibiity where there was no month of may
 if not os.path.exists(ut.extract_nested(run_vae_kwargs, 'mylocal')): # we are assuming that training was not run on R740server5
     run_vae_kwargs = ut.set_values_recursive(run_vae_kwargs, {'mylocal' : '/ClimateDynamics/MediumSpace/ClimateLearningFR/gmiloshe/PLASIM/'})
+
+extra_day = 1
+if ut.keys_exists(run_vae_kwargs, 'A_weights'):
+    A_weights = ut.extract_nested(run_vae_kwargs, 'A_weights')
+    if A_weights is not None:
+        extra_day = A_weights[0] # We need to see if the labels were interpolated to see how much the algorithm should jump each summer
+
+
 logger.info(f"{run_vae_kwargs = }")
 foo.classify = classify
 logger.info(f"{Style.RESET_ALL}")
