@@ -48,6 +48,8 @@ class Dense2D(layers.Layer):
         self.filters_per_field = filters_per_field
         self.nfields = len(self.filters_per_field)
         self.m = np.sum(self.filters_per_field)
+        if self.m == 0:
+            raise ValueError(f'Layer with no filters is invalid: {filters_per_field = }')
 
         self.regularizer = regularizer
 
@@ -60,19 +62,22 @@ class Dense2D(layers.Layer):
 
         self.kernels = []
         for i, fpf in enumerate(self.filters_per_field):
-            self.kernels.append(self.add_weight(
-                name=f"w_{i}",
-                shape=(*kernel_shape, fpf),
-                initializer="random_normal",
-                trainable=True,
-                regularizer=self.regularizer
-            ))
+            if fpf:
+                self.kernels.append(self.add_weight(
+                    name=f"w_{i}",
+                    shape=(*kernel_shape, fpf),
+                    initializer="random_normal",
+                    trainable=True,
+                    regularizer=self.regularizer
+                ))
+            else:
+                self.kernels.append(None) # no filters for this field
     
     def call(self, x):
         if x.shape[-1] != self.nfields:
             raise ValueError(f'Expected {self.nfields} fields, received {x.shape[-1]}')
 
-        x = [tf.tensordot(x[...,i], self.kernels[i], axes=2) for i in range(self.nfields)]
+        x = [tf.tensordot(x[...,i], k, axes=2) for i,k in enumerate(self.kernels) if k is not None]
         x = self.conc(x)
 
         return x
