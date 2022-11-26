@@ -4,7 +4,7 @@ import os, sys
 import pickle
 from pathlib import Path
 
-
+from functools import partial # allows us to create a function with arguments passed
 folder = Path(sys.argv[1])  # The name of the folder where the weights have been stored
      
 import logging
@@ -41,8 +41,15 @@ from sklearn.metrics import log_loss
 tff = foo.tff # tensorflow routines 
 ut = foo.ut # utilities
 ln = foo.ln #Learn2_new.py
-
+print(ln)
+print(ut)
+print(tff)
 import committor_analogue as ca
+print(ca)
+
+ca.tff = tff
+ca.ut = ut
+ca.ln = ln
 
 
 import numba as nb
@@ -155,14 +162,18 @@ time_series_tr = np.load(f"{folder}/fold_{0}/time_series_tr.npy")[:,0]
 sec = ca.RunFolds(folder,1, threshold, n_days, **RunFolds_kwargs_default)[0]   # We only run 1 fold
 logger.info(f"{Style.RESET_ALL}")
 
-logger.info(sec[10][10].shape)
+#logger.info(f'{sec[10][10].shape = }')
 
 #logger.info(sec[10][10][0,0])
 
 #logger.info(sec[10][10][0,0]%n_days)
 time_series_synth = {k: {j:time_series_tr[u] for j, u in v.items()} for k, v in sec.items()}
+#logger.info(f'{time_series_synth[10][10].shape = }')
+convolve_vec = np.vectorize(partial(np.convolve, **{'mode':'valid'}), signature='(n),(m)->(k)')
+A_synth = {k: {j:convolve_vec(u, np.ones(T)/T) for j, u in v.items()} for k, v in time_series_synth.items()}
+logger.info(f'{A_synth[10][10].shape = }')
+logger.info('Saving the synthetic time series in ')
 
-logger.info(time_series_synth[10][10].shape)
 
 #logger.info(time_series_tr[sec[10][10]][0,0])
 

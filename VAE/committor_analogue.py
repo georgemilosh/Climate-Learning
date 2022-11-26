@@ -20,19 +20,11 @@ else:
     logger = logging.getLogger(__name__)
 logger.level = logging.INFO     
 
-import importlib.util
-def module_from_file(module_name, file_path): #The code that imports the file which originated the training with all the instructions
-            spec = importlib.util.spec_from_file_location(module_name, file_path)
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            return module
 
-from importlib import import_module
-#foo = import_module(fold_folder+'/Funs.py', package=None)
 
 
 #folder = './xforanalogs/NA24by48/Z8/yrs500/interT15fw20.1.20lrs4'
-foo = module_from_file("foo", f'{folder}/Funs.py')
+
 import pickle
 import random as rd  
 from scipy.stats import norm
@@ -41,9 +33,17 @@ from sklearn.linear_model import LogisticRegression
 from sklearn import neighbors
 from sklearn.metrics import log_loss
 
-tff = foo.tff # tensorflow routines 
-ut = foo.ut # utilities
-ln = foo.ln #Learn2_new.py
+#from importlib import import_module
+#foo = import_module(fold_folder+'/Funs.py', package=None)
+
+sys.path.append('../ERA/') # an oldschool way of importing because I will need to import committor_analogue.py in trajectory_analogue.py
+sys.path.append('../PLASIM/')               
+import TF_Fields as tff # tensorflow routines 
+import utilities as ut # utilities
+import Learn2_new as ln #Learn2_new.py
+print(ln)
+print(ut)
+print(tff)
 print("==Checking GPU==")
 import tensorflow as tf
 tf.test.is_gpu_available(
@@ -335,9 +335,8 @@ def ComputeSkill(folder, q, percent, chain_step):
     """
                 
     logger.info(f"Computed skill score for the committor and saving in {folder}/committor.pkl")
-    committor_file = open(f'{folder}/committor.pkl', "wb")
-    pickle.dump({'committor' : committor, 'skill' : skill, 'RunFolds_kwargs_default' : RunFolds_kwargs_default}, committor_file)
-    committor_file.close()
+    with open(f'{folder}/committor.pkl', "wb") as committor_file:
+        pickle.dump({'committor' : committor, 'skill' : skill, 'RunFolds_kwargs_default' : RunFolds_kwargs_default}, committor_file)
     
     return committor, entropy
 

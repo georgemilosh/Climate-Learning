@@ -342,7 +342,7 @@ def func1(x, a, b, c, d):
 def func2(x, a, b, c, d):
      return a * np.exp(b * x)/ b + c * np.exp(d * x)/ d
     
-def autocorrelation(myseries, maxlag):
+def autocorrelation(myseries, maxlag=100):
     # this pads each year with padsize sample time of 0s so that when the array is permuted to be multiplied by itself we don't end up using the previous part of the year
     series_pad = np.pad(myseries,((0, 0), (0, maxlag)), 'constant')  
     autocorr = []
