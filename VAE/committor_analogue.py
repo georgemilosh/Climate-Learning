@@ -147,7 +147,7 @@ def CommOnePoint(day,ther,dela, Temp_va, Temp_tr, nn, n_Traj, numsteps, Markov_s
 @ut.execution_time  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function     
 def RemoveSelfAnalogs(Matr_tr,n_days):
-    """_summary_
+    """ remove analogs of the same year from the analog matrix
 
     Args:
         Matr_tr (_ndarray_):        T matrix inside the training set
@@ -168,6 +168,32 @@ def RemoveSelfAnalogs(Matr_tr,n_days):
         noselfanalogsmoved.append(np.pad(temp, (0,noselfanalogs_row.shape[0] - temp.shape[0]), constant_values=(noselfanalogs.shape[0],noselfanalogs.shape[0])))  # pad with the length of the time series so that if we accidently get such analog the error will be returned
     noselfanalogsmoved = np.array(noselfanalogsmoved)
     return noselfanalogsmoved
+
+@ut.execution_time  # prints the time it takes for the function to run
+@ut.indent_logger(logger)   # indents the log messages produced by this function     
+def MovingWindowAnalogs(Matr_tr,n_days,windowsize):
+    """ remove the analogs which are within plus or minus windowsize days from the starting analog
+
+    Args:
+        Matr_tr (_ndarray_):        T matrix inside the training set
+        n_days (_float_):           Keeps track of length of the year (summer) which is expected to be set to time_end-time_start-T+1
+                                    We need this object to handle properly the indices and convert between index and year/calendar day 
+
+    Returns:
+        ndarray: The new matrix of analogs where self analogs have been shuffled away to the end (columns) of 
+        the matrix and then removed, note that there will be missing values if we look for such far away neighbors
+    """
+    dayanalogues = (np.arange(Matr_tr.shape[0])%n_days)[np.newaxis].T
+    dayanalogues = dayanalogues*np.ones((dayanalogues.shape[0],Matr_tr.shape[1])) # This is a matrix of calendar days related to the raw index
+    movingwindow = (dayanalogues < Matr_tr%n_days-windowsize) | (dayanalogues > Matr_tr%n_days+windowsize) # A conditional matrix showing if the entry is outside of the range of the moving average 
+    nooutisdeofwindow = (np.where(movingwindow,-1,Matr_tr)) # We set to -1 all the entries that are outside of the range of the moving average 
+    logger.info(f'Average rate of states outside of the range of the moving average : {np.mean(nooutisdeofwindow == -1)}')
+    nooutisdeofwindowmoved = []
+    for nooutisdeofwindowmoved_row in nooutisdeofwindow: # loop over samples
+        temp = np.delete(nooutisdeofwindowmoved_row,nooutisdeofwindowmoved_row==-1) # remove the values equal to -1 
+        nooutisdeofwindowmoved.append(np.pad(temp, (0,nooutisdeofwindowmoved_row.shape[0] - temp.shape[0]), constant_values=(nooutisdeofwindow.shape[0],nooutisdeofwindow.shape[0])))  # pad with the length of the time series so that if we accidently get such analog the error will be returned
+    nooutisdeofwindowmoved = np.array(nooutisdeofwindowmoved)
+    return nooutisdeofwindowmoved
         
 @ut.execution_time  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function
@@ -196,7 +222,7 @@ def RunNeighbors(Matr_va,Matr_tr, time_series_va, time_series_tr, days, threshol
     logger.info(f'{num_Traj = }, {N_Steps = }, {chain_step = }, {T = }, {neighbors = }, {delay = }, {threshold = }')
     q = {}
     for nn in neighbors:
-        logger.info(f'{nn = }')
+        logger.info(f'{nn = }') # below we will compute committor for all days (+15 days of May) but in a later routine only compute Log score on a summer subset
         q[nn] = CommOnePoint(days,threshold,delay,time_series_va,time_series_tr,nn,num_Traj, N_Steps, chain_step, Matr_va,Matr_tr)
     if hasattr(q[nn],'shape'):
         logger.info(f'{q[nn].shape = }')
@@ -204,8 +230,8 @@ def RunNeighbors(Matr_va,Matr_tr, time_series_va, time_series_tr, days, threshol
 
 @ut.execution_time  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function
-def RunCheckpoints(ind_new_va,ind_new_tr,time_series_va, time_series_tr, threshold, n_days, 
-                   start_calendar_day=None, start_day_set='va', allowselfanalogs=False, RunNeighbors_kwargs = None):
+def RunCheckpoints(ind_new_va,ind_new_tr,time_series_va, time_series_tr, threshold, n_days, windwsize=30,
+                   start_calendar_day=None, start_day_set='va', allowselfanalogs=False, removeoutsidemovingwindow=False, RunNeighbors_kwargs = None):
     """Run each checkpoint: Note that when using only one layer for geopotential ('keep_dims' : [1] in run_vae_kwargs) 
         it is understood that checkpoint corresond to different values of the geopotential coefficient in the metric
 
@@ -219,6 +245,8 @@ def RunCheckpoints(ind_new_va,ind_new_tr,time_series_va, time_series_tr, thresho
         threshold (_float_):        vector descrbing the set of thresholds
         n_days (_float_):           Keeps track of length of the year (summer) which is expected to be set to time_end-time_start-T+1
                                     We need this object to handle properly the indices and convert between index and year/calendar day  
+        
+        windwsize (_int_):          Number of days to add and subtract to get the window (the window is twice this size). Defaults to 30 days
         start_calendar_day (_int_, optional): If not None then it is interpreted as a calendar day of days to retain. Defaults to None.
         start_day_set (str, optional): If we want to start in the training set it is necessary to set it to 'tr'. Defaults to 'va'.
         allowselfanalogs (bool, optional): Deside whether the analogs from the same year are allowed. Defaults to False.
@@ -238,14 +266,18 @@ def RunCheckpoints(ind_new_va,ind_new_tr,time_series_va, time_series_tr, thresho
         else:
             Matr_tr = RemoveSelfAnalogs(ind_new_tr[checkpoint],n_days)
         Matr_va = ind_new_va[checkpoint]
-        logger.info(f"{Matr_va.shape = }")
-        if start_day_set == 'va': # by default we initialize days from the validation set
-            days = np.arange(Matr_va.shape[0]) # by default we take the whole validation set
+        
+        if removeoutsidemovingwindow:
+            Matr_tr = MovingWindowAnalogs(Matr_tr,n_days,windwsize)
+            Matr_va = MovingWindowAnalogs(Matr_va,n_days,windwsize)
+        logger.info(f'{Matr_va.shape = }, {start_day_set = }, {start_calendar_day = }')
+        if start_day_set == 'va': 
+            days = np.arange(Matr_va.shape[0]) 
         else:
-            days = np.arange(Matr_tr.shape[0]) # by default we take the whole training set
-        if start_calendar_day is not None:
-            days = days.reshape(-1,n_days)[:,start_calendar_day].reshape(-1)
-            print(f'{days.shape = }')
+            days = np.arange(Matr_tr.shape[0]) 
+        if start_calendar_day is not None: # by default we start 15 days prior to the summer (that's how both labels Y_va and the indices of Matr_va work)
+            days = days.reshape(-1,n_days)[:,start_calendar_day].reshape(-1) # otherwise we overwrite the starting date as start_calendar_day and consider only those days
+        print(f'{days.shape = }')
         # Note that we will compute committor on all days available (i.e. the ones which have been assign index in the T matrix)
         # Later we may choose to use only relevant days when evaluating the skill (see ComputeSkill())
         q[checkpoint] = RunNeighbors(Matr_va, Matr_tr, time_series_va, time_series_tr, days, threshold, **RunNeighbors_kwargs)
