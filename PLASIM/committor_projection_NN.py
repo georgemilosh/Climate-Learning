@@ -78,7 +78,11 @@ class Dense2D(layers.Layer):
             raise ValueError(f'Expected {self.nfields} fields, received {x.shape[-1]}')
 
         x = [tf.tensordot(x[...,i], k, axes=2) for i,k in enumerate(self.kernels) if k is not None]
-        x = self.conc(x)
+
+        if self.m > 1:
+            x = self.conc(x)
+        else: # there is only one kernel, so concatenate would throw an exception
+            x = x[0]
 
         return x
 
