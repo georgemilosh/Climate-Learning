@@ -734,10 +734,12 @@ def full_extent(ax, padx=0.0, pady=[]):
     return bbox.expanded(1.0 + padx, 1.0 + pady)
 
     
-def return_time_fix(D_sorted, modified='no'): # In this function we fix the length
+def return_time_fix(D_sorted, modified='no', specific_returns=[1, 4, 10, 40, 100, 1000]): # In this function we fix the length
     '''
     Computes the return time from    
     D_sorted: sorted dictionary with layout {anomaly: [day, year]}
+    specific_returns: list
+        list of return times that will populate x_rt and y_rt
     
     If modified == 'no':
         the return time `tau` for anomaly `a` is
