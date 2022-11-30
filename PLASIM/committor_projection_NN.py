@@ -89,6 +89,26 @@ class Dense2D(layers.Layer):
 
 class GradientRegularizer(keras.regularizers.Regularizer):
     def __init__(self, mode='l2', c=1, weights=None, periodic_lon=True, normalize=True):
+        '''
+        Makes a filter smooth by penalizing the difference between adjacent pixels
+
+        Parameters
+        ----------
+        mode : 'l1' or 'l2, optional
+            regularization mode, by default 'l2'
+        c : float, optional
+            regularization coefficient, by default 1
+        weights : np.ndarray or str, optional
+            weights to apply to the different pixels of the filter, special options are:
+                - None : uniform weighting
+                - 'sphere' : assumes a spherical topology
+                - 'auto' or 'compromise' : deprecated: it is a wrong version of the sphere mode
+            By default None
+        periodic_lon : bool, optional
+            whether to consider periodicity on the longitude axis, by default True
+        normalize : bool, optional
+            whether to normalize the gradient so it is not sensitive to rescaling of the whole filter, by default True
+        '''
         if mode in ['L1', 'l1', 'sparse']:
             self.mode = 'l1'
         else:
@@ -103,7 +123,7 @@ class GradientRegularizer(keras.regularizers.Regularizer):
         if self.weights is not None:
             if isinstance(self.weights, str):
                 if self.weights == 'sphere':
-                    lat = 87.863799 - 2.7886687*np.arange(22) # TODO: this si not very versatile
+                    lat = 87.863799 - 2.7886687*np.arange(22) # TODO: this is not very versatile
                     self.coslat = np.cos(lat*np.pi/180)
                     self.broadcasted_coslat = None
                 elif self.weights in ['auto', 'compromise']: # for backward compatibility
@@ -236,7 +256,9 @@ def create_model(input_shape, filters_per_field=[1,1,1], batch_normalization=Fal
         if not isinstance(arg, list):
             args[j] = [arg]*len(dense_units)
             if j==0:
-                args[j][-1] = None
+                args[j][-1] = None # the last layer cannot have activation
+            elif j==1:
+                args[j][-1] = False # the last layer cannot have dropout
         elif len(arg) != len(dense_units):
             raise ValueError(f'Invalid length for argument {arg}')
     logger.info(f'dense args = {args}')
