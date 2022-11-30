@@ -18,6 +18,7 @@ from matplotlib.transforms import Bbox
 from itertools import chain
 import collections
 from random import randrange
+import pandas as pd
 
 from scipy.signal import argrelextrema
 from scipy.stats import skew, kurtosis
@@ -869,11 +870,11 @@ def a_decrese(in_A_max, in_Ti, in_year_a):
     D = {}
     if len(in_A_max) == len(in_Ti) and len(in_A_max) == len(in_year_a):
         for i in range(len(in_A_max)):
-            D[in_A_max[i]] = [in_Ti[i], in_year_a[i]]
-    else:
+            D[i] = [in_Ti[i], in_year_a[i],in_A_max[i]] 
+    else: # In this version of the code we avoid shorter sequences when there are dublicated of int_A_max
         logger.warning(f'size mismatch: {len(in_A_max) = },{len(in_Ti) = },{len(in_year_a) = }')
-    D_sorted = sorted(D.items(), key=lambda kv: kv[0], reverse=True)
-    return D_sorted
+    D_sorted = sorted(D.items(), key=lambda kv: kv[1][2], reverse=True)
+    return [(D_sorted_i[1][2],D_sorted_i[1][:2]) for D_sorted_i in D_sorted]
 
 
 def draw_map(m, scale=0.2, background='stock_img', **kwargs):
