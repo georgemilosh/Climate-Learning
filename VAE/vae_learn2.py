@@ -297,7 +297,7 @@ def classify(fold_folder, evaluate_epoch, vae, X_tr, z_tr, Y_tr, X_va, z_va, Y_v
 @ut.execution_time
 @ut.indent_logger(logger)   
 def k_fold_cross_val(folder, myinput, mask, X, Y, time_series, year_permutation, create_or_load_vae_kwargs=None, train_vae_kwargs=None, keep_dims=None, nfolds=10, val_folds=1, 
-                     range_nfolds=None, u=1, normalization_mode='pointwise', classification=True, evaluate_epoch='last', repeat_nan=5):
+                     range_nfolds=None, u=1, normalization_mode='pointwise', classification=True, evaluate_epoch='last', repeat_nan=5, use_autoencoder=True):
     '''
     Performs k fold cross validation on a model architecture.
 
@@ -333,6 +333,8 @@ def k_fold_cross_val(folder, myinput, mask, X, Y, time_series, year_permutation,
         epoch at which we wish to perform dimensionality reduction for classification. if 'last' then last checkpoint of vae will be used
     repeat_nan: int
         tells do while to repeat the fold that many times if the successive outputs of history['loss'] are nan. Basically if the run has failed we repeat that many times
+    use_autoencoder: bool (Defaults to True)
+        If True dimensionality reduction will be performed
         
     Returns
     ----------
@@ -447,105 +449,102 @@ def k_fold_cross_val(folder, myinput, mask, X, Y, time_series, year_permutation,
                 INPUT_DIM = X_va.shape[1:]  # Image dimension
                 logger.info(f"recomputing: {INPUT_DIM = }")
             
-            vae, history_vae, N_EPOCHS, INITIAL_EPOCH, ckpt_path_callback = create_or_load_vae(fold_folder, INPUT_DIM, myinput, mask, **create_or_load_vae_kwargs)
-            
-            
-
-            if hasattr(vae, 'trainable_weights'):
-                logger.info(f"{len(vae.trainable_weights) = }, {len(vae.encoder.trainable_weights) = }, {len(vae.decoder.trainable_weights) = }")
-            
-            if hasattr(vae.encoder, 'layers'):
-                for inner_layer in vae.encoder.layers:
-                    if inner_layer.name == 'encoder_conv_0':
-                        logger.info(f"vae.encoder layers: {inner_layer.name = }")
-                        logger.info(f"{inner_layer.weights[0][0,0,0,:] = }")
-            if hasattr(vae, 'classifier'):
-                for inner_layer in vae.classifier.layers:
-                    logger.info(f"vae.classifier layers: {inner_layer.name = }")
-                    logger.info(f"{inner_layer.weights = }")
+            if use_autoencoder: # Note that if this is not exercized there will be no dimensionality reduction and scripts such as reconstruction.py will not work
+                vae, history_vae, N_EPOCHS, INITIAL_EPOCH, ckpt_path_callback = create_or_load_vae(fold_folder, INPUT_DIM, myinput, mask, **create_or_load_vae_kwargs)
+                if hasattr(vae, 'trainable_weights'):
+                    logger.info(f"{len(vae.trainable_weights) = }, {len(vae.encoder.trainable_weights) = }, {len(vae.decoder.trainable_weights) = }")
                 
-                
-
-            #logger.info(f"Before training: {vae_trainable_weights = }")
-            # logger.info(f"Before training: {vae.classifier.trainable_weights = }")
-            if myinput!='N': 
-                history_loss = train_vae(X_tr, Y_tr, X_va, Y_va, vae, ckpt_path_callback, fold_folder, myinput, N_EPOCHS, INITIAL_EPOCH, history_vae, **train_vae_kwargs)
-            else: # myinput='N' is useful when loading this function in reconstruction.py or classification for instance
-                history_loss = np.load(f"{fold_folder}/history_vae", allow_pickle=True)['loss']
-            # logger.info(f"After training: {vae.classifier.trainable_weights = }")
-            if hasattr(vae, 'trainable_weights'):
-                logger.info(f"{len(vae.trainable_weights) = }, {len(vae.encoder.trainable_weights) = }, {len(vae.decoder.trainable_weights) = }")
-            
-            #for trainable_weights in vae.encoder.trainable_weights:
-            #    logger.info(f"vae.encoder layers: {trainable_weights = }")
-            if hasattr(vae.encoder, 'layers'):
-                for inner_layer in vae.encoder.layers:
-                    if inner_layer.name == 'encoder_conv_0':
-                        logger.info(f"vae.encoder layers: {inner_layer.name = }")
-                        logger.info(f"{inner_layer.weights[0][0,0,0,:] = }")
-            """
-            for layer in vae.layers:
-                logger.info(f"for layer in vae.layers: {layer.name = }, {layer = }")
-                if layer.name == 'encoder':
-                    for inner_layer in layer.layers:
+                if hasattr(vae.encoder, 'layers'):
+                    for inner_layer in vae.encoder.layers:
                         if inner_layer.name == 'encoder_conv_0':
-                            logger.info(f"encoder layers: {inner_layer.name = }")
+                            logger.info(f"vae.encoder layers: {inner_layer.name = }")
                             logger.info(f"{inner_layer.weights[0][0,0,0,:] = }")
-                if layer.name == 'classifier':
-                    for inner_layer in layer.layers:
-                        logger.info(f"classifier layers: {inner_layer.name = }")
-                        logger.info(f"{inner_layer.weights = }")
-            """
-            if hasattr(vae, 'classifier'):
-                #for trainable_weights in vae.classifier.trainable_weights:
-                #    logger.info(f"vae.classifier layers: {trainable_weights = }")
-                for inner_layer in vae.classifier.layers:
-                    logger.info(f"vae.classifier layers: {inner_layer.name = }")
-                    logger.info(f"{inner_layer.weights = }")
-            
-           
-
-            if not reconstruction: # either training or classification, in both cases we need training set
-
-                z_mean_tr,_,z_tr = vae.encoder.predict(X_tr)
-                z_mean_va,_,z_va = vae.encoder.predict(X_va)
-                logger.info("Evaluating classification")
                 if hasattr(vae, 'classifier'):
-                    logger.info("vae.classifier fit")
-                    if vae.class_type is not None:
-                        if vae.class_type == "stochastic":
+                    for inner_layer in vae.classifier.layers:
+                        logger.info(f"vae.classifier layers: {inner_layer.name = }")
+                        logger.info(f"{inner_layer.weights = }")
+                #logger.info(f"Before training: {vae_trainable_weights = }")
+                # logger.info(f"Before training: {vae.classifier.trainable_weights = }")
+                if myinput!='N': 
+                    history_loss = train_vae(X_tr, Y_tr, X_va, Y_va, vae, ckpt_path_callback, fold_folder, myinput, N_EPOCHS, INITIAL_EPOCH, history_vae, **train_vae_kwargs)
+                else: # myinput='N' is useful when loading this function in reconstruction.py or classification for instance
+                    history_loss = np.load(f"{fold_folder}/history_vae", allow_pickle=True)['loss']
+                # logger.info(f"After training: {vae.classifier.trainable_weights = }")
+                if hasattr(vae, 'trainable_weights'):
+                    logger.info(f"{len(vae.trainable_weights) = }, {len(vae.encoder.trainable_weights) = }, {len(vae.decoder.trainable_weights) = }")
+                
+                #for trainable_weights in vae.encoder.trainable_weights:
+                #    logger.info(f"vae.encoder layers: {trainable_weights = }")
+                if hasattr(vae.encoder, 'layers'):
+                    for inner_layer in vae.encoder.layers:
+                        if inner_layer.name == 'encoder_conv_0':
+                            logger.info(f"vae.encoder layers: {inner_layer.name = }")
+                            logger.info(f"{inner_layer.weights[0][0,0,0,:] = }")
+                """
+                for layer in vae.layers:
+                    logger.info(f"for layer in vae.layers: {layer.name = }, {layer = }")
+                    if layer.name == 'encoder':
+                        for inner_layer in layer.layers:
+                            if inner_layer.name == 'encoder_conv_0':
+                                logger.info(f"encoder layers: {inner_layer.name = }")
+                                logger.info(f"{inner_layer.weights[0][0,0,0,:] = }")
+                    if layer.name == 'classifier':
+                        for inner_layer in layer.layers:
+                            logger.info(f"classifier layers: {inner_layer.name = }")
+                            logger.info(f"{inner_layer.weights = }")
+                """
+                if hasattr(vae, 'classifier'):
+                    #for trainable_weights in vae.classifier.trainable_weights:
+                    #    logger.info(f"vae.classifier layers: {trainable_weights = }")
+                    for inner_layer in vae.classifier.layers:
+                        logger.info(f"vae.classifier layers: {inner_layer.name = }")
+                        logger.info(f"{inner_layer.weights = }")
+                
+            
+
+                if not reconstruction: # either training or classification, in both cases we need training set
+
+                    z_mean_tr,_,z_tr = vae.encoder.predict(X_tr)
+                    z_mean_va,_,z_va = vae.encoder.predict(X_va)
+                    logger.info("Evaluating classification")
+                    if hasattr(vae, 'classifier'):
+                        logger.info("vae.classifier fit")
+                        if vae.class_type is not None:
+                            if vae.class_type == "stochastic":
+                                logger.info("Y_pr_prob_va = vae.classifier.predict(z_va)")
+                                Y_pr_prob_va = vae.classifier.predict(z_va)[:, 0]
+                                logger.info("Y_pr_prob_tr = vae.classifier.predict(z_tr)")
+                                Y_pr_prob_tr = vae.classifier.predict(z_tr)[:, 0]
+                            else: # i.e. "mean"
+                                logger.info("Y_pr_prob_va = vae.classifier.predict(z_mean_va)")
+                                Y_pr_prob_va = vae.classifier.predict(z_mean_va)[:, 0]
+                                logger.info("Y_pr_prob_tr = vae.classifier.predict(z_mean_tr)")
+                                Y_pr_prob_tr = vae.classifier.predict(z_mean_tr)[:, 0]
+                        else:
                             logger.info("Y_pr_prob_va = vae.classifier.predict(z_va)")
                             Y_pr_prob_va = vae.classifier.predict(z_va)[:, 0]
                             logger.info("Y_pr_prob_tr = vae.classifier.predict(z_tr)")
                             Y_pr_prob_tr = vae.classifier.predict(z_tr)[:, 0]
-                        else: # i.e. "mean"
-                            logger.info("Y_pr_prob_va = vae.classifier.predict(z_mean_va)")
-                            Y_pr_prob_va = vae.classifier.predict(z_mean_va)[:, 0]
-                            logger.info("Y_pr_prob_tr = vae.classifier.predict(z_mean_tr)")
-                            Y_pr_prob_tr = vae.classifier.predict(z_mean_tr)[:, 0]
+                        logger.info(f"{Y_tr.shape = }, {Y_pr_prob_tr.shape = } ")
+                        vaebce_tr = vae.bce(Y_tr,Y_pr_prob_tr)
+                        vaebce_va = vae.bce(Y_va,Y_pr_prob_va)
+                        logger.info(f"{vaebce_va = }, {vaebce_tr = } ")
                     else:
-                        logger.info("Y_pr_prob_va = vae.classifier.predict(z_va)")
-                        Y_pr_prob_va = vae.classifier.predict(z_va)[:, 0]
-                        logger.info("Y_pr_prob_tr = vae.classifier.predict(z_tr)")
-                        Y_pr_prob_tr = vae.classifier.predict(z_tr)[:, 0]
-                    logger.info(f"{Y_tr.shape = }, {Y_pr_prob_tr.shape = } ")
-                    vaebce_tr = vae.bce(Y_tr,Y_pr_prob_tr)
-                    vaebce_va = vae.bce(Y_va,Y_pr_prob_va)
-                    logger.info(f"{vaebce_va = }, {vaebce_tr = } ")
-                else:
-                    logger.info("vae.classifier does not exist")
-
-        # Now we decide whether to use a different epoch for the projection
-            checkpoint_path = tf.train.latest_checkpoint(fold_folder)
-            logger.info(f"{checkpoint_path = }")
-            if myinput == 'N': # if running this code in passive mode we have to re-load the weights         
-                if evaluate_epoch != 'last': # we load a specific checkpoint
-                    checkpoint_path = str(fold_folder)+f"/cp_vae-{evaluate_epoch:04d}.ckpt" # TODO: convert checkpoints to f-strings
-                logger.info(f"==loading the model: {checkpoint_path}")
-                # vae = tf.keras.models.load_model(fold_folder, compile=False)
-                if hasattr(vae, 'load_weights'):
-                    vae.load_weights(f'{checkpoint_path}').expect_partial()
-                    logger.info(f'{checkpoint_path} weights loaded')
+                        logger.info("vae.classifier does not exist")
+                # Now we decide whether to use a different epoch for the projection
+                checkpoint_path = tf.train.latest_checkpoint(fold_folder)
+                logger.info(f"{checkpoint_path = }")
+                if myinput == 'N': # if running this code in passive mode we have to re-load the weights         
+                    if evaluate_epoch != 'last': # we load a specific checkpoint
+                        checkpoint_path = str(fold_folder)+f"/cp_vae-{evaluate_epoch:04d}.ckpt" # TODO: convert checkpoints to f-strings
+                    logger.info(f"==loading the model: {checkpoint_path}")
+                    # vae = tf.keras.models.load_model(fold_folder, compile=False)
+                    if hasattr(vae, 'load_weights'):
+                        vae.load_weights(f'{checkpoint_path}').expect_partial()
+                        logger.info(f'{checkpoint_path} weights loaded')
+            else: # i.e. use_autoencoder = false
+                vae, z_tr, z_va, history_vae, checkpoint_path = None, None, None, None, None
+                
             if classification:
                 score.append(classify(fold_folder, evaluate_epoch, vae, X_tr, z_tr, Y_tr, X_va, z_va, Y_va, u)) 
             else:
@@ -555,12 +554,18 @@ def k_fold_cross_val(folder, myinput, mask, X, Y, time_series, year_permutation,
 
             tf.keras.backend.clear_session()
             gc.collect() # Garbage collector which removes some extra references to the objects. This is an attempt to micromanage the python handling of RAM
-            if np.isinf( np.array(history_loss)).any() or np.isnan( np.array(history_loss)).any(): # check if there was a 'nan' entry in the loss (it failed)
-                logger.log(35, f'fold {i} had loss = nan and/or inf')
-                repeat_nan_local = repeat_nan_local-1
-            else:
+            if use_autoencoder: 
+                if np.isinf( np.array(history_loss)).any() or np.isnan( np.array(history_loss)).any(): # check if there was a 'nan' entry in the loss (it failed)
+                    logger.log(35, f'fold {i} had loss = nan and/or inf')
+                    repeat_nan_local = repeat_nan_local-1
+                else:
+                    # sucessful fold, so terminating while
+                    repeat_nan_local = -1
+            else: # If the autoencdoer is not used we don't need to check the above condition
                 # sucessful fold, so terminating while
                 repeat_nan_local = -1
+                N_EPOCHS = 0
+                INITIAL_EPOCH = 0
                 
             if myinput == 'N': # In passive mode we don't need to run while multiple times
                 repeat_nan_local = -1
@@ -860,9 +865,9 @@ def kwargator(thefun):
     '''
     thefun_kwargs_default = ln.get_default_params(thefun, recursive=True)
     thefun_kwargs_default = ut.set_values_recursive(thefun_kwargs_default,
-                                            {'return_time_series' : True, 'return_threshold' : True,'myinput':'Y', 'normalization_mode' : 'global_logit', # 'keep_dims' : [1], #
+                                            {'return_time_series' : True, 'return_threshold' : True,'myinput':'Y', 'normalization_mode' : 'global_logit', 'use_autoencoder' : False,
                                              'fields': ['t2m_inter_filtered','zg500_inter','mrso_inter_filtered'], 'label_field' : 't2m_inter', 'year_list': 'range(8000)', 'T' : 15, 'A_weights' : [3,0,0, 3,0,0, 3,0,0, 3,0,0, 3,0,0],
-                                               'print_summary' : False, 'k1': 0.9 , 'k2':0.1, 'field_weights': [20., 1., 20.],'mask_area':'France', 'usemask' : False, 'Z_DIM': 16, #16, #8, #64,
+                                               'print_summary' : False, 'k1': 0.9 , 'k2':0.1, 'field_weights': [20., 1., 20.],'mask_area': 'Scandinavia', 'area' : 'Scandinavia', 'filter_area' : 'Scandinavia', 'usemask' : True, 'Z_DIM': 8, #16, #8, #64,
                                                 'N_EPOCHS': 2,'batch_size': 128, 'checkpoint_every': 1, 'lr': 5e-5, 'epoch_tol': None, 'lr_min' : 5e-5, 'lat_start' : 0, 'lat_end' : 24, 'lon_start' : 98, 'lon_end' : 18,
                                                 #'lat_start' : 4, 'lat_end' : 22, 'lon_start' : 101, 'lon_end' : 15, 
                                                 'time_start' : 15, 'label_period_start' : 30,  'time_end' : 134, 'label_period_end' : 120,
@@ -884,22 +889,22 @@ def kwargator(thefun):
                                                 #'decoder_conv_skip' : None, 
                                                 #'decoder_use_batch_norm' : [False,False,False,False,False], 
                                                 #'decoder_use_dropout' : [0,0,0,0,0]
-                                               'encoder_conv_filters':             [16, 16, 16, 32, 32,  32,   64, 64],
-                                                        'encoder_conv_kernel_size':[5,  5,  5,  5,   5,   5,   5,  3], #  [5,  5,  5,  5,   5,   5,   5,  3, 64]
-                                                        'encoder_conv_strides'    :[2,  1,  1,  2,   1,   1,   2,  1],
-                                                        'encoder_conv_padding':["same","same","same","same","same","same","same","valid"],
-                                                        'encoder_conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"], # ["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"]
-                                                        'encoder_conv_skip': [[0,2],[3,5]], # None,
-                                                        'encoder_use_batch_norm' : [True,True,True,True,True,True,True,True], # [True,True,True,True,True,True,True,True,True]
-                                                        'encoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25], #[0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25]
-                                                'decoder_conv_filters':[64,32,32,32,16,16,16,1], #3], # Use 3 if working with 3 fields
-                                                        'decoder_conv_kernel_size':[3, 5, 5, 5, 5, 5, 5, 5], # [3, 5, 5, 5, 5, 5, 5, 5, 64]
-                                                            'decoder_conv_strides':[1, 2, 1, 1, 2, 1, 1, 2],
-                                                            'decoder_conv_padding':["valid","same","same","same","same","same","same","same"],
-                                                         'decoder_conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","sigmoid"], # ["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","sigmoid","LeakyRelu"]
-                                                               'decoder_conv_skip': [[1,3],[4,6]], # None,
-                                                            'decoder_use_batch_norm' : [True,True,True,True,True,True,True,True], #[True,True,True,True,True,True,True,True,True]
-                                                            'decoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25] # [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25]
+                                               #'encoder_conv_filters':             [16, 16, 16, 32, 32,  32,   64, 64],
+                                               #         'encoder_conv_kernel_size':[5,  5,  5,  5,   5,   5,   5,  3], #  [5,  5,  5,  5,   5,   5,   5,  3, 64]
+                                               #         'encoder_conv_strides'    :[2,  1,  1,  2,   1,   1,   2,  1],
+                                               #         'encoder_conv_padding':["same","same","same","same","same","same","same","valid"],
+                                               #         'encoder_conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"], # ["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"]
+                                               #         'encoder_conv_skip': [[0,2],[3,5]], # None,
+                                               #         'encoder_use_batch_norm' : [True,True,True,True,True,True,True,True], # [True,True,True,True,True,True,True,True,True]
+                                               #         'encoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25], #[0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25]
+                                               # 'decoder_conv_filters':[64,32,32,32,16,16,16,1], #3], # Use 3 if working with 3 fields
+                                               #         'decoder_conv_kernel_size':[3, 5, 5, 5, 5, 5, 5, 5], # [3, 5, 5, 5, 5, 5, 5, 5, 64]
+                                               #             'decoder_conv_strides':[1, 2, 1, 1, 2, 1, 1, 2],
+                                               #             'decoder_conv_padding':["valid","same","same","same","same","same","same","same"],
+                                               #          'decoder_conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","sigmoid"], # ["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","sigmoid","LeakyRelu"]
+                                               #                'decoder_conv_skip': [[1,3],[4,6]], # None,
+                                               #             'decoder_use_batch_norm' : [True,True,True,True,True,True,True,True], #[True,True,True,True,True,True,True,True,True]
+                                               #             'decoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25] # [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25]
                                               })
 
     logger.info(ut.dict2str(thefun_kwargs_default)) # a nice way of printing nested dictionaries
