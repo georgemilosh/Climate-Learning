@@ -727,7 +727,15 @@ def full_extent(ax, padx=0.0, pady=[]):
     # For text objects, we need to draw the figure first, otherwise the extents
     # are undefined.
     ax.figure.canvas.draw()
-    items = ax.get_xticklabels() + ax.get_yticklabels() 
+    items = []
+    if ax.get_xscale() == 'log':
+        items += ax.get_xticklabels()[2:-2] # weird logscale behavior
+    else:
+        items += ax.get_xticklabels()[1:-1]
+    if ax.get_yscale() == 'log':
+        items += ax.get_yticklabels()[-2:2]
+    else:
+        items += ax.get_yticklabels()[-1:1]
     items += [ax, ax.title, ax.xaxis.label, ax.yaxis.label]
 #    items += [ax, ax.title]
     bbox = Bbox.union([item.get_window_extent() for item in items])
