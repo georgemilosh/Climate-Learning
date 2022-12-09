@@ -203,7 +203,7 @@ class GradientRegularizer(keras.regularizers.Regularizer):
         return {'c': self.c, 'weights': self.weights, 'periodic_lon': self.periodic_lon, 'normalize': self.normalize}
 
 
-def create_model(input_shape, filters_per_field=[1,1,1], batch_normalization=False, reg_mode='l2', reg_c=1, reg_weights=None, reg_periodicity=True, reg_norm=True, dense_units=[8,2], dense_activations=['relu', None], dense_dropouts=False):
+def create_model(input_shape, filters_per_field=[1,1,1], learns_kernels=True, batch_normalization=False, reg_mode='l2', reg_c=1, reg_weights=None, reg_periodicity=True, reg_norm=True, dense_units=[8,2], dense_activations=['relu', None], dense_dropouts=False):
     '''
     Creates a neural network
 
@@ -238,14 +238,18 @@ def create_model(input_shape, filters_per_field=[1,1,1], batch_normalization=Fal
     tf.keras.Model
         Neural network
     '''
-    if not reg_c:
-        regularizer = None
-    else:
+    regularizer = None
+    if not learns_kernels:
+        logger.info('Ignoring all regularization parameters since kernels are not learnt.')
+    elif reg_c:
         regularizer = GradientRegularizer(mode=reg_mode, c=reg_c, weights=reg_weights, periodic_lon=reg_periodicity, normalize=reg_norm)
     
     model = keras.models.Sequential()
 
     model.add(Dense2D(filters_per_field=filters_per_field, regularizer=regularizer, input_shape=input_shape))
+
+    if not learns_kernels:
+        model.layers[0].trainable=False
     if batch_normalization:
         model.add(keras.layers.BatchNormalization())
 
@@ -272,11 +276,48 @@ def create_model(input_shape, filters_per_field=[1,1,1], batch_normalization=Fal
     return model
 
 
+orig_train_model = ln.train_model
+
+def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics, early_stopping_kwargs=None, enable_early_stopping=False,
+                u=1, batch_size=1024, checkpoint_every=1, additional_callbacks=['csv_logger'], return_metric='val_CustomLoss', load_kernels_from=None):
+    if load_kernels_from is not None:
+        if isinstance(load_kernels_from, str):
+            if load_kernels_from.startswith('composite'):
+                comp = np.mean(X_tr[Y_tr==1], axis=0)
+                np.save(f'{folder}/composite.npy', comp)
+            elif load_kernels_from.startswith('significance'):
+                comp = np.mean(X_tr[Y_tr==1], axis=0)
+                np.save(f'{folder}/composite.npy', comp)
+                sig = np.std(X_tr[Y_tr==1], axis=0)
+                sig[sig==0] = 1
+                comp = comp/sig
+                np.save(f'{folder}/significance.npy', comp)
+            else:
+                raise NotImplementedError(f'Unknown option {load_kernels_from}')
+
+            load_kernels_from = []
+            for i,fpf in enumerate(model.layers[0].filters_per_field):
+                if fpf is None:
+                    continue
+                elif fpf == 1:
+                    load_kernels_from.append(comp[...,i])
+                else:
+                    raise ValueError(f'It is dumb to set the composite as kernel {fpf} times')
+
+
+        if not isinstance(load_kernels_from, list):
+            raise TypeError(f'at this point load_kernels_from should be of type list, not {type(load_kernels_from)}')
+
+        model.layers[0].set_weights(load_kernels_from)
+    
+    return orig_train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics, early_stopping_kwargs=early_stopping_kwargs, enable_early_stopping=enable_early_stopping,
+                            u=u, batch_size=batch_size, checkpoint_every=checkpoint_every, additional_callbacks=additional_callbacks, return_metric=return_metric)
 
 #####################################################
 # set the modified function to override the old one #
 #####################################################
 ln.create_model = create_model
+ln.train_model = train_model
 ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram]) # module level config dictionary
 
 if __name__ == '__main__':
