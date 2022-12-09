@@ -2071,12 +2071,30 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
         X,Y, threshold = make_XY(fields, **make_XY_kwargs)
     else:
         X,Y = make_XY(fields, **make_XY_kwargs)
-    time_start = ut.extract_nested(make_XY_kwargs, 'time_start') # We need to extract these values to limit the season of Y which matters for balancing folds (see below)
-    time_end = ut.extract_nested(make_XY_kwargs, 'time_end')
-    label_period_start = ut.extract_nested(make_XY_kwargs, 'label_period_start')
-    label_period_end = ut.extract_nested(make_XY_kwargs, 'label_period_end')
-    tau = ut.extract_nested(make_XY_kwargs, 'tau')
-    T = ut.extract_nested(make_XY_kwargs, 'T')
+    if ut.keys_exists(make_XY_kwargs, 'time_start'):
+        time_start = ut.extract_nested(make_XY_kwargs, 'time_start') # We need to extract these values to limit the season of Y which matters for balancing folds (see below)
+    else:
+        time_start = None
+    if ut.keys_exists(make_XY_kwargs, 'time_end'):
+        time_end = ut.extract_nested(make_XY_kwargs, 'time_end')
+    else:
+        time_end = None
+    if ut.keys_exists(make_XY_kwargs, 'time_start'):
+        label_period_start = ut.extract_nested(make_XY_kwargs, 'label_period_start')
+    else:
+        label_period_start = None
+    if ut.keys_exists(make_XY_kwargs, 'label_period_end'):
+        label_period_end = ut.extract_nested(make_XY_kwargs, 'label_period_end')
+    else:
+        label_period_end = None
+    if ut.keys_exists(make_XY_kwargs, 'tau'):
+        tau = ut.extract_nested(make_XY_kwargs, 'tau')
+    else:
+        tau = None
+    if ut.keys_exists(make_XY_kwargs, 'T'):
+        T = ut.extract_nested(make_XY_kwargs, 'T')
+    else:
+        T = None
     if label_period_start is None:
         label_period_start = time_start
     if label_period_end is None:
@@ -2118,9 +2136,12 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
         # balance folds:
         if do_balance_folds:
             # GM: now the weights will be computed solely based on the time of interest, so the balancing will only care about heatwaves inside this time
-            logger.info(f" {label_period_start = } ;{time_start = } ;{time_end = } ;{label_period_end = } ")
-            logger.info(f"{Y.shape = }, from {label_period_start-time_start} to {label_period_end-time_start-T+1} ")
-            weights = np.sum(Y[:,(label_period_start-time_start):(label_period_end-time_start-T+1)], axis=1) # get the number of heatwave events per year
+            if (label_period_start and time_start and label_period_end and time_start and T) is None:
+                weights = np.sum(Y, axis=1) # get the number of heatwave events per year
+            else:
+                logger.info(f" {label_period_start = } ;{time_start = } ;{time_end = } ;{label_period_end = } ")
+                logger.info(f"{Y.shape = }, from {label_period_start-time_start} to {label_period_end-time_start-T+1} ")
+                weights = np.sum(Y[:,(label_period_start-time_start):(label_period_end-time_start-T+1)], axis=1) # get the number of heatwave events per year
             balance_permutation = balance_folds(weights,nfolds=nfolds, verbose=True)
             Y = Y[balance_permutation]
             if year_permutation is None:
@@ -2152,9 +2173,15 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
             temp = (field.area_integral.to_numpy().reshape(field.years,-1))[year_permutation]
             # flatten the time axis dropping the organizatin in years
             if flatten_time_axis:
-                time_series.append((temp[:,time_start+tau:time_end+tau-T+1]).flatten()) 
+                if (time_start and time_start and T and tau) is None:
+                    time_series.append(temp.flatten()) 
+                else:
+                    time_series.append((temp[:,time_start+tau:time_end+tau-T+1]).flatten()) 
             else:
-                time_series.append((temp[:,time_start+tau:time_end+tau-T+1])) 
+                if (time_start and time_start and T and tau) is None:
+                    time_series.append(temp)
+                else:
+                    time_series.append((temp[:,time_start+tau:time_end+tau-T+1])) 
         
         logger.info(f"{time_series = }")
         time_series = np.array(time_series).T
