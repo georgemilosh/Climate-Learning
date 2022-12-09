@@ -300,7 +300,7 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
                 if fpf is None:
                     continue
                 elif fpf == 1:
-                    load_kernels_from.append(comp[...,i])
+                    load_kernels_from.append(comp[...,i:i+1])
                 else:
                     raise ValueError(f'It is dumb to set the composite as kernel {fpf} times')
 
