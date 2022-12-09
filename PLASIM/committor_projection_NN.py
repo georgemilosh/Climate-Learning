@@ -334,9 +334,10 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
         logger.info('Projection is not trainable: computing it at the beginning')
 
         # split the model
-        proj = model.layers[0]
+        proj = keras.models.Sequential(model.layers[:1])
         proj.save(f'{folder}/projection') # save the projection
         model = keras.models.Sequential(model.layers[1:]) # override model
+        model.build(input_shape=proj.output_shape)
 
         # compute the output of the first layer
         _X_va = []
