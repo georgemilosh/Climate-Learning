@@ -1859,7 +1859,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
             X_va = (X_va - X_mean)/X_std 
 
             # save X_mean and X_std
-            np.save(f'{fold_folder}/X_mean.npy', X_mean) # GM: Why not include all of this in normalize_X? It may simplify the code
+            np.save(f'{fold_folder}/X_mean.npy', X_mean) # GM: Why not include all of this in normalize_X? It may simplify the code -> AL: Because normalize_X doesn't know about fold_folder
             np.save(f'{fold_folder}/X_std.npy', X_std)
         
             
