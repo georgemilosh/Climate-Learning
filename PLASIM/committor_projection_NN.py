@@ -56,6 +56,8 @@ class Dense2D(layers.Layer):
         else:
             self.conc = keras.layers.Concatenate()
 
+        self.m = 1 if self.merge_to_one else self.nfilters
+
         self.regularizer = regularizer
 
         
