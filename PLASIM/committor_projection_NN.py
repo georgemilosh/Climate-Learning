@@ -17,6 +17,7 @@ pd = ln.pd
 import logging
 import sys
 import os
+from pathlib import Path
 logging.getLogger().level = logging.INFO
 logging.getLogger().handlers = [logging.StreamHandler(sys.stdout)]
 
@@ -215,7 +216,7 @@ class GradientRegularizer(keras.regularizers.Regularizer):
         return {'c': self.c, 'weights': self.weights, 'periodic_lon': self.periodic_lon, 'normalize': self.normalize}
 
 
-def create_model(input_shape, filters_per_field=[1,1,1], merge_to_one=False, learns_kernels=True, batch_normalization=False, reg_mode='l2', reg_c=1, reg_weights=None, reg_periodicity=True, reg_norm=True, dense_units=[8,2], dense_activations=['relu', None], dense_dropouts=False):
+def create_model(input_shape, filters_per_field=[1,1,1], merge_to_one=False, batch_normalization=False, reg_mode='l2', reg_c=1, reg_weights=None, reg_periodicity=True, reg_norm=True, dense_units=[8,2], dense_activations=['relu', None], dense_dropouts=False):
     '''
     Creates a neural network
 
@@ -254,17 +255,13 @@ def create_model(input_shape, filters_per_field=[1,1,1], merge_to_one=False, lea
         Neural network
     '''
     regularizer = None
-    if not learns_kernels:
-        logger.info('Ignoring all regularization parameters since kernels are not learnt.')
-    elif reg_c:
+    if reg_c:
         regularizer = GradientRegularizer(mode=reg_mode, c=reg_c, weights=reg_weights, periodic_lon=reg_periodicity, normalize=reg_norm)
     
     model = keras.models.Sequential()
 
     model.add(Dense2D(filters_per_field=filters_per_field, merge_to_one=merge_to_one, regularizer=regularizer, input_shape=input_shape))
 
-    if not learns_kernels:
-        model.layers[0].trainable=False
     if batch_normalization:
         model.add(keras.layers.BatchNormalization())
 
@@ -294,7 +291,15 @@ def create_model(input_shape, filters_per_field=[1,1,1], merge_to_one=False, lea
 orig_train_model = ln.train_model
 
 def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics, early_stopping_kwargs=None, enable_early_stopping=False,
-                u=1, batch_size=1024, checkpoint_every=1, additional_callbacks=['csv_logger'], return_metric='val_CustomLoss', load_kernels_from=None):
+                u=1, batch_size=1024, checkpoint_every=1, additional_callbacks=['csv_logger'], return_metric='val_CustomLoss', load_kernels_from=None, learn_kernels=True):
+    '''
+    Extra arguments:
+
+    load_kernels_from : None|str|list
+        How to initialize the kernels
+    learn_kernels : bool
+        Whether to train the kernels or leave them as they are at the initialization. By default True
+    '''
     if load_kernels_from is not None:
         if isinstance(load_kernels_from, str):
             if load_kernels_from.startswith('composite'):
@@ -324,15 +329,67 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
             raise TypeError(f'at this point load_kernels_from should be of type list, not {type(load_kernels_from)}')
 
         model.layers[0].set_weights(load_kernels_from)
+
+    if not learn_kernels: # we can compute the result of the first layer on the data at once at the beginning. Also since we won't compute gradients through the projection layer, it is not trained.
+        logger.info('Projection is not trainable: computing it at the beginning')
+
+        # split the model
+        proj = model.layers[0]
+        proj.save(f'{folder}/projection') # save the projection
+        model = keras.models.Sequential(model.layers[1:]) # override model
+
+        # compute the output of the first layer
+        _X_va = []
+        for b in range(Y_va.shape[0]//batch_size + 1):
+            _X_va.append(proj(X_va[b*batch_size:(b+1)*batch_size]).numpy())
+        X_va = np.concatenate(_X_va) # override validation set
+
+        _X_tr = []
+        for b in range(Y_tr.shape[0]//batch_size + 1):
+            _X_tr.append(proj(X_tr[b*batch_size:(b+1)*batch_size]).numpy())
+        X_tr = np.concatenate(_X_tr) # override training set
+
+        logger.info('New data shapes:')
+        logger.info(f'{X_tr.shape = }, {X_va.shape = }, {Y_tr.shape = }, {Y_va.shape = }')
     
     return orig_train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics, early_stopping_kwargs=early_stopping_kwargs, enable_early_stopping=enable_early_stopping,
                             u=u, batch_size=batch_size, checkpoint_every=checkpoint_every, additional_callbacks=additional_callbacks, return_metric=return_metric)
 
-#####################################################
-# set the modified function to override the old one #
-#####################################################
+
+def load_model(checkpoint, compile=False):
+    '''
+    Loads a neural network and its weights. Checkpoints with the weights are supposed to be in the same folder as where the model structure is
+
+    Parameters
+    ----------
+    checkpoint : str
+        path to the checkpoint is. For example with structure <folder>/cp-<epoch>.ckpt
+    compile : bool, optional
+        whether to compile the model, by default False
+
+    Returns
+    -------
+    keras.models.Model
+    '''
+    model_folder = Path(checkpoint).parent
+    model = keras.models.load_model(model_folder, compile=compile)
+    model.load_weights(checkpoint)
+
+    proj_folder = model_folder / 'projection'
+    if proj_folder.exists():
+        logger.info('Detected separate projection: loading and concatenating')
+        proj = keras.models.load_model(proj_folder, compile=compile)
+
+        model = keras.models.Sequential([proj, model])
+    return model
+
+
+#######################################################
+# set the modified functions to override the old ones #
+#######################################################
 ln.create_model = create_model
 ln.train_model = train_model
+ln.load_model = load_model
 ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram]) # module level config dictionary
 
 if __name__ == '__main__':
