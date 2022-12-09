@@ -372,7 +372,7 @@ def ShowArea(lon_mask, lat_mask, field_mask, coords=[-7,15,40,60], **kwargs):
     return fig, m
 
 
-def multiple_field_plot(lon, lat, f, projections=ccrs.Orthographic(central_latitude=90), extents=None, figsize=(9,6), fig_num=None, figure=None,
+def multiple_field_plot(lon, lat, f, projections=ccrs.Orthographic(central_latitude=90), extents=None, figsize=(9,6), fig_num=None, figure=None, axes=None,
                         colorbar='individual', titles=None, **kwargs):
     '''
     Plots several fields
@@ -395,6 +395,8 @@ def multiple_field_plot(lon, lat, f, projections=ccrs.Orthographic(central_latit
         figure number of the first field, by default None
     figure : figure, optional
         The figure handle is provided
+    axes : axes, optional,
+        If the axes are provided then they would be reused, otherwise make new ones
     colorbar : 'individual', 'shared', 'disabled', optional
         How to plot the colorbar:
             'disabled': every field has its own colorbar, not centerd around 0
@@ -447,14 +449,17 @@ def multiple_field_plot(lon, lat, f, projections=ccrs.Orthographic(central_latit
                 fig = plt.figure(figsize=figsize)
         else:
             fig = figure
-
-        m = fig.add_subplot(projection = projections[i])
-        if extents[i]:
-            m.set_extent(extents[i])
+        if axes is None:
+            m = fig.add_subplot(projection = projections[i])
+            if extents[i]:
+                m.set_extent(extents[i])
+        else:
+            m = axes
 
         geo_plotter(m, lon, lat, _f, title=titles[i], norm=norm, **kwargs)
 
         fig.tight_layout()
+        return m
 
 def mfp(lon, lat, f,
          projections=[
