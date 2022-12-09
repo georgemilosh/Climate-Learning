@@ -33,7 +33,7 @@ class SeparateMRSOLinearModel(keras.Model):
         return x
 
 class Dense2D(layers.Layer):
-    def __init__(self, filters_per_field=[1,2,1], regularizer=None, **kwargs):
+    def __init__(self, filters_per_field=[1,2,1], merge_to_one=False, regularizer=None, **kwargs):
         '''
         Layer for performing a linear projection of a color image treating the colors (fields) independently
 
@@ -47,13 +47,18 @@ class Dense2D(layers.Layer):
         super().__init__(**kwargs)
         self.filters_per_field = filters_per_field
         self.nfields = len(self.filters_per_field)
-        self.m = np.sum(self.filters_per_field)
-        if self.m == 0:
+        self.nfilters = np.sum(self.filters_per_field)
+        self.merge_to_one = merge_to_one
+        if self.nfilters == 0:
             raise ValueError(f'Layer with no filters is invalid: {filters_per_field = }')
+        if self.merge_to_one:
+            self.sum = keras.layers.Add()
+        else:
+            self.conc = keras.layers.Concatenate()
 
         self.regularizer = regularizer
 
-        self.conc = keras.layers.Concatenate()
+        
 
     def build(self, input_shape):
         if input_shape[-1] != self.nfields:
@@ -79,10 +84,12 @@ class Dense2D(layers.Layer):
 
         x = [tf.tensordot(x[...,i], k, axes=2) for i,k in enumerate(self.kernels) if k is not None]
 
-        if self.m > 1:
-            x = self.conc(x)
-        else: # there is only one kernel, so concatenate would throw an exception
+        if self.nfilters == 1:
             x = x[0]
+        elif self.merge_to_one:
+            x = self.sum(x)
+        else:
+            x = self.conc(x)            
 
         return x
 
