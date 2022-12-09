@@ -41,6 +41,9 @@ class Dense2D(layers.Layer):
         ----------
         filters_per_field : list[int], optional
             Number of patterns onto which to project for every color (field), by default [1,2,1]
+        merge_to_one : bool, optional
+            Whether to sum the outputs of the scalar products between filters and fields into a single neuron. This makes the reduced space one dimensional.
+            With this setting there is no point in having more than 1 filter per field. Default is False
         regularizer : tf.keras.regularizers.Regularizer, optional
             Regularizer, by default None
         '''
@@ -212,7 +215,7 @@ class GradientRegularizer(keras.regularizers.Regularizer):
         return {'c': self.c, 'weights': self.weights, 'periodic_lon': self.periodic_lon, 'normalize': self.normalize}
 
 
-def create_model(input_shape, filters_per_field=[1,1,1], learns_kernels=True, batch_normalization=False, reg_mode='l2', reg_c=1, reg_weights=None, reg_periodicity=True, reg_norm=True, dense_units=[8,2], dense_activations=['relu', None], dense_dropouts=False):
+def create_model(input_shape, filters_per_field=[1,1,1], merge_to_one=False, learns_kernels=True, batch_normalization=False, reg_mode='l2', reg_c=1, reg_weights=None, reg_periodicity=True, reg_norm=True, dense_units=[8,2], dense_activations=['relu', None], dense_dropouts=False):
     '''
     Creates a neural network
 
@@ -222,6 +225,9 @@ def create_model(input_shape, filters_per_field=[1,1,1], learns_kernels=True, ba
         shape of the data (without the batch axis)
     filters_per_field : list[int], optional
         Number of projection patterns for each of the fields ('ghost' fields should not be counted), by default [1,1,1]
+    merge_to_one : bool, optional
+        Whether to sum the outputs of the scalar products between filters and fields into a single neuron. This makes the reduced space one dimensional.
+        With this setting there is no point in having more than 1 filter per field. Default is False
     batch_normalization : bool, optional
         whether to perform batch normalization after the projection. This helps if the input data is not normalized, by default False
     reg_mode : str, optional
@@ -255,7 +261,7 @@ def create_model(input_shape, filters_per_field=[1,1,1], learns_kernels=True, ba
     
     model = keras.models.Sequential()
 
-    model.add(Dense2D(filters_per_field=filters_per_field, regularizer=regularizer, input_shape=input_shape))
+    model.add(Dense2D(filters_per_field=filters_per_field, merge_to_one=merge_to_one, regularizer=regularizer, input_shape=input_shape))
 
     if not learns_kernels:
         model.layers[0].trainable=False
