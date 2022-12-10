@@ -372,7 +372,8 @@ def ShowArea(lon_mask, lat_mask, field_mask, coords=[-7,15,40,60], **kwargs):
     return fig, m
 
 
-def multiple_field_plot(lon, lat, f, projections=ccrs.Orthographic(central_latitude=90), extents=None, figsize=(9,6), fig_num=None, figure=None, axes=None,
+def multiple_field_plot(lon, lat, f, projections=ccrs.Orthographic(central_latitude=90), extents=None, 
+                        figsize=(9,6), fig_num=None, figure=None, axes=None, levs=None,
                         colorbar='individual', titles=None, **kwargs):
     '''
     Plots several fields
@@ -397,6 +398,8 @@ def multiple_field_plot(lon, lat, f, projections=ccrs.Orthographic(central_latit
         The figure handle is provided
     axes : axes, optional,
         If the axes are provided then they would be reused, otherwise make new ones
+    levs : list, optional,
+        If provided it will mark the maximal and minimal value
     colorbar : 'individual', 'shared', 'disabled', optional
         How to plot the colorbar:
             'disabled': every field has its own colorbar, not centerd around 0
@@ -433,14 +436,21 @@ def multiple_field_plot(lon, lat, f, projections=ccrs.Orthographic(central_latit
 
     norm = None
     if colorbar == 'shared':
-        mx = max(-np.min(f), np.max(f)) or 1
-        norm = matplotlib.colors.TwoSlopeNorm(vcenter=0., vmin=-mx, vmax=mx)
+        if levs is None:
+            mx = max(-np.min(f), np.max(f)) or 1
+            norm = matplotlib.colors.TwoSlopeNorm(vcenter=0., vmin=-mx, vmax=mx)
+        else:
+            norm = matplotlib.colors.TwoSlopeNorm(vcenter=np.mean(levs), vmin=levs[0], vmax=levs[-1])
 
     for i in range(n_fields):
         _f = f[...,i]
         if colorbar == 'individual':
-            mx = max(-np.min(_f), np.max(_f)) or 1
-            norm = matplotlib.colors.TwoSlopeNorm(vcenter=0., vmin=-mx, vmax=mx)
+            if levs is None:
+                mx = max(-np.min(_f), np.max(_f)) or 1
+                norm = matplotlib.colors.TwoSlopeNorm(vcenter=0., vmin=-mx, vmax=mx)
+            else:
+                norm = matplotlib.colors.TwoSlopeNorm(vcenter=np.mean(levs), vmin=levs[0], vmax=levs[-1])
+        print(f'{norm = }')
         if figure is None:
             if fig_num is not None:
                 plt.close(fig_num + i)
