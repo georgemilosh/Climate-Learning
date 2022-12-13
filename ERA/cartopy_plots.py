@@ -99,6 +99,7 @@ def geo_plotter(m, lon, lat, values, mode='contourf',
         
         greenwich: if True automatically adds the Greenwich meridian to avoid gaps in the plot
     '''
+    
     if greenwich and mode in ['scatter', 'pcolormesh']:
         logger.warning('Ignoring greenwich kwarg')
         greenwich = False
@@ -131,7 +132,7 @@ def geo_plotter(m, lon, lat, values, mode='contourf',
     if draw_gridlines:
         m.gridlines(draw_labels=draw_labels)
     if put_colorbar:
-        plt.colorbar(im, label=colorbar_label, extend='both')
+        plt.colorbar(im, label=colorbar_label, extend='both', **kwargs)
     if title is not None:
         m.set_title(title, fontsize=20)
         
@@ -373,7 +374,7 @@ def ShowArea(lon_mask, lat_mask, field_mask, coords=[-7,15,40,60], **kwargs):
 
 
 def multiple_field_plot(lon, lat, f, projections=ccrs.Orthographic(central_latitude=90), extents=None, 
-                        figsize=(9,6), fig_num=None, figure=None, axes=None, levs=None,
+                        figsize=(9,6), fig_num=None, figure=None, axes=None, levs=None, use_norm=True,
                         colorbar='individual', titles=None, **kwargs):
     '''
     Plots several fields
@@ -400,6 +401,8 @@ def multiple_field_plot(lon, lat, f, projections=ccrs.Orthographic(central_latit
         If the axes are provided then they would be reused, otherwise make new ones
     levs : list, optional,
         If provided it will mark the maximal and minimal value
+    use_norm : bool, optional,
+        If use_norm=False then levels=levs will be used instead
     colorbar : 'individual', 'shared', 'disabled', optional
         How to plot the colorbar:
             'disabled': every field has its own colorbar, not centerd around 0
@@ -412,7 +415,6 @@ def multiple_field_plot(lon, lat, f, projections=ccrs.Orthographic(central_latit
     **kwargs:
         passed to geo_plotter
     '''
-    
     if len(lon.shape) != len(lat.shape):
         raise ValueError('lon and lat must have the same number of dimensions')
     if len(lon.shape) == 1:
@@ -465,8 +467,10 @@ def multiple_field_plot(lon, lat, f, projections=ccrs.Orthographic(central_latit
                 m.set_extent(extents[i])
         else:
             m = axes
-
-        geo_plotter(m, lon, lat, _f, title=titles[i], norm=norm, **kwargs)
+        if use_norm:
+            geo_plotter(m, lon, lat, _f, title=titles[i], norm=norm, **kwargs)
+        else:
+            geo_plotter(m, lon, lat, _f, title=titles[i], levels=levs, **kwargs)
 
         fig.tight_layout()
         return m
