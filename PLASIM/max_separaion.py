@@ -15,11 +15,111 @@ logging.getLogger().handlers = [logging.StreamHandler(sys.stdout)]
 sys.path.append('../../MaxSeparation/')
 import MaxSeparator as ms
 
+@ut.execution_time
+@ut.indent_logger(logger)
+def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics,
+                checkpoint_every=1, return_metric='invFisher'):
+    '''
+    Trains a given model checkpointing its weights
+
+    Parameters
+    ----------
+    model : keras.models.Model
+    X_tr : np.ndarray
+        training data
+    Y_tr : np.ndarray
+        training labels
+    X_va : np.ndarray
+        validation data
+    Y_va : np.ndarray
+        validation labels
+    folder : str or Path
+        location where to save the checkpoints of the model
+    num_epochs : int
+        number of maximum epochs for the training
+    optimizer : keras.Optimizer object
+    loss : keras.losses.Loss object
+    metrics : list of keras.metrics.Metric or str
+    early_stopping_kwargs : dict
+        arguments to create the early stopping callback. Ignored if `enable_early_stopping` = False
+    enable_early_stopping : bool, optional
+        whether to perform early stopping or not, by default False
+    u : float, optional
+        undersampling factor (>=1). Used for unbiasing and saving the committor
+    batch_size : int, optional
+        by default 1024
+    checkpoint_every : int or str, optional
+        Examples:
+        0: disabled
+        5 or '5 epochs' or '5 e': every 5 epochs
+        '100 batches' or '100 b': every 100 batches
+        'best custom_loss': every time 'custom_loss' reaches a new minimum. 'custom_loss' must be in the list of metrics
+    additional_callbacks : list of keras.callbacks.Callback objects or list of str, optional
+        string items are interpreted, for example 'csv_logger' creates a CSVLogger callback that saves the history to a csv file
+    return_metric : str, optional
+        name of the metric of which the minimum value will be returned at the end of training
+
+    Returns
+    -------
+    float
+        minimum value of `return_metric` during training
+    '''
+    ### preliminary operations
+    ##########################
+    folder = folder.rstrip('/')
+    ckpt_name = folder + '/cp-{epoch:04d}.ckpt'
+
+
+    ### training the model
+    ######################
+
+    # log the amount af data that is entering the network
+    logger.info(f'Training the network on {len(Y_tr)} datapoint and validating on {len(Y_va)}')
+
+    # prepare the data
+    X0_tr = X_tr[Y_tr==0]
+    X1_tr = X_tr[Y_tr==1]
+
+    # prepare the model
+    model.set_data(X0_tr,X1_tr)
+    model.compute_rotation()
+
+    # prepare the history
+    history = {'invFisher': [], 'val_invFisher': []}
+
+    # perform training for `num_epochs`
+    for i in range(num_epochs):
+        model.compute_projection(n_directions=i+1)
+
+        ### in progress...
+
+
+    ## save Y_va and Y_pred_unbiased
+    np.save(f'{folder}/Y_va.npy', Y_va)
+    Y_pred = model(X_va)
+    np.save(f'{folder}/Y_pred_unbiased.npy', Y_pred)
+
+    ## deal with history
+    np.save(f'{folder}/history.npy', history)
+    # log history
+    df = pd.DataFrame(history)
+    df.index.name = 'epoch-1'
+    logger.log(25, str(df))
+    df.to_csv(f'{folder}/history.csv', index=True)
+
+    # return the best value of the return metric
+    if return_metric not in history:
+        logger.error(f'{return_metric = } is not one of the metrics monitored during training, returning NaN')
+        score = np.NaN
+    else:
+        score = np.min(history[return_metric])
+    logger.log(42, f'{score = }')
+    return score
 
 @ut.execution_time
 @ut.indent_logger(logger)
 def k_fold_cross_val(folder, X, Y, train_model_kwargs=None, optimal_checkpoint_kwargs=None, nfolds=10, val_folds=1, u=1, normalization_mode='pointwise',
-                    training_epochs=40, patience=0):
+                    training_epochs=40):
     '''
     Performs k fold cross validation on a model architecture.
 
@@ -222,6 +322,8 @@ def k_fold_cross_val(folder, X, Y, train_model_kwargs=None, optimal_checkpoint_k
 #######################################################
 # set the modified functions to override the old ones #
 #######################################################
+ln.k_fold_cross_val = k_fold_cross_val
+ln.train_model = train_model
 
 ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram]) # module level config dictionary
 
