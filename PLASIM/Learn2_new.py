@@ -1466,7 +1466,6 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     float
         minimum value of `return_metric` during training
     '''
-    # GM: It seem "u" is not used in train_model, obsolete?
     ### preliminary operations
     ##########################
     if early_stopping_kwargs is None:
