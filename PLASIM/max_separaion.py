@@ -284,16 +284,13 @@ def k_fold_cross_val(folder, X, Y, train_model_kwargs=None, optimal_checkpoint_k
             scores[i] = np.load(f'{folder}/fold_{i}/{fold_subfolder}history.npy', allow_pickle=True).item()[return_metric][opt_checkpoint - first_epoch]
 
         # reload the models at their proper checkpoint and recompute Y_pred_unbiased
-        batch_size = train_model_kwargs['batch_size']
         for i in range(nfolds):
             _, _, X_va, Y_va = ln.k_fold_cross_val_split(i, X, Y, nfolds=nfolds, val_folds=val_folds)
             fold_folder = f'{folder}/fold_{i}'
-            model = ms.load_model(f'{fold_folder}/{fold_subfolder}cp-{opt_checkpoint:04d}.ckpt')
+            model = ms.GeoSeparator()
+            model = ms.load_proj(f'{fold_folder}/{fold_subfolder}cp-{opt_checkpoint:04d}.ckpt')
 
-            Y_pred = []
-            for b in range(Y_va.shape[0]//batch_size + 1):
-                Y_pred.append(model(X_va[b*batch_size:(b+1)*batch_size]))
-            Y_pred = np.concatenate(Y_pred)
+            Y_pred = model(X_va)
             np.save(f'{fold_folder}/Y_pred_unbiased.npy', Y_pred)
         
 
