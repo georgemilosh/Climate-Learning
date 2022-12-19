@@ -17,7 +17,7 @@ import MaxSeparator as ms
 
 @ut.execution_time
 @ut.indent_logger(logger)
-def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics,
+def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, patience=0,
                 checkpoint_every=1, return_metric='invFisher'):
     '''
     Trains a given model checkpointing its weights
@@ -37,25 +37,12 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
         location where to save the checkpoints of the model
     num_epochs : int
         number of maximum epochs for the training
-    optimizer : keras.Optimizer object
-    loss : keras.losses.Loss object
-    metrics : list of keras.metrics.Metric or str
-    early_stopping_kwargs : dict
-        arguments to create the early stopping callback. Ignored if `enable_early_stopping` = False
-    enable_early_stopping : bool, optional
-        whether to perform early stopping or not, by default False
-    u : float, optional
-        undersampling factor (>=1). Used for unbiasing and saving the committor
-    batch_size : int, optional
-        by default 1024
     checkpoint_every : int or str, optional
         Examples:
         0: disabled
         5 or '5 epochs' or '5 e': every 5 epochs
         '100 batches' or '100 b': every 100 batches
         'best custom_loss': every time 'custom_loss' reaches a new minimum. 'custom_loss' must be in the list of metrics
-    additional_callbacks : list of keras.callbacks.Callback objects or list of str, optional
-        string items are interpreted, for example 'csv_logger' creates a CSVLogger callback that saves the history to a csv file
     return_metric : str, optional
         name of the metric of which the minimum value will be returned at the end of training
 
@@ -67,7 +54,6 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     ### preliminary operations
     ##########################
     folder = folder.rstrip('/')
-    ckpt_name = folder + '/cp-{epoch:04d}.ckpt'
 
 
     ### training the model
@@ -80,6 +66,9 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     X0_tr = X_tr[Y_tr==0]
     X1_tr = X_tr[Y_tr==1]
 
+    X0_va = X_va[Y_va==0]
+    X1_va = X_va[Y_va==1]
+    
     # prepare the model
     model.set_data(X0_tr,X1_tr)
     model.compute_rotation()
@@ -88,11 +77,36 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     history = {'invFisher': [], 'val_invFisher': []}
 
     # perform training for `num_epochs`
-    for i in range(num_epochs):
-        model.compute_projection(n_directions=i+1)
+    best_epoch = 0
+    best_value = np.inf
+    non_improving_epochs = 0
+    for epoch in range(num_epochs):
+        model.compute_projection(n_directions=epoch+1)
 
-        ### in progress...
+        tr_score = model.inv_fisher
+        va_score = 1./ms.score(model(X0_va), model(X1_va))
 
+        history['invFisher'].append(tr_score)
+        history['val_invFisher'].append(va_score)
+
+        print(f'{epoch = }: {tr_score = }, {va_score = }')
+
+        if checkpoint_every and epoch % checkpoint_every == 0:
+            model.save_proj(f'{folder}/cp-{epoch:04d}.npy')
+
+        if patience:
+            if va_score < best_value:
+                best_epoch = epoch
+                non_improving_epochs = 0
+                best_value = va_score
+            else:
+                non_improving_epochs += 1
+                if non_improving_epochs > patience:
+                    # checkpoint back and exit the loop
+                    model.compute_projection(n_directions=best_epoch+1)
+                    if not os.path.exists(f'{folder}/cp-{best_epoch:04d}.npy'):
+                        model.save_proj(f'{folder}/cp-{best_epoch:04d}.npy')
+                    break
 
     ## save Y_va and Y_pred_unbiased
     np.save(f'{folder}/Y_va.npy', Y_va)
@@ -288,7 +302,7 @@ def k_fold_cross_val(folder, X, Y, train_model_kwargs=None, optimal_checkpoint_k
             _, _, X_va, Y_va = ln.k_fold_cross_val_split(i, X, Y, nfolds=nfolds, val_folds=val_folds)
             fold_folder = f'{folder}/fold_{i}'
             model = ms.GeoSeparator()
-            model = ms.load_proj(f'{fold_folder}/{fold_subfolder}cp-{opt_checkpoint:04d}.ckpt')
+            model = ms.load_proj(f'{fold_folder}/{fold_subfolder}cp-{opt_checkpoint:04d}.npy')
 
             Y_pred = model(X_va)
             np.save(f'{fold_folder}/Y_pred_unbiased.npy', Y_pred)
