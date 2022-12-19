@@ -80,8 +80,8 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, patience=0,
     best_epoch = 0
     best_value = np.inf
     non_improving_epochs = 0
-    for epoch in range(num_epochs):
-        model.compute_projection(n_directions=epoch+1)
+    for epoch in range(1, num_epochs+1):
+        model.compute_projection(n_directions=epoch)
 
         tr_score = model.inv_fisher
         va_score = 1./ms.score(model(X0_va), model(X1_va))
@@ -132,7 +132,7 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, patience=0,
 
 @ut.execution_time
 @ut.indent_logger(logger)
-def k_fold_cross_val(folder, X, Y, train_model_kwargs=None, optimal_checkpoint_kwargs=None, nfolds=10, val_folds=1, u=1, normalization_mode='pointwise',
+def k_fold_cross_val(folder, X, Y, train_model_kwargs=None, optimal_checkpoint_kwargs=None, load_from=None, nfolds=10, val_folds=1, u=1, normalization_mode='pointwise',
                     training_epochs=40):
     '''
     Performs k fold cross validation on a model architecture.
@@ -199,15 +199,14 @@ def k_fold_cross_val(folder, X, Y, train_model_kwargs=None, optimal_checkpoint_k
     float
         average score of the run
     '''
-    if create_model_kwargs is None:
-        create_model_kwargs = {}
     if train_model_kwargs is None:
         train_model_kwargs = {}
     if optimal_checkpoint_kwargs is None:
         optimal_checkpoint_kwargs = {}
     folder = folder.rstrip('/')
 
-    load_from = None
+    if load_from is not None:
+        raise NotImplementedError('Sorry: cannot do transfer learning with this code')
     # get the folders from which to load the models
     load_from, info = ln.get_transfer_learning_folders(load_from, folder, nfolds, optimal_checkpoint_kwargs=optimal_checkpoint_kwargs)
     # here load_from is either None (no transfer learning) or a list of strings

@@ -300,7 +300,7 @@ def check_config_dict(config_dict, correct_mistakes=True):
             else:
                 raise ValueError(f"{label_field = } is not one of the loaded fields: please add a ghost field as {label_field+'_ghost'}")
 
-        if config_dict_flat['enable_early_stopping']:
+        if 'enable_early_stopping' in config_dict_flat and config_dict_flat['enable_early_stopping']:
             if config_dict_flat['patience'] == 0:
                 logger.warning('Setting `patience` to 0 disables early stopping')
             elif config_dict_flat['collective']:
