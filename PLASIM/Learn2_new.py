@@ -140,6 +140,7 @@ import ast
 import logging
 from uncertainties import ufloat
 from functools import wraps
+import socket
 
 if __name__ == '__main__':
     logger = logging.getLogger()
@@ -147,6 +148,8 @@ if __name__ == '__main__':
 else:
     logger = logging.getLogger(__name__)
 logger.level = logging.INFO
+
+HOSTNAME = socket.gethostname()
 
 
 ## machine learning
@@ -2696,6 +2699,7 @@ class Trainer():
         os.mkdir(f'{self.root_folder}/{folder}')
         with open(f'{self.root_folder}/{folder}/log.log', 'a') as logfile:
             logfile.write(f'{run_id = }\n\n')
+            logfile.write(f'Running on machine: {HOSTNAME}\n\n')
             logfile.write('Non default parameters:\n')
             logfile.write(ut.dict2str(kwargs))
             logfile.write('\n')
