@@ -352,6 +352,9 @@ def ComputeSkill(folder, q, percent, chain_step, input_set='va'):
                     # the goal is to extract only the summer heatwaves, but the committor is computed from mid may 
                     # to the end of August. For tau = 0 we should have from June1 to August15 and for increasing
                     # tau this window has to shift towards earlier dates
+                    if input_set != 'va':
+                        committor[j][k][i][:,l] = (temp[i][:,l].reshape(-1,n_days)[:,(label_period_start-
+                                time_start-3*l):(n_days-T+1-3*l)]).reshape(-1)
                     entropy = tf.keras.losses.BinaryCrossentropy(from_logits= 
                                 False)(Y_va, (temp[i][:,l].reshape(-1,n_days)[:,(label_period_start-
                                 time_start-3*l):(n_days-T+1-3*l)]).reshape(-1)).numpy() 
