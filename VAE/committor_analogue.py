@@ -370,12 +370,13 @@ def ComputeSkill(folder, q, percent, chain_step, input_set='va'):
             committor[j][k] = (np.concatenate(list(qneighbors.values()),axis=0).shape
     """
                 
-    logger.info(f"Computed skill score for the committor and saving in {folder}/committor.pkl")
     if input_set == 'va':
         committor_file_name = 'committor'
+    	logger.info(f"Computed skill score for the committor and saving in {folder}/committor.pkl")
     else:
-        committor_file_name = f'committor_{input_set}'
-       
+        committor_file_name = f'committor_{input_set}' 
+    	logger.info(f"Computed skill score for the committor and saving in {folder}/committor_{input_set}.pkl")
+
     with open(f'{folder}/{committor_file_name}.pkl', "wb") as committor_file:
             pickle.dump({'committor' : committor, 'skill' : skill, 'RunFolds_kwargs_default' : RunFolds_kwargs_default}, committor_file)
             
