@@ -1,7 +1,7 @@
 # George Miloshevich 2022
 #   Adapted from earlier version of Dario Lucente
 # This routine is written for one parameter: input folder for VAE weights/ whether VAE is used for dimensionality reduction can vary. It shows us how good the committor of the analog Markov chain works
-# The new usage committor.py <folder> 
+# The new usage committor.py <folder> <committor_file>
 import os, sys
 import pickle
 from pathlib import Path
@@ -19,7 +19,6 @@ if __name__ == '__main__':
 else:
     logger = logging.getLogger(__name__)
 logger.level = logging.INFO     
-
 
 
 
@@ -322,12 +321,12 @@ def RunFolds(folder,nfolds, threshold, n_days, nfield=0, input_set='va', bulk_se
 
 @ut.execution_time  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function
-def ComputeSkill(folder, q, percent, chain_step):
+def ComputeSkill(folder, q, percent, chain_step, input_set='va'):
     logger.info(f'Using {chain_step}')
     committor = dict()
     skill = dict()
     for i, qfold in q.items():
-        Y_va = (np.load(f"{folder}/fold_{i}/Y_va.npy").reshape(-1,n_days)
+        Y_va = (np.load(f"{folder}/fold_{i}/Y_{input_set}.npy").reshape(-1,n_days)
                 [:,(label_period_start-time_start):(n_days-T+1)]).reshape(-1) # the goal is to extract only the summer heatwaves
         logger.info(f'Extraction from {label_period_start-time_start = } to {(n_days-T+1)} and reshape(-1) gives  {Y_va.shape = }')
         for j, qcheckpoints in qfold.items():
@@ -347,6 +346,7 @@ def ComputeSkill(folder, q, percent, chain_step):
                 else:
                     temp2 = skill[j][k]
                 temp2[i] = []
+                
                 for l in range(temp[i].shape[1]): # loop over the tau dimension
                     #logger.info(f'{Y_va.shape = },{temp[i][:,l].shape = }, {label_period_start-time_start-3*l = }, {n_days-T+1-3*l = }, {n_days = }  ')
                     # the goal is to extract only the summer heatwaves, but the committor is computed from mid may 
@@ -358,6 +358,7 @@ def ComputeSkill(folder, q, percent, chain_step):
                     maxskill = -(percent/100.)*np.log(percent/100.)-(1-percent/100.)*np.log(1-percent/100.)
                     temp2[i].append((maxskill-entropy)/maxskill) # Using 3 instead of chain_step is important because tau increments are still 3 days 
                 skill[j][k] = temp2
+    
     logger.info("Computed the skill of the committor")
 
     """     If you want to concatenate the     
@@ -367,9 +368,14 @@ def ComputeSkill(folder, q, percent, chain_step):
     """
                 
     logger.info(f"Computed skill score for the committor and saving in {folder}/committor.pkl")
-    with open(f'{folder}/committor.pkl', "wb") as committor_file:
-        pickle.dump({'committor' : committor, 'skill' : skill, 'RunFolds_kwargs_default' : RunFolds_kwargs_default}, committor_file)
-    
+    if input_set == 'va':
+        committor_file_name = 'committor'
+    else:
+        committor_file_name = f'committor_{input_set}'
+       
+    with open(f'{folder}/{committor_file_name}.pkl', "wb") as committor_file:
+            pickle.dump({'committor' : committor, 'skill' : skill, 'RunFolds_kwargs_default' : RunFolds_kwargs_default}, committor_file)
+            
     return committor, entropy
 
 ln.RunCheckpoints = RunCheckpoints
@@ -407,9 +413,12 @@ if __name__ == '__main__': #  so that the functions above can be used in traject
 
     RunFolds_kwargs_default = ln.get_default_params(RunFolds, recursive=True)
     RunFolds_kwargs_default = ut.set_values_recursive(
-        RunFolds_kwargs_default, {'num_Traj' : 10000, 'chain_step' : extra_day, 'delay' : delay, 'neighbors' : [2,3,5,10,20,50], 
-                                'T' : T, 'allowselfanalogs' : True, 'input_set' : 'va', 'bulk_set' : 'tr'}  )
-
+        RunFolds_kwargs_default, {'num_Traj' : 10000, 'chain_step' : extra_day, 'delay' : delay, 'neighbors' : [2,10,20], 
+                                'T' : T, 'allowselfanalogs' : True, 'input_set' : 'tr', 'bulk_set' : 'tr'}  )
+    # the code below is used to set kwargs for usual validation of the committor
+    #RunFolds_kwargs_default = ut.set_values_recursive(
+    #    RunFolds_kwargs_default, {'num_Traj' : 10000, 'chain_step' : extra_day, 'delay' : delay, 'neighbors' : [2,3,5,10,20,50], 
+    #                            'T' : T, 'allowselfanalogs' : True, 'input_set' : 'va', 'bulk_set' : 'tr'}  )
     chain_step = ut.extract_nested(RunFolds_kwargs_default, 'chain_step')  
     logger.info(RunFolds_kwargs_default)
     logger.info(f"{Fore.BLUE}") #  indicates we are inside the routine 
@@ -424,7 +433,7 @@ if __name__ == '__main__': #  so that the functions above can be used in traject
     CommOnePoint(33,threshold,delay,time_series_va_0,time_series_tr_0,[2,3,5,10,20,50],10, 5, chain_step, 
                 analogues_va,analogues_tr) # We have to compile the numba function before it can be used in parallel
     q = RunFolds(folder,nfolds, threshold, n_days, **RunFolds_kwargs_default)   # Full run
-
-    committor, entropy = ComputeSkill(folder, q, percent, chain_step)
+    input_set = ut.extract_nested(RunFolds_kwargs_default, 'input_set')
+    committor, entropy = ComputeSkill(folder, q, percent, chain_step, input_set=input_set)
 
     logger.info(f"{Style.RESET_ALL}")
