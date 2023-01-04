@@ -352,15 +352,15 @@ def ComputeSkill(folder, q, percent, chain_step, input_set='va'):
                     # the goal is to extract only the summer heatwaves, but the committor is computed from mid may 
                     # to the end of August. For tau = 0 we should have from June1 to August15 and for increasing
                     # tau this window has to shift towards earlier dates
-                    if input_set != 'va':
-                        committor[j][k][i][:,l] = (temp[i][:,l].reshape(-1,n_days)[:,(label_period_start-
-                                time_start-3*l):(n_days-T+1-3*l)]).reshape(-1)
                     entropy = tf.keras.losses.BinaryCrossentropy(from_logits= 
                                 False)(Y_va, (temp[i][:,l].reshape(-1,n_days)[:,(label_period_start-
                                 time_start-3*l):(n_days-T+1-3*l)]).reshape(-1)).numpy() 
                     maxskill = -(percent/100.)*np.log(percent/100.)-(1-percent/100.)*np.log(1-percent/100.)
                     temp2[i].append((maxskill-entropy)/maxskill) # Using 3 instead of chain_step is important because tau increments are still 3 days 
                 skill[j][k] = temp2
+                if input_set != 'va':
+                    committor[j][k][i] = np.array([(temp[i][:,l].reshape(-1,n_days)[:,(label_period_start-
+                                time_start-3*l):(n_days-T+1-3*l)]).reshape(-1) for l in range(temp[i].shape[1])]).transpose()
     
     logger.info("Computed the skill of the committor")
 
@@ -372,10 +372,10 @@ def ComputeSkill(folder, q, percent, chain_step, input_set='va'):
                 
     if input_set == 'va':
         committor_file_name = 'committor'
-    	logger.info(f"Computed skill score for the committor and saving in {folder}/committor.pkl")
+        logger.info(f"Computed skill score for the committor and saving in {folder}/committor.pkl")
     else:
         committor_file_name = f'committor_{input_set}' 
-    	logger.info(f"Computed skill score for the committor and saving in {folder}/committor_{input_set}.pkl")
+        logger.info(f"Computed skill score for the committor and saving in {folder}/committor_{input_set}.pkl")
 
     with open(f'{folder}/{committor_file_name}.pkl', "wb") as committor_file:
             pickle.dump({'committor' : committor, 'skill' : skill, 'RunFolds_kwargs_default' : RunFolds_kwargs_default}, committor_file)
