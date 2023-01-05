@@ -2473,7 +2473,8 @@ class Trainer():
         '''
         # add telegram logger
         th = self.telegram(**self.telegram_kwargs)
-        logger.log(45, f'Starting {len(self.scheduled_kwargs)} runs')
+        nruns = len(self.scheduled_kwargs)
+        logger.log(45, f"Starting {nruns} run{'' if nruns == 1 else 's'}")
         try:
             for i,kwargs in enumerate(self.scheduled_kwargs):
                 logger.log(42, f'Run {i+1}/{len(self.scheduled_kwargs)}')
