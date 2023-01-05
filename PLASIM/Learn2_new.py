@@ -1510,6 +1510,18 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
 
     model.save_weights(ckpt_name.format(epoch=0)) # save model before training
 
+    # save Y_va
+    np.save(f'{folder}/Y_va.npy', Y_va)
+
+    with tf.device('CPU'): # convert data to tensors to fix a bugfix in tf > 2.6 that was otherwise throwing OutOfMemory errors
+        logger.info('Converting training data to tensors')
+        X_va = tf.convert_to_tensor(X_tr)
+        Y_va = tf.convert_to_tensor(Y_tr)
+
+        logger.info('Converting validation data to tensors')
+        X_va = tf.convert_to_tensor(X_va)
+        Y_va = tf.convert_to_tensor(Y_va)
+
     # log the amount af data that is entering the network
     logger.info(f'Training the network on {len(Y_tr)} datapoint and validating on {len(Y_va)}')
 
@@ -1517,8 +1529,7 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     my_history=model.fit(X_tr, Y_tr, batch_size=batch_size, validation_data=(X_va,Y_va), shuffle=True,
                          callbacks=callbacks, epochs=num_epochs, verbose=2, class_weight=None)
 
-    ## save Y_va and Y_pred_unbiased
-    np.save(f'{folder}/Y_va.npy', Y_va)
+    ## compute and save Y_pred_unbiased
     Y_pred = []
     for b in range(Y_va.shape[0]//batch_size + 1):
         Y_pred.append(keras.layers.Softmax()(model(X_va[b*batch_size:(b+1)*batch_size])).numpy())
