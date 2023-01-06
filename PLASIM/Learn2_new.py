@@ -1515,8 +1515,8 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
 
     with tf.device('CPU'): # convert data to tensors to fix a bugfix in tf > 2.6 that was otherwise throwing OutOfMemory errors
         logger.info('Converting training data to tensors')
-        X_va = tf.convert_to_tensor(X_tr)
-        Y_va = tf.convert_to_tensor(Y_tr)
+        X_tr = tf.convert_to_tensor(X_tr)
+        Y_tr = tf.convert_to_tensor(Y_tr)
 
         logger.info('Converting validation data to tensors')
         X_va = tf.convert_to_tensor(X_va)
