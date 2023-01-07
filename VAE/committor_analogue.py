@@ -31,6 +31,7 @@ import numpy as np
 from sklearn.linear_model import LogisticRegression
 from sklearn import neighbors
 from sklearn.metrics import log_loss
+from collections import defaultdict
 
 #from importlib import import_module
 #foo = import_module(fold_folder+'/Funs.py', package=None)
@@ -98,7 +99,11 @@ def CommOnePoint(day,ther,dela, Temp_va, Temp_tr, nn, n_Traj, numsteps, Markov_s
         z = np.zeros((len(ther),len(dela))) #auxiliary variable (result)
         for i in range(n_Traj):
             app = rd.randint(0,nn-1) # we go randomly to the training dataset from the validation dataset without updating the time
-            s = Matr_va[day][app]
+            if len(Matr_va) == len(Matr_tr): # we are assuming that this means that Matr_va = Matr_tr, which would be more difficult to check quickly
+            #if False:
+                s = day
+            else: # if not we have to map ourselves to from validation to training
+                s = Matr_va[day][app]
             #print("output: ", day,app,s, Matr_va.shape)
             if (s >= Matr_tr.shape[0]) or (s < 0):
                 wrong_index = 1
@@ -256,7 +261,7 @@ def RunCheckpoints(ind_new_va,ind_new_tr,time_series_va, time_series_tr, thresho
     """
     if RunNeighbors_kwargs is None:
         RunNeighbors_kwargs = {}
-   
+    logger.info(f'{time_series_va.shape = }, {time_series_tr.shape = }')  
     q = {}
     for checkpoint in ind_new_tr.keys():
         logger.info(f'{checkpoint = }')
@@ -269,7 +274,7 @@ def RunCheckpoints(ind_new_va,ind_new_tr,time_series_va, time_series_tr, thresho
         if removeoutsidemovingwindow:
             Matr_tr = MovingWindowAnalogs(Matr_tr,n_days,windwsize)
             Matr_va = MovingWindowAnalogs(Matr_va,n_days,windwsize)
-        logger.info(f'{Matr_va.shape = }, {start_day_set = }, {start_calendar_day = }')
+        logger.info(f'{Matr_tr.shape = }, {Matr_va.shape = }, {start_day_set = }, {start_calendar_day = }')
         if start_day_set == 'va': 
             days = np.arange(Matr_va.shape[0]) 
         else:
@@ -323,17 +328,16 @@ def RunFolds(folder,nfolds, threshold, n_days, nfield=0, input_set='va', bulk_se
 @ut.indent_logger(logger)   # indents the log messages produced by this function
 def ComputeSkill(folder, q, percent, chain_step, input_set='va'):
     logger.info(f'Using {chain_step}')
-    committor = dict()
-    skill = dict()
-    for i, qfold in q.items():
-        Y_va = (np.load(f"{folder}/fold_{i}/Y_{input_set}.npy").reshape(-1,n_days)
-                [:,(label_period_start-time_start):(n_days-T+1)]).reshape(-1) # the goal is to extract only the summer heatwaves
-        logger.info(f'Extraction from {label_period_start-time_start = } to {(n_days-T+1)} and reshape(-1) gives  {Y_va.shape = }')
+    skill = defaultdict(dict)
+    committor = dict() #q has fold appear first in the hierarchy
+    Y_va = []
+    for i, qfold in q.items(): # We want to rearrange the hierarchy of keys, so that fold goes last
+        Y_va.append((np.load(f"{folder}/fold_{i}/Y_{input_set}.npy").reshape(-1,n_days)
+                [:,(label_period_start-time_start):(n_days-T+1)]).reshape(-1)) # the goal is to extract only the summer heatwaves
+        logger.info(f'Extraction from {label_period_start-time_start = } to {(n_days-T+1)} and reshape(-1) gives  {Y_va[i].shape = }')
         for j, qcheckpoints in qfold.items():
             if j not in committor:
                 committor[j] = {}
-            if j not in skill:
-                skill[j] = {}
             for k, qneighbors in qcheckpoints.items():
                 if k not in committor[j]:
                     temp = dict()
@@ -341,26 +345,36 @@ def ComputeSkill(folder, q, percent, chain_step, input_set='va'):
                     temp = committor[j][k]
                 temp[i] = np.squeeze(qneighbors) 
                 committor[j][k] = temp
-                if k not in skill[j]:
-                    temp2 = dict()
-                else:
-                    temp2 = skill[j][k]
-                temp2[i] = []
-                
-                for l in range(temp[i].shape[1]): # loop over the tau dimension
+    logger.info(f'{committor.keys() = }')
+    
+
+    for j, committor_checkpoints in committor.items():
+        skill[j] = {}
+        for k, committor_neighbors in committor_checkpoints.items():
+            skill[j][k] = {}
+            for i, committor_fold in committor_neighbors.items():
+                skill[j][k][i] = []
+                for l in range(committor_fold.shape[1]): # loop over the tau dimension
                     #logger.info(f'{Y_va.shape = },{temp[i][:,l].shape = }, {label_period_start-time_start-3*l = }, {n_days-T+1-3*l = }, {n_days = }  ')
                     # the goal is to extract only the summer heatwaves, but the committor is computed from mid may 
                     # to the end of August. For tau = 0 we should have from June1 to August15 and for increasing
                     # tau this window has to shift towards earlier dates
+                    #logger.info(f'{committor_fold[:,l] .reshape(-1,n_days).shape = }')
                     entropy = tf.keras.losses.BinaryCrossentropy(from_logits= 
-                                False)(Y_va, (temp[i][:,l].reshape(-1,n_days)[:,(label_period_start-
+                                False)(Y_va[i], (committor_fold[:,l].reshape(-1,n_days)[:,(label_period_start-
                                 time_start-3*l):(n_days-T+1-3*l)]).reshape(-1)).numpy() 
                     maxskill = -(percent/100.)*np.log(percent/100.)-(1-percent/100.)*np.log(1-percent/100.)
-                    temp2[i].append((maxskill-entropy)/maxskill) # Using 3 instead of chain_step is important because tau increments are still 3 days 
-                skill[j][k] = temp2
-                if input_set != 'va':
-                    committor[j][k][i] = np.array([(temp[i][:,l].reshape(-1,n_days)[:,(label_period_start-
-                                time_start-3*l):(n_days-T+1-3*l)]).reshape(-1) for l in range(temp[i].shape[1])]).transpose()
+                    skill[j][k][i].append((maxskill-entropy)/maxskill) # Using 3 instead of chain_step is important because tau increments are still 3 days 
+    
+    if input_set != 'va': # if 'tr' we intend to use it for re-traiing CNN, so the committor=labels should come only from summer
+        for j, committor_checkpoints in committor.items():
+            for k, committor_neighbors in committor_checkpoints.items():
+                for i, committor_fold in committor_neighbors.items():
+                        committor[j][k][i] = np.array([(committor_fold[:,l].reshape(-1,n_days)[:,(label_period_start-
+                                time_start-3*l):(n_days-T+1-3*l)]).reshape(-1) for l in range(committor_fold.shape[1])]).transpose()
+                        #logger.info(f'{committor_fold.shape = }')                  
+
+    
     
     logger.info("Computed the skill of the committor")
 
@@ -417,7 +431,7 @@ if __name__ == '__main__': #  so that the functions above can be used in traject
 
     RunFolds_kwargs_default = ln.get_default_params(RunFolds, recursive=True)
     RunFolds_kwargs_default = ut.set_values_recursive(
-        RunFolds_kwargs_default, {'num_Traj' : 10000, 'chain_step' : extra_day, 'delay' : delay, 'neighbors' : [2,10,20], 
+        RunFolds_kwargs_default, {'num_Traj' : 10000, 'chain_step' : extra_day, 'delay' : delay, 'neighbors' : [1,5,10,20], 
                                 'T' : T, 'allowselfanalogs' : True, 'input_set' : 'tr', 'bulk_set' : 'tr'}  )
     # the code below is used to set kwargs for usual validation of the committor
     #RunFolds_kwargs_default = ut.set_values_recursive(
@@ -437,6 +451,8 @@ if __name__ == '__main__': #  so that the functions above can be used in traject
     CommOnePoint(33,threshold,delay,time_series_va_0,time_series_tr_0,[2,3,5,10,20,50],10, 5, chain_step, 
                 analogues_va,analogues_tr) # We have to compile the numba function before it can be used in parallel
     q = RunFolds(folder,nfolds, threshold, n_days, **RunFolds_kwargs_default)   # Full run
+    with open(f'{folder}/q.pkl', "wb") as q_file:
+            pickle.dump({'q' : q, 'RunFolds_kwargs_default' : RunFolds_kwargs_default}, q_file)
     input_set = ut.extract_nested(RunFolds_kwargs_default, 'input_set')
     committor, entropy = ComputeSkill(folder, q, percent, chain_step, input_set=input_set)
 
