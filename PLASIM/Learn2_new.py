@@ -806,7 +806,7 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
     if dataset_years == 1000:
         dataset_suffix = ''
     elif dataset_years == 8000:
-        dataset_suffix = '_LONG'
+        dataset_suffix = 'LONG'
     else:
         raise ValueError(f'Invalid number of {dataset_years = }')
 

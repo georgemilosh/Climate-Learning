@@ -38,9 +38,9 @@ from collections import defaultdict
 
 sys.path.append('../ERA/') # an oldschool way of importing because I will need to import committor_analogue.py in trajectory_analogue.py
 sys.path.append('../PLASIM/')               
-import TF_Fields as tff # tensorflow routines 
-import utilities as ut # utilities
 import Learn2_new as ln #Learn2_new.py
+tff = ln.tff# tensorflow routines 
+ut = ln.ut # utilities
 print(ln)
 print(ut)
 print(tff)
@@ -430,13 +430,13 @@ if __name__ == '__main__': #  so that the functions above can be used in traject
         delay = 3*np.arange(6)
 
     RunFolds_kwargs_default = ln.get_default_params(RunFolds, recursive=True)
-    RunFolds_kwargs_default = ut.set_values_recursive(
-        RunFolds_kwargs_default, {'num_Traj' : 10000, 'chain_step' : extra_day, 'delay' : delay, 'neighbors' : [1,5,10,20], 
-                                'T' : T, 'allowselfanalogs' : True, 'input_set' : 'tr', 'bulk_set' : 'tr'}  )
-    # the code below is used to set kwargs for usual validation of the committor
     #RunFolds_kwargs_default = ut.set_values_recursive(
-    #    RunFolds_kwargs_default, {'num_Traj' : 10000, 'chain_step' : extra_day, 'delay' : delay, 'neighbors' : [2,3,5,10,20,50], 
-    #                            'T' : T, 'allowselfanalogs' : True, 'input_set' : 'va', 'bulk_set' : 'tr'}  )
+    #    RunFolds_kwargs_default, {'num_Traj' : 10000, 'chain_step' : extra_day, 'delay' : delay, 'neighbors' : [1,5,10,20], 
+    #                            'T' : T, 'allowselfanalogs' : True, 'input_set' : 'tr', 'bulk_set' : 'tr'}  )
+    # the code below is used to set kwargs for usual validation of the committor
+    RunFolds_kwargs_default = ut.set_values_recursive(
+        RunFolds_kwargs_default, {'num_Traj' : 10000, 'chain_step' : extra_day, 'delay' : delay, 'neighbors' : [2,3,5,10,20,50], 
+                                'T' : T, 'allowselfanalogs' : True, 'input_set' : 'va', 'bulk_set' : 'tr'}  )
     chain_step = ut.extract_nested(RunFolds_kwargs_default, 'chain_step')  
     logger.info(RunFolds_kwargs_default)
     logger.info(f"{Fore.BLUE}") #  indicates we are inside the routine 
