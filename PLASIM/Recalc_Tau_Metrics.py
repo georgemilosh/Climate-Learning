@@ -269,6 +269,8 @@ for check_num1, checkpoint_name1 in enumerate(sys.argv[1:-2]):
 ax1.set_title('MCC')
 ax1.set_xlabel(r'$\tau$ (days)')
 ax2.set_xlabel(r'$\tau$ (days)')
+ax1.set_ylabel('MCC')
+ax2.set_ylabel('NLS')
 ax2.set_title('normalized cross-entropy skill')
 #ax3.set_xlabel(r'$\tau$ (days)')
 #ax3.set_title('Brier Score')

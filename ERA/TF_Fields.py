@@ -12,7 +12,8 @@ from tensorflow.keras.regularizers import l2
 from tensorflow.keras import datasets, layers, models 
 from tensorflow.keras import backend as K
 import matplotlib.pyplot as plt
-
+from sklearn.decomposition import PCA
+import pickle
 
 
 
@@ -24,6 +25,67 @@ def Custom_BCE(y_true,y_pred):
     p2 = ( 1 - y_true ) * tf.math.log( 1 -  tf.clip_by_value( y_pred , tf.keras.backend.epsilon() , 1 - tf.keras.backend.epsilon() ) + tf.keras.backend.epsilon() )
     return -tf.reduce_mean( p1 + p2 )
 
+#####################################################
+########### PCA Autoencoder  ################        
+##################################################### 
+
+class PCAencoder(PCA):
+    """_summary_
+
+    Args:
+        PCA (_type_): _description_
+    """
+    
+    def predict(self,*args,**kwargs):
+        _X = self.transform(args[0].reshape(args[0].shape[0],-1))
+        return _X, _X, _X # PCA expects the input of type fit(X) such that X is 2 dimensional and encoder generally has three outputs that we will set to the same number
+        
+    def summary(self):
+        print(f'We are computing PCA')
+
+class PCAer:
+    """_summary_
+        Essentially decorator class that keeps the inputs and outputs maximally similar to autoencoder so that we could using the same routines
+    """
+    def __init__(self, *args, k1=1, k2=1, from_logits=False, field_weights=None, 
+            lat_0=None, lat_1=None, lon_0=None, lon_1=None, coef_out=1, coef_in=0, coef_class=0, loss_type=None, class_type='stochastic', mask_area=None, Z_DIM=2, N_EPOCHS=2, print_summary=True, **kwargs):
+        self.k1 = 'pca'
+        self.k2 = 'pca'
+        self.Z_DIM = Z_DIM
+        self.encoder = PCAencoder(n_components=Z_DIM, svd_solver="randomized", whiten=True)
+        self.shape = None # is created when calling method fit()
+        self.bce = tf.keras.losses.BinaryCrossentropy(from_logits=from_logits)
+        self.field_weights = field_weights
+        self.lat_0 = lat_0 # parameters for weighting the reconstruction loss geographically
+        self.lat_1 = lat_1 # parameters for weighting the reconstruction loss geographically
+        self.lon_0 = lon_0 # parameters for weighting the reconstruction loss geographically
+        self.lon_1 = lon_1 
+        self.coef_out = coef_out # The full grid coefficient for reconstruction loss
+        self.coef_in = coef_in # The inner grid coefficient (lat_0:lat_1, lon_0:lon_1) for reconstruction loss
+        if loss_type is None: # Assuming Bernoulli variables
+            self.rec_loss_form = self.bce
+        else: # assuming Gaussian variables, for future compatibility write 'L2'
+            self.rec_loss_form = tf.losses.MeanSquaredError()
+    def fit(self,*args, **kwargs):
+        print(f'{args[0].shape = }')
+        result_fit = self.encoder.fit(args[0].reshape(args[0].shape[0],-1)) # PCA expects the input of type fit(X) such that X is 2 dimensional
+        self.shape = self.shape = args[0].shape[0]
+        print(f'{np.sum(self.encoder.explained_variance_ratio_) = }')
+        return result_fit 
+    def score(self,*args,**kwargs):
+        return self.encoder.score(args[0].reshape(args[0].shape[0],-1))
+    def save(self,folder):
+        with open(folder+'/encoder.pkl', 'wb') as file_pi:
+            pickle.dump(self.encoder, file_pi)
+    def decoder(self,X):
+        return self.encoder.inverse_transform(X).reshape(self.shape)
+    def compute_loss(self,data,factor=None):
+        if factor == None:
+            factor = 18*data.shape[1]*data.shape[2] # 18 because we don't have access to k1 value any more and for consistency we choose 18
+        reconstruction = self.decoder(data)
+        return compute_loss(data,self.rec_loss_form,self.coef_out,self.coef_in,self.field_weights,self.lat_0,self.lat_1,self.lon_0,self.lon_1,factor)
+    def summary(self):
+        print(f'PCA with {self.Z_DIM} components')
 
 #####################################################
 ########### Variational Autoencoder  ################        
@@ -67,6 +129,17 @@ class Sampling(tf.keras.layers.Layer):  # Normal distribution sampling for the e
         dim = tf.shape(z_mean)[1]
         epsilon = tf.keras.backend.random_normal(shape=(batch, dim))
         return z_mean + tf.exp(0.5 * z_log_var) * epsilon
+
+def compute_loss(data,reconstruction,rec_loss_form,coef_out,coef_in,field_weights,lat_0,lat_1,lon_0,lon_1,factor):
+    if field_weights is None: # I am forced to use this awkward way to apply field weights since I cannot use the new version of tensorflow where axis parameter can be given
+        reconstruction_loss = coef_out*factor*tf.reduce_mean([tf.reduce_mean(rec_loss_form(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis])) for i in range(reconstruction.shape[3])] ) 
+        if coef_in != 0: # This only matters if we want loss which depends on geographical areas
+            reconstruction_loss += coef_in*factor*tf.reduce_mean([tf.reduce_mean(rec_loss_form(data[...,lat_0:lat_1,lon_0:lon_1,i][..., np.newaxis], reconstruction[...,lat_0:lat_1,lon_0:lon_1,i][..., np.newaxis])) for i in range(reconstruction.shape[3])] )
+    else:  # The idea behind adding [..., np.newaxis] is to be able to use sample_weight in self.rec_loss_form on three dimensional input
+        reconstruction_loss = coef_out*factor*tf.reduce_mean([field_weights[i]*tf.reduce_mean(rec_loss_form(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis])) for i in range(reconstruction.shape[3])])
+        if coef_in != 0: # This only matters if we want loss which depends on geographical areas
+            reconstruction_loss +=  coef_in*factor*tf.reduce_mean([field_weights[i]*tf.reduce_mean(rec_loss_form(data[...,lat_0:lat_1,lon_0:lon_1,i][..., np.newaxis], reconstruction[...,lat_0:lat_1,lon_0:lon_1,i][..., np.newaxis])) for i in range(reconstruction.shape[3])])
+    return reconstruction_loss
     
 class VAE(tf.keras.Model): # Class of variational autoencoder
     '''
@@ -104,7 +177,7 @@ class VAE(tf.keras.Model): # Class of variational autoencoder
         coefficient of the classifier which compares the labels to the first component of the latent space
     '''
     def __init__(self, *args, k1=1, k2=1, from_logits=False, field_weights=None, 
-            lat_0=None, lat_1=None, lon_0=None, lon_1=None, coef_out=1, coef_in=0, coef_class=0, class_type='stochastic', mask_area=None, Z_DIM=2, N_EPOCHS=2, print_summary=True, **kwargs):
+            lat_0=None, lat_1=None, lon_0=None, lon_1=None, coef_out=1, coef_in=0, coef_class=0, loss_type=None, class_type='stochastic', mask_area=None, Z_DIM=2, N_EPOCHS=2, print_summary=True, **kwargs):
         super(VAE, self).__init__(**kwargs)
         self.encoder = args[0]
         self.decoder = args[1]
@@ -127,14 +200,20 @@ class VAE(tf.keras.Model): # Class of variational autoencoder
         self.reconstruction_loss_tracker = tf.keras.metrics.Mean(name="reconstruction_loss")
         self.kl_loss_tracker = tf.keras.metrics.Mean(name="kl_loss")
         self.class_loss_tracker = tf.keras.metrics.Mean(name="class_loss")
+        #self.val_total_loss_tracker = tf.keras.metrics.Mean(name="val_total_loss") # It is possible to define my own val metric, though tensorflow seems to take care of that
+        #self.val_reconstruction_loss_tracker = tf.keras.metrics.Mean(name="val_reconstruction_loss")
+        #self.val_kl_loss_tracker = tf.keras.metrics.Mean(name="val_kl_loss")
+        #self.val_class_loss_tracker = tf.keras.metrics.Mean(name="val_class_loss")
         self.from_logits = from_logits
         self.class_type = class_type  # Decided if mean or the stochastic term is used for zz to condition based on classification
         self.encoder_input_shape = self.encoder.input.shape   # i.e. TensorShape([None, 24, 128, 3])
         self.field_weights = field_weights # Choose which fields the reconstruction loss cares about
         #self.mask_weights = mask_weights # Choose which grid points the reconstruction loss cares about  # This idea didn't work due to some errors
         self.bce = tf.keras.losses.BinaryCrossentropy(from_logits=from_logits)
-        #self.bce = Custom_BCE # Trying how custom binary cross entropy compares
-        #print("VAE: self.from_logits = ", self.from_logits)
+        if loss_type is None: # Assuming Bernoulli variables
+            self.rec_loss_form = self.bce
+        else: # assuming Gaussian variables, for future compatibility write 'L2'
+            self.rec_loss_form = tf.losses.MeanSquaredError()
 
     @property
     def metrics(self):
@@ -142,10 +221,18 @@ class VAE(tf.keras.Model): # Class of variational autoencoder
             self.total_loss_tracker,
             self.reconstruction_loss_tracker,
             self.kl_loss_tracker,
-            self.class_loss_tracker
+            self.class_loss_tracker #, # It is possible to define my own val metric, though tensorflow seems to take care of that
+            #self.val_total_loss_tracker,
+            #self.val_reconstruction_loss_tracker,
+            #self.val_kl_loss_tracker,
+            #self.val_class_loss_tracker
         ]
     def call(self, inputs):
-        z_mean, _, z =  self.encoder(inputs)
+        _, _, z, zz = self.call_encoder_classifier(inputs)
+        return self.decoder(z), zz
+
+    def call_encoder_classifier(self,inputs):
+        z_mean, z_log_var, z =  self.encoder(inputs)
         if self.classifier is not None:
             if self.class_type == 'stochastic':
                 zz = self.classifier(z)
@@ -153,40 +240,34 @@ class VAE(tf.keras.Model): # Class of variational autoencoder
                 zz = self.classifier(z_mean)
         else:
             zz = z
-        return self.decoder(z), zz
+        return z_mean, z_log_var, z, zz
+    
+    def compute_losses(self, data):
+        if isinstance(data, tuple): # If model.fit receives both X and Y
+            print('both X and Y are provided')
+            label = data[1]
+            data = data[0]
+        else:
+            print('only X is provided')
+        z_mean, z_log_var, z, zz = self.call_encoder_classifier(data)
 
+        reconstruction = self.decoder(z)
+        factor = self.k1*self.encoder_input_shape[1]*self.encoder_input_shape[2] # this factor is designed for consistency with the previous defintion of the loss
+        # We should try tf.reduce_mean([0.1,0.1,0.4]*tf.cast([bce(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis],sample_weight=np.ones((2,4,3))) for i in range(3)], dtype=np.float32))
+        reconstruction_loss = compute_loss(data,reconstruction,self.rec_loss_form,self.coef_out,self.coef_in,self.field_weights,self.lat_0,self.lat_1,self.lon_0,self.lon_1,factor)
+        # there is probably a more efficient way to do the line above: we are adding the full region plus a sub region.
+        kl_loss = -0.5 * (1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var))
+        kl_loss = self.k2*tf.reduce_mean(tf.reduce_sum(kl_loss, axis=1))
+        if self.classifier is not None: # the idea is to have the first coordinate approximate the committor
+            class_loss = self.coef_class*self.bce(label,zz[:,0])
+        else: # without labels we cannot say what is the class error
+            class_loss = 0
+        total_loss = reconstruction_loss + kl_loss + class_loss
+        return total_loss, reconstruction_loss, kl_loss, class_loss
+    
     def train_step(self, data):
         with tf.GradientTape() as tape:
-            if isinstance(data, tuple): # If model.fit receives both X and Y
-                print('both X and Y are provided')
-                label = data[1]
-                data = data[0]
-            else:
-                print('only X is provided')
-            z_mean, z_log_var, z = self.encoder(data)
-            if self.classifier is not None:
-                if self.class_type == 'stochastic':
-                    zz = self.classifier(z)
-                else:
-                    zz = self.classifier(z_mean)
-            else:
-                zz = z
-
-            reconstruction = self.decoder(z)
-            factor = self.k1*self.encoder_input_shape[1]*self.encoder_input_shape[2] # this factor is designed for consistency with the previous defintion of the loss (see commented section below)
-            # We should try tf.reduce_mean([0.1,0.1,0.4]*tf.cast([bce(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis],sample_weight=np.ones((2,4,3))) for i in range(3)], dtype=np.float32))
-            if self.field_weights is None: # I am forced to use this awkward way of apply field weights since I cannot use the new version of tensorflow where axis parameter can be given
-                reconstruction_loss = self.coef_out*factor*tf.reduce_mean([tf.reduce_mean(self.bce(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis])) for i in range(reconstruction.shape[3])] ) + self.coef_in*factor*tf.reduce_mean([tf.reduce_mean(self.bce(data[...,self.lat_0:self.lat_1,self.lon_0:self.lon_1,i][..., np.newaxis], reconstruction[...,self.lat_0:self.lat_1,self.lon_0:self.lon_1,i][..., np.newaxis])) for i in range(reconstruction.shape[3])] )
-            else:  # The idea behind adding [..., np.newaxis] is to be able to use sample_weight in self.bce on three dimensional input
-                reconstruction_loss = self.coef_out*factor*tf.reduce_mean([self.field_weights[i]*tf.reduce_mean(self.bce(data[...,i][..., np.newaxis], reconstruction[...,i][..., np.newaxis])) for i in range(reconstruction.shape[3])]) + self.coef_in*factor*tf.reduce_mean([self.field_weights[i]*tf.reduce_mean(self.bce(data[...,self.lat_0:self.lat_1,self.lon_0:self.lon_1,i][..., np.newaxis], reconstruction[...,self.lat_0:self.lat_1,self.lon_0:self.lon_1,i][..., np.newaxis])) for i in range(reconstruction.shape[3])])
-            # there is probably a more efficient way to do the line above: we are adding the full region plus a sub region.
-            kl_loss = -0.5 * (1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var))
-            kl_loss = self.k2*tf.reduce_mean(tf.reduce_sum(kl_loss, axis=1))
-            if self.classifier is not None: # the idea is to have the first coordinate approximate the committor
-                class_loss = self.coef_class*self.bce(label,zz[:,0])
-            else: # without labels we cannot say what is the class error
-                class_loss = 0
-            total_loss = reconstruction_loss + kl_loss + class_loss
+            total_loss, reconstruction_loss, kl_loss, class_loss = self.compute_losses(data)
         grads = tape.gradient(total_loss, self.trainable_weights)
         self.optimizer.apply_gradients(zip(grads, self.trainable_weights))
         self.total_loss_tracker.update_state(total_loss)
@@ -194,6 +275,18 @@ class VAE(tf.keras.Model): # Class of variational autoencoder
         self.kl_loss_tracker.update_state(kl_loss)
         self.class_loss_tracker.update_state(class_loss)
         return {
+            "loss": self.total_loss_tracker.result(),
+            "reconstruction_loss": self.reconstruction_loss_tracker.result(),
+            "kl_loss": self.kl_loss_tracker.result(),
+            "class_loss" : self.class_loss_tracker.result()
+        }
+    def test_step(self, data):
+        val_total_loss, val_reconstruction_loss, val_kl_loss, val_class_loss = self.compute_losses(data)
+        self.total_loss_tracker.update_state(val_total_loss) # # It is possible to define my own val metric, though tensorflow seems to take care of that
+        self.reconstruction_loss_tracker.update_state(val_reconstruction_loss)
+        self.kl_loss_tracker.update_state(val_kl_loss)
+        self.class_loss_tracker.update_state(val_class_loss)
+        return { # tensorflow will automatically attach 'val' to the names here
             "loss": self.total_loss_tracker.result(),
             "reconstruction_loss": self.reconstruction_loss_tracker.result(),
             "kl_loss": self.kl_loss_tracker.result(),
