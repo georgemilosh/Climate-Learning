@@ -137,6 +137,7 @@ import numpy as np
 import pandas as pd
 import inspect
 import ast
+import pickle # in case we need to open labels from outside
 import logging
 from uncertainties import ufloat
 from functools import wraps
@@ -730,6 +731,16 @@ fields_infos = {
         'filename_suffix': 'mrso',
         'label': 'Soil Moisture',
     },
+    't2m_inter': { # temperature
+        'name': 'tas',
+        'filename_suffix': 'tas_inter',
+        'label': '3 day Temperature',
+    },
+    'mrso_inter': { # soil moisture
+        'name': 'mrso',
+        'filename_suffix': 'mrso_inter',
+        'label': '3 day Soil Moisture',
+    },
 }
 
 for h in [200,300,500,850]: # geopotential heights
@@ -738,11 +749,17 @@ for h in [200,300,500,850]: # geopotential heights
         'filename_suffix': f'zg{h}',
         'label': f'{h} mbar Geopotential',
     }
+for h in [200,300,500,850]: # geopotential heights
+    fields_infos[f'zg{h}_inter'] = {
+        'name': 'zg',
+        'filename_suffix': f'zg{h}_inter',
+        'label': f'3 day {h} mbar Geopotential',
+    }
 
 @ut.execution_time  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function
 def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', area='France', filter_area='France',
-              lon_start=-64, lon_end=64, lat_start=0, lat_end=22, mylocal=['/local/gmiloshe/PLASIM/', '/ClimateDynamics/MediumSpace/ClimateLearningFR/gmiloshe/PLASIM/'],fields=['t2m','zg500','mrso_filtered']):
+              lon_start=-64, lon_end=64, lat_start=0, lat_end=22, mylocal='/local/gmiloshe/PLASIM/',fields=['t2m','zg500','mrso_filtered'], preprefix='ANO_'):
     '''
     Loads the data into Plasim_Fields objects
 
@@ -774,6 +791,8 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
         list of field names to be loaded. Add '_filtered' to the name to have the values of the field outside `filter_area` set to zero.
         Add '_ghost' to the name of the field to load it but not use it for learning.
         This happens when you need to compute the labels on a field that won't be fed to the network.
+    preprefix: str, optional
+        The name of the input file starts with preprefix. In practice it is either null or 'ANO' which indicates precomputed anomalies
 
     Returns
     -------
@@ -804,10 +823,17 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
 
     if sampling == '3hrs': 
         prefix = ''
-        file_suffix = f'../Climate/Data_Plasim{dataset_suffix}/'
+        if dataset_suffix == '':
+            file_suffix = f'../Climate/Data_Plasim/'
+        else:
+            file_suffix = f'../Climate/Data_Plasim_{dataset_suffix}/'
     else:
-        prefix = f'ANO{dataset_suffix}_'
-        file_suffix = f'Data_Plasim{dataset_suffix}/'
+        if dataset_suffix == '':
+            prefix = f'{preprefix}{dataset_suffix}'
+            file_suffix = f'Data_Plasim{dataset_suffix}/'
+        else:
+            prefix = f'{preprefix}{dataset_suffix}_'
+            file_suffix = f'Data_Plasim_{dataset_suffix}/'
 
     # load the fields
     _fields = {}
@@ -851,7 +877,7 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
 
 @ut.execution_time
 @ut.indent_logger(logger)
-def assign_labels(field, time_start=30, time_end=120, T=14, percent=5, threshold=None, label_period_start=None, label_period_end=None):
+def assign_labels(field, time_start=30, time_end=120, T=14, percent=5, threshold=None, label_period_start=None, label_period_end=None, A_weights=None, return_threshold=False):
     '''
     Given a field of anomalies it computes the `T` days forward convolution of the integrated anomaly and assigns label 1 to anomalies above a given `threshold`.
     If `threshold` is not provided, then it is computed from `percent`, namely to identify the `percent` most extreme anomalies.
@@ -873,6 +899,10 @@ def assign_labels(field, time_start=30, time_end=120, T=14, percent=5, threshold
         if provided the first day of the period of interest for the label threshold determination
     label_period_end : int, optional
         if provided the first day after the end of the period of interst for the label threshold determination
+    A_weights: list, optional
+        if provided will influence how running mean is computed
+    return_threshold: bool, optional
+        if provided as True the output also involves threshold_new
 
     Returns:
     --------
@@ -880,23 +910,28 @@ def assign_labels(field, time_start=30, time_end=120, T=14, percent=5, threshold
         2D array with shape (years, days) and values 0 or 1
     '''
     day0 = field.field.time.dt.dayofyear[0]
+    logger.info(f"{A_weights = }")
     if threshold is None:
         if (label_period_start is not None) and (label_period_end is None):
-            A = field.compute_time_average(day_start=day0+label_period_start, day_end=day0+time_end, T=T)
+            A = field.compute_time_average(day_start=day0+label_period_start, day_end=day0+time_end, T=T, weights=A_weights)
             _, threshold_new = ef.is_over_threshold(field.to_numpy(A), threshold=None, percent=percent)
         elif (label_period_start is None) and (label_period_end is not None):
-            A = field.compute_time_average(day_start=day0+time_start, day_end=day0+label_period_end, T=T)
+            A = field.compute_time_average(day_start=day0+time_start, day_end=day0+label_period_end, T=T, weights=A_weights)
             _, threshold_new = ef.is_over_threshold(field.to_numpy(A), threshold=None, percent=percent)
         elif (label_period_start is not  None) and (label_period_end is not None):
-            A = field.compute_time_average(day_start=day0+label_period_start, day_end=day0+label_period_end, T=T)
+            A = field.compute_time_average(day_start=day0+label_period_start, day_end=day0+label_period_end, T=T, weights=A_weights)
             _, threshold_new = ef.is_over_threshold(field.to_numpy(A), threshold=None, percent=percent)
         else: # This is the default behavior that should be consistent with what Alessandro does at the moment
             threshold_new = None
     else:
         threshold_new = threshold.copy()
-    A = field.compute_time_average(day_start=day0+time_start, day_end=day0+time_end, T=T)
+    A = field.compute_time_average(day_start=day0+time_start, day_end=day0+time_end, T=T, weights=A_weights)
+    if hasattr(field, 'A'): 
+        field.A = A # This is a placeholder variable that can be used as a running mean save. Problem is that our routines do not output it and rewritting could cause issues with backward compatibility
     labels, threshold = ef.is_over_threshold(field.to_numpy(A), threshold=threshold_new, percent=percent)
     logger.info(f"{threshold_new = }")
+    if return_threshold:
+        return np.array(labels, dtype=int), threshold_new
     return np.array(labels, dtype=int)
 
 @ut.execution_time
@@ -930,7 +965,7 @@ def make_X(fields, time_start=30, time_end=120, T=14, tau=0):
 
 @ut.execution_time
 @ut.indent_logger(logger)
-def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0, percent=5, threshold=None, label_period_start=None, label_period_end=None):
+def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0, percent=5, threshold=None, label_period_start=None, label_period_end=None, A_weights=None, return_threshold=False):
     '''
     Combines `make_X` and `assign_labels`
 
@@ -977,7 +1012,11 @@ def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0,
             lf = fields[f'{label_field}_ghost']
         except KeyError:
             raise KeyError(f'Unable to find label field {label_field} among the provided fields {list(fields.keys())}')
-    Y = assign_labels(lf, time_start=time_start, time_end=time_end, T=T, percent=percent, threshold=threshold, label_period_start=label_period_start, label_period_end=label_period_end)
+    if return_threshold:
+        Y, threshold_new = assign_labels(lf, time_start=time_start, time_end=time_end, T=T, percent=percent, threshold=threshold, label_period_start=label_period_start, label_period_end=label_period_end, A_weights=A_weights, return_threshold=return_threshold)
+        return X,Y,threshold_new
+    else:
+        Y = assign_labels(lf, time_start=time_start, time_end=time_end, T=T, percent=percent, threshold=threshold, label_period_start=label_period_start, label_period_end=label_period_end, A_weights=A_weights)
     return X,Y
 
 @ut.execution_time
@@ -1512,6 +1551,7 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
 
     # save Y_va
     np.save(f'{folder}/Y_va.npy', Y_va)
+    np.save(f'{folder}/Y_tr.npy', Y_tr)
 
     with tf.device('CPU'): # convert data to tensors to fix a bugfix in tf > 2.6 that was otherwise throwing OutOfMemory errors
         logger.info('Converting training data to tensors')
@@ -1765,8 +1805,8 @@ def load_model(checkpoint, compile=False):
 
 @ut.execution_time
 @ut.indent_logger(logger)
-def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=None, optimal_checkpoint_kwargs=None, load_from='last', nfolds=10, val_folds=1, u=1, normalization_mode='pointwise',
-                     fullmetrics=True, training_epochs=40, training_epochs_tl=10, loss='sparse_categorical_crossentropy', lr=1e-4, prune_threshold=None, min_folds_before_pruning=None):
+def k_fold_cross_val(folder, X, Y, tau, create_model_kwargs=None, train_model_kwargs=None, optimal_checkpoint_kwargs=None, load_from='last', nfolds=10, val_folds=1, u=1, normalization_mode='pointwise',
+                     source_labels=None, alpha=None, nn=None, fullmetrics=True, training_epochs=40, training_epochs_tl=10, loss='sparse_categorical_crossentropy', lr=1e-4, prune_threshold=None, min_folds_before_pruning=None):
     '''
     Performs k fold cross validation on a model architecture.
 
@@ -1778,6 +1818,8 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
         all data (train + val)
     Y : np.ndarray
         all labels
+    tau : int
+        the current shift of X
     create_model_kwargs : dict
         dictionary with the parameters to create a model
     train_model_kwargs : dict
@@ -1805,6 +1847,16 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
         number of folds to be used for the validation set for every split
     u : float, optional
         undersampling factor (>=1). If = 1 no undersampling is performed
+    source_labels : string, optional
+        If not None it provides the training labels that can be accessed from `source_labels/committor_tr.pkl`. The motivation 
+        for adding thisfeature is to be able to use committor obtained from Stochastic Weather Generator, 
+        typically stored as 'committor' key of  committor_tr.pkl. The file is assumed to contain dictionary with [alpha][nn][fold] 
+        which is numpy array with dimensions: times*days x tau. 
+    alpha : float,  optional
+        If source_labels is not None we rely on this float to give us the parameter alpha in the dictionary committor_tr.pkl
+    nn : int, optional
+        If source_labels is not None we rely on this int to give us the parameter nn in the dictionary committor_tr.pkl
+    
     fullmetrics : bool, optional
         whether to use a set of evaluation metrics or just the loss
     training_epochs : int, optional
@@ -1843,10 +1895,23 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
     # get the folders from which to load the models
     load_from, info = get_transfer_learning_folders(load_from, folder, nfolds, optimal_checkpoint_kwargs=optimal_checkpoint_kwargs)
     # here load_from is either None (no transfer learning) or a list of strings
-
+    print(f'{tau = }')
     my_memory = []
     info['status'] = 'RUNNING'
-
+    if source_labels is not None:
+        with open(f'{source_labels}/committor_tr.pkl', "rb") as open_file:
+                committor_dictionary = pickle.load(open_file)
+        committor = committor_dictionary['committor'][alpha][nn]
+        chain_step = ut.extract_nested(committor_dictionary['RunFolds_kwargs_default'],'chain_step') # the step of the Markov chain
+        taus = chain_step*ut.extract_nested(committor_dictionary['RunFolds_kwargs_default'],'delay') # the set of taus available from the Stochastic Weather Generator
+        tau_index = list(taus).index(-tau) # where to find the appropriate tau in the list of taus (note that the sign convention between
+                                            # the Learn2_new.py and committor_analogue.py is not the same)
+    else:
+        committor = None
+        RunFolds_kwargs_default = None
+        extra_day = None
+        taus = None
+        tau_index = None
     # k fold cross validation
     scores = []
     for i in range(nfolds):
@@ -1860,6 +1925,11 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
         # split data
         X_tr, Y_tr, X_va, Y_va = k_fold_cross_val_split(i, X, Y, nfolds=nfolds, val_folds=val_folds)
 
+        if source_labels is not None: # In case we want to take the labels generated by Stochastic Weather Generator
+            
+            Y_tr = committor[i][:,tau_index]
+            logger.info(f'Sourcing external labels that have {Y_tr.shape = }')
+            
         # perform undersampling
         X_tr, Y_tr = undersample(X_tr, Y_tr, u=u)
 
@@ -2020,7 +2090,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
 @ut.execution_time
 @ut.indent_logger(logger)
 def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
-               do_premix=False, premix_seed=0, do_balance_folds=True, nfolds=10, year_permutation=None, flatten_time_axis=True):
+               do_premix=False, premix_seed=0, do_balance_folds=True, nfolds=10, year_permutation=None, flatten_time_axis=True, return_time_series=False):
     '''
     Performs all operations to extract from the fields X and Y ready to be fed to the neural network.
 
@@ -2043,6 +2113,8 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
         if provided overrides both premixing and fold balancing, useful for transfer learning as avoids contaminating test sets. By default None
     flatten_time_axis : bool, optional
         whether to flatten the time axis consisting of years and days
+    return_time_series : bool, optional
+        If True it appends to the return statement the time series integrated over the area
 
     Returns
     -------
@@ -2056,6 +2128,8 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
         latitude, with shape (lat,) (rolled if necessary)
     lon : np.ndarray
         longitude, with shape (lon,) (rolled if necessary)
+    time_series : np.ndarray
+        output which is conditional on the input return_time_series
     '''
     if make_XY_kwargs is None:
         make_XY_kwargs = {}
@@ -2067,9 +2141,43 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
     f = list(fields.values())[0] # take the first field
     lat = np.copy(f.field.lat.data) # 1d array
     lon = np.copy(f.field.lon.data) # 1d array
-
-    X,Y = make_XY(fields, **make_XY_kwargs)
-    
+    if ut.keys_exists(make_XY_kwargs, 'return_threshold'):
+        return_threshold = ut.extract_nested(make_XY_kwargs, 'return_threshold')
+    else:
+        return_threshold = False
+    print(f"{return_threshold = }")
+    if return_threshold:
+        X,Y, threshold = make_XY(fields, **make_XY_kwargs)
+    else:
+        X,Y = make_XY(fields, **make_XY_kwargs)
+    if ut.keys_exists(make_XY_kwargs, 'time_start'):
+        time_start = ut.extract_nested(make_XY_kwargs, 'time_start') # We need to extract these values to limit the season of Y which matters for balancing folds (see below)
+    else:
+        time_start = None
+    if ut.keys_exists(make_XY_kwargs, 'time_end'):
+        time_end = ut.extract_nested(make_XY_kwargs, 'time_end')
+    else:
+        time_end = None
+    if ut.keys_exists(make_XY_kwargs, 'time_start'):
+        label_period_start = ut.extract_nested(make_XY_kwargs, 'label_period_start')
+    else:
+        label_period_start = None
+    if ut.keys_exists(make_XY_kwargs, 'label_period_end'):
+        label_period_end = ut.extract_nested(make_XY_kwargs, 'label_period_end')
+    else:
+        label_period_end = None
+    if ut.keys_exists(make_XY_kwargs, 'tau'):
+        tau = ut.extract_nested(make_XY_kwargs, 'tau')
+    else:
+        tau = None
+    if ut.keys_exists(make_XY_kwargs, 'T'):
+        T = ut.extract_nested(make_XY_kwargs, 'T')
+    else:
+        T = None
+    if label_period_start is None:
+        label_period_start = time_start
+    if label_period_end is None:
+        label_period_end = time_end
     # move greenwich_meridian
     X = roll_X(X, **roll_X_kwargs)
     # roll also lat and lon
@@ -2106,7 +2214,13 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
 
         # balance folds:
         if do_balance_folds:
-            weights = np.sum(Y, axis=1) # get the number of heatwave events per year
+            # GM: now the weights will be computed solely based on the time of interest, so the balancing will only care about heatwaves inside this time
+            if (label_period_start and time_start and label_period_end and time_start and T) is None:
+                weights = np.sum(Y, axis=1) # get the number of heatwave events per year
+            else:
+                logger.info(f" {label_period_start = } ;{time_start = } ;{time_end = } ;{label_period_end = } ")
+                logger.info(f"{Y.shape = }, from {label_period_start-time_start} to {label_period_end-time_start-T+1} ")
+                weights = np.sum(Y[:,(label_period_start-time_start):(label_period_end-time_start-T+1)], axis=1) # get the number of heatwave events per year
             balance_permutation = balance_folds(weights,nfolds=nfolds, verbose=True)
             Y = Y[balance_permutation]
             if year_permutation is None:
@@ -2130,7 +2244,37 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
         Y = Y.reshape((Y.shape[0]*Y.shape[1]))
         logger.info(f'Flattened time: {X.shape = }, {Y.shape = }')
 
-    return X, Y, year_permutation, lat, lon
+    if return_time_series:
+        time_series = []
+        # logger.info(f"{fields.values() = }")
+        for field in fields.values():
+            #logger.info(f"{field.area_integral =}")=
+            temp = (field.area_integral.to_numpy().reshape(field.years,-1))[year_permutation]
+            # flatten the time axis dropping the organizatin in years
+            if flatten_time_axis:
+                if (time_start and time_start and T and tau) is None:
+                    time_series.append(temp.flatten()) 
+                else:
+                    time_series.append((temp[:,time_start+tau:time_end+tau-T+1]).flatten()) 
+            else:
+                if (time_start and time_start and T and tau) is None:
+                    time_series.append(temp)
+                else:
+                    time_series.append((temp[:,time_start+tau:time_end+tau-T+1])) 
+        
+        logger.info(f"{time_series = }")
+        time_series = np.array(time_series).T
+        logger.info(f"{time_series.shape = }")
+        if return_threshold:
+            return X, Y, year_permutation, lat, lon, time_series, threshold
+        else:
+            return X, Y, year_permutation, lat, lon, time_series
+    
+    if return_threshold:
+        return X, Y, year_permutation, lat, lon,  threshold
+    else:
+        return X, Y, year_permutation, lat, lon
+
 
 @ut.execution_time
 @ut.indent_logger(logger)
@@ -2561,8 +2705,7 @@ class Trainer():
             self.load_data(**load_data_kwargs) # compute self.fields
 
             self.prepare_XY(self.fields, **prepare_XY_kwargs) # compute self.X, self.Y, self.year_permutation, self.lat, self.lon
-
-            # save year permutation
+            tau = ut.extract_nested(prepare_XY_kwargs, 'tau')
             if self.year_permutation is not None:
                 np.save(f'{folder}/year_permutation.npy',self.year_permutation)
 
@@ -2587,7 +2730,7 @@ class Trainer():
             
 
             # do kfold
-            score, info = k_fold_cross_val(folder, self.X, self.Y, **k_fold_cross_val_kwargs)
+            score, info = k_fold_cross_val(folder, self.X, self.Y, tau, **k_fold_cross_val_kwargs)
 
             # make the config file read-only after the first successful run
             if os.access(self.config_file, os.W_OK): # the file is writeable
