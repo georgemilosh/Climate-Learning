@@ -308,7 +308,7 @@ def func1(x, a, b, c, d):
 def func2(x, a, b, c, d):
      return a * np.exp(b * x)/ b + c * np.exp(d * x)/ d
     
-def autocorrelation(myseries, maxlag):
+def autocorrelation(myseries, maxlag=100):
     # this pads each year with padsize sample time of 0s so that when the array is permuted to be multiplied by itself we don't end up using the previous part of the year
     series_pad = np.pad(myseries,((0, 0), (0, maxlag)), 'constant')  
     autocorr = []
@@ -1487,6 +1487,8 @@ class Plasim_Field:
 
         self.mask_area = None
         self.mask = None
+        self.A = None # This is a placeholder variable that can be used as a running mean save. It might be unnecessary given that there is an existing attribute:  _area_integral
+
 
         logger.info(f'Opening field {self.name}')
 
@@ -1648,7 +1650,7 @@ class Plasim_Field:
 
     @ut.execution_time
     @ut.indent_logger(logger)
-    def compute_time_average(self, day_start, day_end, T):
+    def compute_time_average(self, day_start, day_end, T, weights=None):
         '''
         Computes the forward running mean of the self._area_intgral attribute
 
@@ -1667,7 +1669,7 @@ class Plasim_Field:
             time average
         '''
         cut_area_integral = self.area_integral.sel(time=self.area_integral.time.dt.dayofyear.isin(np.arange(day_start, day_end)))
-        self._time_average = running_mean(cut_area_integral, T, mode='forward') # cache the time average
+        self._time_average = running_mean(cut_area_integral, T, mode='forward',weights=weights) # cache the time average
         return self._time_average
 
         
