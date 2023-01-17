@@ -692,7 +692,15 @@ def full_extent(ax, padx=0.0, pady=[]):
     # For text objects, we need to draw the figure first, otherwise the extents
     # are undefined.
     ax.figure.canvas.draw()
-    items = ax.get_xticklabels() + ax.get_yticklabels() 
+    items = []
+    if ax.get_xscale() == 'log':
+        items += ax.get_xticklabels()[2:-2] # weird logscale behavior
+    else:
+        items += ax.get_xticklabels()[1:-1]
+    if ax.get_yscale() == 'log':
+        items += ax.get_yticklabels()[-2:2]
+    else:
+        items += ax.get_yticklabels()[-1:1]
     items += [ax, ax.title, ax.xaxis.label, ax.yaxis.label]
 #    items += [ax, ax.title]
     bbox = Bbox.union([item.get_window_extent() for item in items])
@@ -700,11 +708,13 @@ def full_extent(ax, padx=0.0, pady=[]):
     return bbox.expanded(1.0 + padx, 1.0 + pady)
 
     
-def return_time_fix(D_sorted, modified='no'): # In this function we fix the length
+def return_time_fix(D_sorted, modified='no', specific_returns=[1, 4, 10, 40, 100, 1000]): # In this function we fix the length
     '''
     Computes the return time from    
     D_sorted: sorted dictionary with layout {anomaly: [day, year]}
-    
+    specific_returns: list
+        list of return times that will populate x_rt and y_rt    
+        
     If modified == 'no':
         the return time `tau` for anomaly `a` is
         
@@ -833,11 +843,11 @@ def a_decrese(in_A_max, in_Ti, in_year_a):
     D = {}
     if len(in_A_max) == len(in_Ti) and len(in_A_max) == len(in_year_a):
         for i in range(len(in_A_max)):
-            D[in_A_max[i]] = [in_Ti[i], in_year_a[i]]
-    else:
+            D[i] = [in_Ti[i], in_year_a[i],in_A_max[i]] 
+    else: # In this version of the code we avoid shorter sequences when there are dublicated of int_A_max
         logger.warning(f'size mismatch: {len(in_A_max) = },{len(in_Ti) = },{len(in_year_a) = }')
-    D_sorted = sorted(D.items(), key=lambda kv: kv[0], reverse=True)
-    return D_sorted
+    D_sorted = sorted(D.items(), key=lambda kv: kv[1][2], reverse=True)
+    return [(D_sorted_i[1][2],D_sorted_i[1][:2]) for D_sorted_i in D_sorted]
 
 
 def draw_map(m, scale=0.2, background='stock_img', **kwargs):
@@ -1356,7 +1366,25 @@ def masked_average(xa:xr.DataArray,
     _xa = xa*_weights
     return _xa.sum(dim=dim)
 
-def running_mean(xa:xr.DataArray, T, mode='forward', separate_years=True):
+def weight_average(*a,**kwargs):
+    '''
+        Perform weighted average
+    '''
+    kwargs['axis'] = kwargs['axis'][0] # Otherwise what is being fed into this function could be something of the sort (dim,), which is in conflict with weights
+    return np.average(*a,**kwargs)
+
+def rolling_reduce_weighted(my_a:xr.DataArray, T, weights=None):
+    '''
+        Perform weighted average
+    '''
+    #print(f"{my_a = }")
+    rolling = my_a.rolling(time=T, center=False)
+    #print(f"{rolling = }")
+    rolling.construct("window_dim")
+    #print(f"{rolling = }")
+    return rolling.reduce(weight_average, weights=weights).dropna('time')*np.sum(weights)/len(weights)
+
+def running_mean(xa:xr.DataArray, T, mode='forward', separate_years=True, weights=None):
     '''
     Computes the running mean over the time axis of an array of data
 
@@ -1387,19 +1415,32 @@ def running_mean(xa:xr.DataArray, T, mode='forward', separate_years=True):
     '''
     # define the averaging function
     if mode == 'backward':
-        t_avg = lambda a: a.rolling(time=T, center=False).mean().dropna('time')
+        if weights is not None:
+            raise ValueError(f"Currently weighted running mean only suppported with mode = 'forward'")
+        else:
+            t_avg = lambda a: a.rolling(time=T, center=False).mean().dropna('time')
         #                                                        ^ this removes nan values
     elif mode == 'forward':
-        t_avg = lambda a: a[::-1].rolling(time=T, center=False).mean().dropna('time')[::-1]
+        if weights is None:
+            t_avg = lambda a: a[::-1].rolling(time=T, center=False).mean().dropna('time')[::-1]
         # we work on the reversed array so we have the forward T day rolling mean, since xarray by default computes the backward rolling mean
     elif mode == 'center':
-        t_avg = lambda a: a.rolling(time=T, center=True).mean().dropna('time')
+        if weights is not None:
+            raise ValueError(f"Currently weighted running mean only suppported with mode = 'forward'")
+        else:
+            t_avg = lambda a: a.rolling(time=T, center=True).mean().dropna('time')
     else:
         raise ValueError(f"Unrecognized {mode = }. Possible options are 'forward', 'backward' or 'center'")
 
     if separate_years:
-        return xa.groupby('time.year').apply(t_avg) # apply to each year individually
-    return t_avg(xa)
+        if weights is not None:
+            return xa.groupby('time.year').apply(rolling_reduce_weighted, T=T, weights=weights)
+        else:
+            return xa.groupby('time.year').apply(t_avg) # apply to each year individually
+    if weights is not None:
+        return rolling_reduce_weighted(xa, T=T, weights=weights)
+    else:
+        return t_avg(xa)
 
 def is_over_threshold(a:np.ndarray, threshold=None, percent=None):
     '''
