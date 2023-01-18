@@ -34,11 +34,14 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import confusion_matrix
 from skimage.transform import resize
 
-path_to_ERA = str(Path(__file__).resolve().parent)
-if not path_to_ERA in sys.path:
-    sys.path.insert(1, path_to_ERA)
+path_to_parent = str(Path(__file__).resolve().parent.parent)
+if not path_to_parent in sys.path:
+    sys.path.insert(1, path_to_parent)
 
-from utilities import execution_time, indent_logger
+try:
+    import general_purpose.utilities as ut
+except ImportError:
+    import ERA.utilities as ut
 
 logger = logging.getLogger(__name__)
 logger.level = logging.INFO
@@ -65,7 +68,10 @@ def import_basemap():
 def import_cartopy():
     try:
         global cplt
-        import cartopy_plots as cplt
+        try:
+            import general_purpose.cartopy_plots as cplt
+        except ImportError:
+            import cartopy_plots as cplt
         logger.info('Successfully imported cartopy')
         return True
     except (ImportError, FileNotFoundError):
@@ -100,53 +106,13 @@ def significative_data(Data, Data_t_value=None, T_value=None, both=False, defaul
     Data that fail the filter conditions are set to `default_value`.
     If `Data_t_value` or `T_value` are None, all of `Data` is considered significant
     '''
-    if Data is None:
-        if both:
-            return None, 0, 0
-        else:
-            return None, 0
-    
-    data = np.array(Data)
-    
-    if Data_t_value is None or T_value is None:
-        warnings.warn('Assuming all data are significant')
-        if both:
-            return data, np.ones_like(data)*default_value, np.product(data.shape)
-        else:
-            return data, np.product(data.shape)
-        
-    data_t_value = np.array(Data_t_value)
-    if data.shape != data_t_value.shape:
-        raise ValueError('Shape mismatch')
-    Out_taken = data.copy()
-    
-#     # old function definition   
-#     N_points_taken = 0
-#     for la in range(len(Data)):
-#         for lo in range(len(Data[la])):
-#             if abs(Data_t_value[la, lo]) >= T_value:
-#                 Out_taken[la, lo] = Data[la, lo]
-#                 N_points_taken += 1
-#             else:
-#                 Out_not_taken[la, lo] = Data[la, lo]
-    
-    # considerable speed up wrt the old nested for loops
-    mask = data_t_value >= T_value
-    N_points_taken = np.sum(mask)
-    Out_taken[np.logical_not(mask)] = default_value
-    
-    if both:
-        Out_not_taken = data.copy()
-        Out_not_taken[mask] = default_value
-        return Out_taken, Out_not_taken, N_points_taken
-    else:
-        return Out_taken, N_points_taken
+    return ut.significative_data(Data, Data_t_value, T_value, both=both, default_value=default_value)
     
 def significative_data2(Data, Data_t_value, T_value, both): # CHANGE THIS FOR TEMPERATURE SO THAT THE OLD ROUTINE IS USED
     '''
     Does the same of significative_data, but with `default_value` to np.NaN
     '''
-    return significative_data(Data, Data_t_value, T_value, both, default_value=np.NaN)
+    return ut.significative_data(Data, Data_t_value, T_value, both=both, default_value=np.NaN)
     # OLD VERSION
     
     # Out_taken = np.empty((np.shape(Data)))
@@ -748,8 +714,8 @@ def return_time_fix(D_sorted, modified='no', specific_returns=[1, 4, 10, 40, 100
     Computes the return time from    
     D_sorted: sorted dictionary with layout {anomaly: [day, year]}
     specific_returns: list
-        list of return times that will populate x_rt and y_rt
-    
+        list of return times that will populate x_rt and y_rt    
+        
     If modified == 'no':
         the return time `tau` for anomaly `a` is
         
@@ -1297,7 +1263,7 @@ class Field:
         anomaly_series = self.ano_mask.copy()
         return series, anomaly_series
 
-@execution_time
+@ut.execution_time
 def monotonize_years(da:xr.DataArray):
     '''
     Transforms the time coordinate such that the years are consecutive and increasing monotonically and starting from 0.
@@ -1334,7 +1300,7 @@ def monotonize_years(da:xr.DataArray):
     new_ys = change(da.time, new_ys)
     return da.assign_coords({'time': new_ys}), new_y + 1
 
-@execution_time
+@ut.execution_time
 def monotonize_longitude(da:xr.DataArray):
     '''
     Makes the leongitude of an array monotonic. This is useful when working with rolled data.
@@ -1522,11 +1488,12 @@ class Plasim_Field:
 
         self.mask_area = None
         self.mask = None
-        self.A = None # This is a placeholder variable that can be used as a running mean save. Problem is that our routines do not output it and rewritting could cause issues with backward compatibility
+        self.A = None # This is a placeholder variable that can be used as a running mean save. It might be unnecessary given that there is an existing attribute:  _area_integral
+
 
         logger.info(f'Opening field {self.name}')
 
-        self.field = xr.open_dataset(Path(self.mylocal) / self.filename)[name]
+        self.field = xr.open_dataset(ut.first_valid_path(self.mylocal,self.filename))[name]
 
         self.field = discard_all_dimensions_but(self.field, dims_to_keep=['time', 'lon', 'lat'])
         
@@ -1542,8 +1509,9 @@ class Plasim_Field:
         self.land_area_weights.data /= np.sum(self.land_area_weights.data)
 
         self._area_integral = None
+        self._time_average = None
 
-    @execution_time
+    @ut.execution_time
     def select_years(self, year_list=None):
         '''
         Select a subset of years
@@ -1557,7 +1525,7 @@ class Plasim_Field:
             self.field = self.field.sel(time=self.field.time.dt.year.isin(year_list))
             self.years = len(year_list)
 
-    @execution_time
+    @ut.execution_time
     def select_lonlat(self, lat_start=None, lat_end=None, lon_start=None, lon_end=None):
         '''
         Select a region in space.
@@ -1643,7 +1611,7 @@ class Plasim_Field:
         else:
             self.field.data *= np.logical_not(self.mask.data)
     
-    @execution_time
+    @ut.execution_time
     def compute_area_integral(self, weights='land_area'):
         '''
         Computes the area integral over the region set by the mask and stores it in self._are_integral
@@ -1681,8 +1649,8 @@ class Plasim_Field:
             self.compute_area_integral()
         return self._area_integral
 
-    @execution_time
-    @indent_logger(logger)
+    @ut.execution_time
+    @ut.indent_logger(logger)
     def compute_time_average(self, day_start, day_end, T, weights=None):
         '''
         Computes the forward running mean of the self._area_intgral attribute
@@ -1702,7 +1670,8 @@ class Plasim_Field:
             time average
         '''
         cut_area_integral = self.area_integral.sel(time=self.area_integral.time.dt.dayofyear.isin(np.arange(day_start, day_end)))
-        return running_mean(cut_area_integral, T, mode='forward',weights=weights)
+        self._time_average = running_mean(cut_area_integral, T, mode='forward',weights=weights) # cache the time average
+        return self._time_average
 
         
 
@@ -1728,8 +1697,8 @@ class Plasim_Field_Old:
             self.np_precision = np.float32
             self.np_precision_complex = np.complex64
         
-    @execution_time
-    @indent_logger(logger)
+    @ut.execution_time
+    @ut.indent_logger(logger)
     def load_field(self, folder, year_list=None):
         '''
         Load the file from the database stored in `folder`
@@ -1826,7 +1795,7 @@ class Plasim_Field_Old:
             raise NotImplementedError('if you specify a day, you must also specify a year')
         return Greenwich(self.var[year,day])
     
-    @execution_time
+    @ut.execution_time
     def Set_area_integral(self, input_area, input_mask, containing_folder='Postproc', delta=1, force_computation=False):
         '''
         Evaluate area integral and (possibly if delta is not 1) coarse grain it in time
@@ -2168,24 +2137,24 @@ def discard_all_dimensions_but(xa:xr.DataArray, dims_to_keep:list):
 def get_lsm(mylocal,Model):
     if Model != 'Plasim':
         raise NotImplementedError()
-    lsm = xr.open_dataset(mylocal+'Data_Plasim_inter/CONTROL_lsmask.nc').lsm
+    lsm = xr.open_dataset(ut.first_valid_path(mylocal, 'Data_Plasim_inter/CONTROL_lsmask.nc')).lsm
     lsm = discard_all_dimensions_but(lsm, ['lon', 'lat'])
     return lsm
 
 def get_cell_area(mylocal,Model):
     if Model != 'Plasim':
         raise NotImplementedError()
-    cell_area = xr.open_dataset(mylocal+'Data_Plasim_inter/CONTROL_gparea.nc').cell_area
+    cell_area = xr.open_dataset(ut.first_valid_path(mylocal, 'Data_Plasim_inter/CONTROL_gparea.nc')).cell_area
     cell_area = discard_all_dimensions_but(cell_area, ['lon', 'lat'])
     return cell_area
 
 def ExtractAreaWithMask(mylocal,Model,area): # extract land sea mask and multiply it by cell area
     # Load the land area mask
-    dataset = Dataset(mylocal+'Data_Plasim_inter/CONTROL_lsmask.nc')
+    dataset = Dataset(ut.first_valid_path(mylocal,'Data_Plasim_inter/CONTROL_lsmask.nc'))
     lsm = dataset.variables['lsm'][0]
     dataset.close()
     # Load the areas of each cell
-    dataset = Dataset(mylocal+'Data_Plasim_inter/CONTROL_gparea.nc')
+    dataset = Dataset(ut.first_valid_path(mylocal,'Data_Plasim_inter/CONTROL_gparea.nc'))
     cell_area = dataset.variables["cell_area"][:]
     dataset.close()
     # mask_ocean = np.array(lsm) # unused

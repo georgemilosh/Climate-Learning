@@ -108,9 +108,12 @@ level   name                events
 42                          Folder name of the run and progressive number among the scheduled runs
                             Single run completes
 
+44                          Non default arguments of the run
+
 45                          Added and removed telegram logger
                             Tell number of scheduled runs
                             Skipping already performed run
+                            Average score of the run
 
 49                          All runs completed
 
@@ -126,7 +129,6 @@ from pathlib import Path
 from stat import S_IREAD, S_IROTH, S_IRGRP
 import sys
 import traceback
-import warnings
 import time
 import shutil
 import gc
@@ -135,10 +137,11 @@ import numpy as np
 import pandas as pd
 import inspect
 import ast
-import pickle
+import pickle # in case we need to open labels from outside
 import logging
 from uncertainties import ufloat
 from functools import wraps
+import socket
 
 if __name__ == '__main__':
     logger = logging.getLogger()
@@ -146,6 +149,8 @@ if __name__ == '__main__':
 else:
     logger = logging.getLogger(__name__)
 logger.level = logging.INFO
+
+HOSTNAME = socket.gethostname()
 
 
 ## machine learning
@@ -176,7 +181,10 @@ if not path_to_ERA in sys.path:
 
 import ERA.ERA_Fields_New as ef # general routines
 import ERA.TF_Fields as tff # tensorflow routines
-import ERA.utilities as ut
+try:
+    import general_purpose.utilities as ut
+except ImportError:
+    import ERA.utilities as ut
 
 # separators to create the run name from the run arguments
 arg_sep = '--' # separator between arguments
@@ -265,7 +273,7 @@ def build_config_dict(functions):
         d[f'{f_name}_kwargs'] = get_default_params(f, recursive=True)
     return d
 
-def check_config_dict(config_dict):
+def check_config_dict(config_dict, correct_mistakes=True):
     '''
     Checks that the confic dictionary is consistent
 
@@ -281,6 +289,7 @@ def check_config_dict(config_dict):
     '''
     try:
         config_dict_flat = ut.collapse_dict(config_dict) # in itself this checks for multiple values for the same key
+
         found = False
         label_field = config_dict_flat['label_field']
         for field_name in config_dict_flat['fields']:
@@ -288,9 +297,18 @@ def check_config_dict(config_dict):
                 found = True
                 break
         if not found:
-            logger.warning(f"field {label_field} is not a loaded field: adding ghost field")
-            config_dict_flat['fields'].append(f'{label_field}_ghost')
-            ut.set_values_recursive(config_dict, {'fields': config_dict_flat['fields']}, inplace=True)
+            if correct_mistakes:
+                logger.warning(f"field {label_field} is not a loaded field: adding ghost field")
+                config_dict_flat['fields'].append(f'{label_field}_ghost')
+                ut.set_values_recursive(config_dict, {'fields': config_dict_flat['fields']}, inplace=True)
+            else:
+                raise ValueError(f"{label_field = } is not one of the loaded fields: please add a ghost field as {label_field+'_ghost'}")
+
+        if 'enable_early_stopping' in config_dict_flat and config_dict_flat['enable_early_stopping']:
+            if config_dict_flat['patience'] == 0:
+                logger.warning('Setting `patience` to 0 disables early stopping')
+            elif config_dict_flat['collective']:
+                raise ValueError('Using collective checkpoint together with early stopping is highly deprecated')
     except Exception as e:
         raise KeyError('Invalid config dictionary') from e
     return config_dict_flat
@@ -686,12 +704,11 @@ def move_to_folder(folder, additional_files=None):
         for file in additional_files:
             shutil.copy(file, folder)
 
-    # copy useful files from ../ERA/ to folder/ERA/
-    path_to_here = path_to_here.parent / 'ERA'
-    shutil.copy(path_to_here / 'cartopy_plots.py', ERA_folder)
-    shutil.copy(path_to_here / 'ERA_Fields_New.py', ERA_folder)
-    shutil.copy(path_to_here / 'TF_Fields.py', ERA_folder)
-    shutil.copy(path_to_here / 'utilities.py', ERA_folder)
+    # copy useful files from other directories to 'folder/ERA/'
+    shutil.copy(path_to_here.parent / 'ERA/ERA_Fields_New.py', ERA_folder)
+    shutil.copy(path_to_here.parent / 'ERA/TF_Fields.py', ERA_folder)
+    shutil.copy(path_to_here.parent / 'general_purpose/cartopy_plots.py', ERA_folder)
+    shutil.copy(path_to_here.parent / 'general_purpose/utilities.py', ERA_folder)
 
     print(f'Now you can go to {folder} and run the learning from there:\n')
     print(f'\n\ncd \"{folder}\"\n')
@@ -767,8 +784,9 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
         longitude and latitude extremes of the data expressed in indices (model specific)
         If `lon_start` >= `lon_end` the selection will start from `lon_start`, go over the end of the array and then continue from the beginning up to `lon_end`.
         Providing `lon_start` = `lon_end` will result in the longitude being rolled by `lon_start` steps
-    mylocal : str or Path, optional
-        path the the data storage. For speed it is better if it is a local path.
+    mylocal : list[str or Path], optional
+        paths to the data storage. The program will look for each data file in the first path, if not found it will look in the next one and so on.
+        For speed it is better if they are local paths.
     fields : list, optional
         list of field names to be loaded. Add '_filtered' to the name to have the values of the field outside `filter_area` set to zero.
         Add '_ghost' to the name of the field to load it but not use it for learning.
@@ -781,9 +799,9 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
     _fields: dict
         dictionary of ERA_Fields.Plasim_Field objects
     '''
-
+    
     if area != filter_area:
-        warnings.warn(f'Fields will be filtered on a different area ({filter_area}) than the region of interest ({area}). If {area} is not a subset of {filter_area} the area integral will be different with and without filtering.')
+        logger.warn(f'Fields will be filtered on a different area ({filter_area}) than the region of interest ({area}). If {area} is not a subset of {filter_area} the area integral will be different with and without filtering.')
 
     if dataset_years == 1000:
         dataset_suffix = ''
@@ -999,7 +1017,7 @@ def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0,
         return X,Y,threshold_new
     else:
         Y = assign_labels(lf, time_start=time_start, time_end=time_end, T=T, percent=percent, threshold=threshold, label_period_start=label_period_start, label_period_end=label_period_end, A_weights=A_weights)
-        return X,Y
+    return X,Y
 
 @ut.execution_time
 @ut.indent_logger(logger)
@@ -1031,7 +1049,7 @@ def roll_X(X, roll_axis='lon', roll_steps=0):
     '''
     if roll_steps == 0:
         return X
-    warnings.warn('Roll the data when loading it using the arguments `lon_start`, `lon_end` of function `load_data`', category=DeprecationWarning)
+    logger.warn('DeprecationWarning: Roll the data when loading it using the arguments `lon_start`, `lon_end` of function `load_data`')
     if isinstance(roll_axis, str):
         if roll_axis.startswith('y'):
             roll_axis = 0
@@ -1052,23 +1070,26 @@ def roll_X(X, roll_axis='lon', roll_steps=0):
 
 def normalize_X(X, mode='pointwise'):
     '''
-    Performs data normalization
+    Performs data normalization x_norm = (x - x_mean)/x_std
 
     Parameters
     ----------
-    X : np.ndarray of shape (N, ...)
+    X : np.ndarray of shape (N, lat, lon, fields)
         data
-    mode : 'pointwise', optional
-        how to perform the normalization. For now the only possible option is 'pointwise', which means every grid point is treated independently, by default 'pointwise'
+    mode : str, optional
+        how to perform the normalization, possibilities are:
+            'pointwise': every gridpoint of every field is treated independenly (default)
+            'global': mean and std are computed globally on each field
+            'mean': mean and std are computed pointwise and then averaged over each field
 
     Returns
     -------
     X_n : np.ndarray of same shape as X
         normalized data
-    X_mean : np.ndarray of shape (...)
-        mean of X along the first axis
-    X_std : np.ndarray of shape (...)
-        std of X along the first axis
+    X_mean : np.ndarray 
+        mean of X along the axes given by the normalization mode
+    X_std : np.ndarray
+        std of X along the axes given by the normalization mode
 
     Raises
     ------
@@ -1079,15 +1100,32 @@ def normalize_X(X, mode='pointwise'):
         # renormalize data with pointwise mean and std
         X_mean = np.mean(X, axis=0)
         X_std = np.std(X, axis=0)
-        logger.info(f'{np.sum(X_std < 1e-5)/np.product(X_std.shape)*100 :.4f}\% of the data have std below 1e-5')
-        X_std[X_std==0] = 1 # If there is no variance we shouldn't divide by zero ### hmmm: this may create discontinuities
-                            # This is necessary because we will be masking (filtering) certain parts of the map 
-                            #     for certain fields, e.g. mrso, setting them to zero. Also there are some fields that don't
-                            #     vary over the ocean. I've tried normalizing by field, rather than by grid point, in which case
-                            #     the problem X_std==0 does not arise, but then the results came up slightly worse. 
-
+    elif mode == 'global':
+        # mean over all axes except the last one (field axis). This does not work very well with filtered fields
+        axis = tuple(range(len(X.shape) - 1))
+        X_mean = np.mean(X, axis=axis)
+        X_std = np.std(X, axis=axis)
+    elif mode == 'mean':
+        X_mean = np.mean(X, axis=0)
+        X_std = np.std(X, axis=0)
+        nfields = X.shape[-1]
+        for i in range(nfields):
+            mask = X_std[...,i] != 0 # work only on the points that display some fluctuations
+            non_zero_non_fluctuating_points = np.sum(X_mean[...,i][~mask] != 0) # number of gridpoints that have a non zero value that is always the same
+            if non_zero_non_fluctuating_points:
+                logger.warning(f'Field {i} has {non_zero_non_fluctuating_points} non zero non fluctuating gridpoints')
+            X_mean[...,i][mask] = np.mean(X_mean[...,i][mask])
+            X_std[...,i][mask] = np.mean(X_std[...,i][mask])
     else:
         raise NotImplementedError(f'Unknown normalization {mode = }')
+
+    logger.info(f'{np.sum((X_std < 1e-4)*(X_std > 0))/np.product(X_std.shape)*100 :.4f}\% of the data have non zero std below 1e-4')
+    X_std[X_std==0] = 1 # If there is no variance we shouldn't divide by zero ### hmmm: this may create discontinuities
+                        # This is necessary because we will be masking (filtering) certain parts of the map 
+                        #     for certain fields, e.g. mrso, setting them to zero. Also there are some fields that don't
+                        #     vary over the ocean. I've tried normalizing by field, rather than by grid point, in which case
+                        #     the problem X_std==0 does not arise, but then the results came up slightly worse.
+    
     return  (X - X_mean)/X_std, X_mean, X_std
 
 ####### MIXING ########    
@@ -1470,7 +1508,6 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     float
         minimum value of `return_metric` during training
     '''
-    # GM: It seem "u" is not used in train_model, obsolete?
     ### preliminary operations
     ##########################
     if early_stopping_kwargs is None:
@@ -1512,6 +1549,19 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
 
     model.save_weights(ckpt_name.format(epoch=0)) # save model before training
 
+    # save Y_va
+    np.save(f'{folder}/Y_va.npy', Y_va)
+    np.save(f'{folder}/Y_tr.npy', Y_tr)
+
+    with tf.device('CPU'): # convert data to tensors to fix a bugfix in tf > 2.6 that was otherwise throwing OutOfMemory errors
+        logger.info('Converting training data to tensors')
+        X_tr = tf.convert_to_tensor(X_tr)
+        Y_tr = tf.convert_to_tensor(Y_tr)
+
+        logger.info('Converting validation data to tensors')
+        X_va = tf.convert_to_tensor(X_va)
+        Y_va = tf.convert_to_tensor(Y_va)
+
     # log the amount af data that is entering the network
     logger.info(f'Training the network on {len(Y_tr)} datapoint and validating on {len(Y_va)}')
 
@@ -1519,9 +1569,7 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     my_history=model.fit(X_tr, Y_tr, batch_size=batch_size, validation_data=(X_va,Y_va), shuffle=True,
                          callbacks=callbacks, epochs=num_epochs, verbose=2, class_weight=None)
 
-    ## save Y_va and Y_pred_unbiased
-    np.save(f'{folder}/Y_tr.npy', Y_tr)
-    np.save(f'{folder}/Y_va.npy', Y_va)
+    ## compute and save Y_pred_unbiased
     Y_pred = []
     for b in range(Y_va.shape[0]//batch_size + 1):
         Y_pred.append(keras.layers.Softmax()(model(X_va[b*batch_size:(b+1)*batch_size])).numpy())
@@ -1654,13 +1702,12 @@ def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='m
 
     if collective: # the optimal checkpoint is the same for all folds and it is based on the average performance over the folds
         # check that the nfolds histories have the same length
-        l0 = len(historyCustom[0])
-        for h in historyCustom[1:]:
-            if len(h) != l0:
-                logger.error('Cannot compute a collective checkpoint from folds trained a different number of epochs. Computing independent checkpoints instead')
-                collective = False
-                break
-    if collective:
+        lm = np.min([len(historyCustom[i]) for i in range(nfolds)])
+        lM = np.max([len(historyCustom[i]) for i in range(nfolds)])
+        if lm < lM: # folds have different history length
+            logger.warning('Using collective checkpoint on histories of different length is deprecated! Longer histories will be clipped to the shortest one')
+            historyCustom = [historyCustom[i][:lm] for i in range(nfolds)]
+
         historyCustom = np.mean(np.array(historyCustom),axis=0)
         opt_checkpoint = opt_f(historyCustom)
     else:
@@ -1877,7 +1924,6 @@ def k_fold_cross_val(folder, X, Y, tau, create_model_kwargs=None, train_model_kw
 
         # split data
         X_tr, Y_tr, X_va, Y_va = k_fold_cross_val_split(i, X, Y, nfolds=nfolds, val_folds=val_folds)
-        
         if source_labels is not None: # In case we want to take the labels generated by Stochastic Weather Generator
             
             Y_tr = committor[i][:,tau_index]
@@ -1895,7 +1941,7 @@ def k_fold_cross_val(folder, X, Y, tau, create_model_kwargs=None, train_model_kw
             X_va = (X_va - X_mean)/X_std 
 
             # save X_mean and X_std
-            np.save(f'{fold_folder}/X_mean.npy', X_mean) # GM: Why not include all of this in normalize_X? It may simplify the code
+            np.save(f'{fold_folder}/X_mean.npy', X_mean) # GM: Why not include all of this in normalize_X? It may simplify the code -> AL: Because normalize_X doesn't know about fold_folder
             np.save(f'{fold_folder}/X_std.npy', X_std)
         
             
@@ -2012,7 +2058,7 @@ def k_fold_cross_val(folder, X, Y, tau, create_model_kwargs=None, train_model_kw
                 Y_pred.append(keras.layers.Softmax()(model(X_va[b*batch_size:(b+1)*batch_size])).numpy())
             Y_pred = np.concatenate(Y_pred)
             Y_pred_unbiased = ut.unbias_probabilities(Y_pred, u=u)
-            np.save(f'{folder}/Y_pred_unbiased.npy', Y_pred_unbiased)
+            np.save(f'{fold_folder}/Y_pred_unbiased.npy', Y_pred_unbiased)
         
 
     score_mean = np.mean(scores)
@@ -2389,7 +2435,7 @@ class Trainer():
         else:
             raise TypeError(f'Invalid type {type(config)} for config')
         
-        self.config_dict_flat = check_config_dict(self.config_dict)
+        self.config_dict_flat = check_config_dict(self.config_dict, correct_mistakes=False)
         
         # cached (heavy) variables
         self.fields = None
@@ -2403,8 +2449,8 @@ class Trainer():
         self._LONLAT = None # meshgrid of self.lat, self.lon
 
         # extract default arguments for each function
-        self.default_run_kwargs = ut.extract_nested(self.config_dict, 'run_kwargs')
-        self.telegram_kwargs = ut.extract_nested(self.config_dict, 'telegram_kwargs')
+        self.default_run_kwargs = ut.extract_nested(self.config_dict, 'run_kwargs').copy()
+        self.telegram_kwargs = ut.extract_nested(self.config_dict, 'telegram_kwargs').copy()
 
         # setup last evaluation arguments
         self._load_data_kwargs = None
@@ -2421,7 +2467,7 @@ class Trainer():
             print(f"{tf.config.list_physical_devices('GPU') = }")
             GPU = len(tf.config.list_physical_devices('GPU'))
         if not GPU:
-            warnings.warn('\nThis machine does not have a GPU: training may be very slow\n')
+            logger.warn('\nThis machine does not have a GPU: training may be very slow\n')
 
     @property
     def LON(self):
@@ -2503,7 +2549,7 @@ class Trainer():
         # retrieve values of the arguments
         iteration_values = [kwargs[k] for k in iterate_over]
         # expand the iterations into a list performing the meshgrid
-        iteration_values = list(zip(*[m.flatten() for m in np.meshgrid(*iteration_values, indexing='ij')]))
+        iteration_values = ut.zipped_meshgrid(*iteration_values)
         # ensure json serializability by converting to string and back
         iteration_values = ast.literal_eval(str(iteration_values))
 
@@ -2570,7 +2616,8 @@ class Trainer():
         '''
         # add telegram logger
         th = self.telegram(**self.telegram_kwargs)
-        logger.log(45, f'Starting {len(self.scheduled_kwargs)} runs')
+        nruns = len(self.scheduled_kwargs)
+        logger.log(45, f"Starting {nruns} run{'' if nruns == 1 else 's'}")
         try:
             for i,kwargs in enumerate(self.scheduled_kwargs):
                 logger.log(42, f'Run {i+1}/{len(self.scheduled_kwargs)}')
@@ -2661,12 +2708,32 @@ class Trainer():
             if self.year_permutation is not None:
                 np.save(f'{folder}/year_permutation.npy',self.year_permutation)
 
+            # save area integral and A
+            label_field = ut.extract_nested(prepare_XY_kwargs, 'label_field')
+            try:
+                lf = self.fields[label_field]
+            except KeyError:
+                try:
+                    lf = self.fields[f'{label_field}_ghost']
+                except KeyError:
+                    logger.error(f'Unable to find label field {label_field} among the provided fields {list(self.fields.keys())}')
+                    raise KeyError
+            
+            np.save(f'{folder}/area_integral.npy', lf.to_numpy(lf.area_integral))
+            ta = lf.to_numpy(lf._time_average)
+            np.save(f'{folder}/time_average.npy', ta)
+            np.save(f'{folder}/time_average_permuted.npy', ta[self.year_permutation])
+
+            # save labels
+            np.save(f'{folder}/labels_permuted.npy', self.Y)
+            
+
             # do kfold
             score, info = k_fold_cross_val(folder, self.X, self.Y, tau, **k_fold_cross_val_kwargs)
 
             # make the config file read-only after the first successful run
             if os.access(self.config_file, os.W_OK): # the file is writeable
-                os.chmod(self.config_file, S_IREAD|S_IROTH|S_IRGRP) # we make the file readable by all users
+                os.chmod(self.config_file, S_IREAD|S_IRGRP|S_IROTH) # we make it readable for all users
         
         except Exception as e:
             logger.critical(f'Run on {folder = } failed due to {repr(e)}')
@@ -2786,18 +2853,20 @@ class Trainer():
         os.mkdir(f'{self.root_folder}/{folder}')
         with open(f'{self.root_folder}/{folder}/log.log', 'a') as logfile:
             logfile.write(f'{run_id = }\n\n')
+            logfile.write(f'Running on machine: {HOSTNAME}\n\n')
             logfile.write('Non default parameters:\n')
-            for k,v in kwargs.items():
-                logfile.write(f'\t{k} = {v}\n')
+            logfile.write(ut.dict2str(kwargs))
             logfile.write('\n')
             if tl_info:
                 logfile.write('Transfer learning from:\n')
-                for k,v in tl_info.items():
-                        logfile.write(f'\t{k} = {v}\n')
+                logfile.write(ut.dict2str(tl_info))
                 logfile.write('\n')
             else:
                 logfile.write('No transfer learning\n\n')
             logfile.write('\n\n\n')
+
+        # log kwargs
+        logger.log(44, ut.dict2str(kwargs))
 
         # run
         score, info = None, {}

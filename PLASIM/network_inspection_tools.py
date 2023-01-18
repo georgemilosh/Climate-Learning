@@ -13,6 +13,22 @@ ut = ln.ut
 tf = ln.tf
 keras = ln.keras
 
+import sys
+from pathlib import Path
+path_to_root = str(Path(__file__).resolve().parent.parent)
+if not path_to_root in sys.path:
+    sys.path.append(path_to_root)
+
+import general_purpose.uplotlib as uplt
+
+def get_runs(folder: str) -> dict:
+    '''
+    Retrieves all completed runs from a folder
+    '''
+    runs = ut.json2dict(f'{folder}/runs.json')
+    runs = {k:v for k,v in runs.items() if v['status'] == 'COMPLETED'}
+    return runs
+
 def make_groups(runs: dict, variable: str = 'tau', config_dict_flat: dict = None) -> list[dict]:
     '''
     Divides the runs into groups according to one variable. Basically is ln.group_by_varying with some extra steps.
@@ -215,9 +231,9 @@ def optimal_activation(model, class_idx=1, seed=None,
     pass
     # TODO (if worth)
 
-############
-# Plotting #
-############
+#####################
+# Committo analysis #
+#####################
 
 def committor_histogram(q: np.ndarray, nbins: int = 50, weights: np.ndarray = None, normalize: bool = True) -> Tuple[np.ndarray, np.ndarray]:
     '''
@@ -318,3 +334,58 @@ def consistency_check(q: np.ndarray, Y: np.ndarray, nbins: int = 50) -> Tuple[np
         acc[i] = np.mean(Y[(q >= bin_edges[i])*(q < bin_edges[i+1])]) # fraction of positive events when q is inside bin i
 
     return 0.5*(bin_edges[1:] + bin_edges[:-1]), acc
+
+def loss_contributions(q: np.ndarray, Y: np.ndarray, nbins: int = 50, bin_edges: np.ndarray = None) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    '''
+    Decomposes the loss contribution in frequency of the outputted committor and loss per committor value.
+    Can be used for the consistency check as well.
+
+    Parameters
+    ----------
+    q : np.ndarray
+        predicted committor values
+    Y : np.ndarray
+        labels
+    nbins : int, optional
+        number of bins, by default 50
+    bin_edges : np.ndarray, optional
+        array of bin edges. If provided overrides nbins
+
+    Returns
+    -------
+    x : np.ndarray[float]
+        bin centers
+    f : np.ndarray[float]
+        normalized frequency of the committor. np.sum(f) = 1
+    a : np.ndarray[ufloat]
+        average number of positive labels per committor bin with errorbar
+    e : np.ndarray
+        loss per committor bin
+
+    Raises
+    ------
+    ValueError
+        If mismatched shapes
+    '''
+    if q.shape != Y.shape:
+        raise ValueError('Shape mismatch')
+    N = len(Y)
+    if bin_edges is None:
+        bin_edges = np.linspace(0,1,nbins+1)
+    else:
+        nbins = len(bin_edges) - 1
+    q_bin_centers = 0.5*(bin_edges[1:] + bin_edges[:-1])
+    acc = np.zeros(nbins, dtype=float)
+    freq = np.zeros(nbins, dtype=float)
+    for i in range(nbins):
+        mask = (q >= bin_edges[i])*(q < bin_edges[i+1])
+        freq[i] = np.sum(mask)/N # fraction of points with this particular committor value
+        acc[i] = np.mean(Y[mask]) if freq[i] else np.nan # fraction of positive events when q is inside bin i
+
+    err = ut.entropy(acc,q_bin_centers) # loss per committor bin
+
+    acc = uplt.ufloatify(acc, np.sqrt(2*acc*(1-acc)/(freq*N))) # add errorbars
+
+    return q_bin_centers, freq, acc, err
+        
+
