@@ -908,6 +908,8 @@ def assign_labels(field, time_start=30, time_end=120, T=14, percent=5, threshold
     --------
     labels : np.ndarray
         2D array with shape (years, days) and values 0 or 1
+    (threshold) if return_threshold : float
+        the computed threshold
     '''
     day0 = field.field.time.dt.dayofyear[0]
     logger.info(f"{A_weights = }")
@@ -990,13 +992,19 @@ def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0,
         if provided the first day of the period of interest for the label threshold determination
     label_period_end : int, optional
         if provided the first day after the end of the period of interst for the label threshold determination
-
+    A_weights: list, optional
+        if provided will influence how running mean is computed
+    return_threshold: bool, optional
+        if provided as True the output also involves threshold_new
+        
     Returns:
     --------
     X : np.ndarray
         with shape (years, days, lat, lon, field)
     Y : np.ndarray
         with shape (years, days)
+    (threshold) if return_threshold : float
+        the computed threshold
     '''
     #if label_period_start is not None:
     #    if label_period_start < time_start:
@@ -1012,11 +1020,11 @@ def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0,
             lf = fields[f'{label_field}_ghost']
         except KeyError:
             raise KeyError(f'Unable to find label field {label_field} among the provided fields {list(fields.keys())}')
-    if return_threshold:
-        Y, threshold_new = assign_labels(lf, time_start=time_start, time_end=time_end, T=T, percent=percent, threshold=threshold, label_period_start=label_period_start, label_period_end=label_period_end, A_weights=A_weights, return_threshold=return_threshold)
+
+    Y = assign_labels(lf, time_start=time_start, time_end=time_end, T=T, percent=percent, threshold=threshold, label_period_start=label_period_start, label_period_end=label_period_end, A_weights=A_weights, return_threshold=return_threshold)
+    if return_threshold: # Y is actually a tuple
+        Y, threshold_new = Y
         return X,Y,threshold_new
-    else:
-        Y = assign_labels(lf, time_start=time_start, time_end=time_end, T=T, percent=percent, threshold=threshold, label_period_start=label_period_start, label_period_end=label_period_end, A_weights=A_weights)
     return X,Y
 
 @ut.execution_time
@@ -1883,6 +1891,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
     # get the folders from which to load the models
     load_from, info = get_transfer_learning_folders(load_from, folder, nfolds, optimal_checkpoint_kwargs=optimal_checkpoint_kwargs)
     # here load_from is either None (no transfer learning) or a list of strings
+
     my_memory = []
     info['status'] = 'RUNNING'
 
@@ -2097,8 +2106,10 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
         latitude, with shape (lat,) (rolled if necessary)
     lon : np.ndarray
         longitude, with shape (lon,) (rolled if necessary)
-    time_series : np.ndarray
+    (time_series) if return_time_series : np.ndarray
         output which is conditional on the input return_time_series
+    (threshold) if return_threshold in make_XY_kwargs : float
+        the threshold used for the labels
     '''
     if make_XY_kwargs is None:
         make_XY_kwargs = {}
