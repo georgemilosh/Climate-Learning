@@ -916,24 +916,21 @@ def assign_labels(field, time_start=30, time_end=120, T=14, percent=5, threshold
     if threshold is None:
         if (label_period_start is not None) and (label_period_end is None):
             A = field.compute_time_average(day_start=day0+label_period_start, day_end=day0+time_end, T=T, weights=A_weights)
-            _, threshold_new = ef.is_over_threshold(field.to_numpy(A), threshold=None, percent=percent)
+            _, threshold = ef.is_over_threshold(field.to_numpy(A), threshold=None, percent=percent)
         elif (label_period_start is None) and (label_period_end is not None):
             A = field.compute_time_average(day_start=day0+time_start, day_end=day0+label_period_end, T=T, weights=A_weights)
-            _, threshold_new = ef.is_over_threshold(field.to_numpy(A), threshold=None, percent=percent)
+            _, threshold = ef.is_over_threshold(field.to_numpy(A), threshold=None, percent=percent)
         elif (label_period_start is not  None) and (label_period_end is not None):
             A = field.compute_time_average(day_start=day0+label_period_start, day_end=day0+label_period_end, T=T, weights=A_weights)
-            _, threshold_new = ef.is_over_threshold(field.to_numpy(A), threshold=None, percent=percent)
-        else: # This is the default behavior that should be consistent with what Alessandro does at the moment
-            threshold_new = None
-    else:
-        threshold_new = threshold.copy()
+            _, threshold = ef.is_over_threshold(field.to_numpy(A), threshold=None, percent=percent)
+    
     A = field.compute_time_average(day_start=day0+time_start, day_end=day0+time_end, T=T, weights=A_weights)
     if hasattr(field, 'A'): 
         field.A = A # This is a placeholder variable that can be used as a running mean save. Problem is that our routines do not output it and rewritting could cause issues with backward compatibility
-    labels, threshold = ef.is_over_threshold(field.to_numpy(A), threshold=threshold_new, percent=percent)
-    logger.info(f"{threshold_new = }")
+    labels, threshold = ef.is_over_threshold(field.to_numpy(A), threshold=threshold, percent=percent)
+    logger.info(f"{threshold = }")
     if return_threshold:
-        return np.array(labels, dtype=int), threshold_new
+        return np.array(labels, dtype=int), threshold
     return np.array(labels, dtype=int)
 
 @ut.execution_time
