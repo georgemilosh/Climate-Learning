@@ -1818,8 +1818,6 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
         all data (train + val)
     Y : np.ndarray
         all labels
-    tau : int
-        the current shift of X
     create_model_kwargs : dict
         dictionary with the parameters to create a model
     train_model_kwargs : dict
@@ -1885,7 +1883,6 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
     # get the folders from which to load the models
     load_from, info = get_transfer_learning_folders(load_from, folder, nfolds, optimal_checkpoint_kwargs=optimal_checkpoint_kwargs)
     # here load_from is either None (no transfer learning) or a list of strings
-    print(f'{tau = }')
     my_memory = []
     info['status'] = 'RUNNING'
 
