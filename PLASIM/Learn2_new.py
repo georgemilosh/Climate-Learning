@@ -2110,39 +2110,23 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
     f = list(fields.values())[0] # take the first field
     lat = np.copy(f.field.lat.data) # 1d array
     lon = np.copy(f.field.lon.data) # 1d array
-    if ut.keys_exists(make_XY_kwargs, 'return_threshold'):
-        return_threshold = ut.extract_nested(make_XY_kwargs, 'return_threshold')
-    else:
-        return_threshold = False
+
+    
+    return_threshold = ut.extract_nested(make_XY_kwargs, 'return_threshold', False)
     print(f"{return_threshold = }")
+
     if return_threshold:
         X,Y, threshold = make_XY(fields, **make_XY_kwargs)
     else:
         X,Y = make_XY(fields, **make_XY_kwargs)
-    if ut.keys_exists(make_XY_kwargs, 'time_start'):
-        time_start = ut.extract_nested(make_XY_kwargs, 'time_start') # We need to extract these values to limit the season of Y which matters for balancing folds (see below)
-    else:
-        time_start = None
-    if ut.keys_exists(make_XY_kwargs, 'time_end'):
-        time_end = ut.extract_nested(make_XY_kwargs, 'time_end')
-    else:
-        time_end = None
-    if ut.keys_exists(make_XY_kwargs, 'time_start'):
-        label_period_start = ut.extract_nested(make_XY_kwargs, 'label_period_start')
-    else:
-        label_period_start = None
-    if ut.keys_exists(make_XY_kwargs, 'label_period_end'):
-        label_period_end = ut.extract_nested(make_XY_kwargs, 'label_period_end')
-    else:
-        label_period_end = None
-    if ut.keys_exists(make_XY_kwargs, 'tau'):
-        tau = ut.extract_nested(make_XY_kwargs, 'tau')
-    else:
-        tau = None
-    if ut.keys_exists(make_XY_kwargs, 'T'):
-        T = ut.extract_nested(make_XY_kwargs, 'T')
-    else:
-        T = None
+    
+    time_start = ut.extract_nested(make_XY_kwargs, 'time_start', None) # We need to extract these values to limit the season of Y which matters for balancing folds (see below)
+    time_end = ut.extract_nested(make_XY_kwargs, 'time_end', None)
+    label_period_start = ut.extract_nested(make_XY_kwargs, 'label_period_start', None)
+    label_period_end = ut.extract_nested(make_XY_kwargs, 'label_period_end', None)
+    tau = ut.extract_nested(make_XY_kwargs, 'tau', None)
+    T = ut.extract_nested(make_XY_kwargs, 'T', None)
+
     if label_period_start is None:
         label_period_start = time_start
     if label_period_end is None:
@@ -2184,7 +2168,7 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
         # balance folds:
         if do_balance_folds:
             # GM: now the weights will be computed solely based on the time of interest, so the balancing will only care about heatwaves inside this time
-            if (label_period_start and time_start and label_period_end and time_start and T) is None:
+            if (label_period_start and time_start and label_period_end and time_start and T) is None: # i.e. if any of the variables between parentheses is None
                 weights = np.sum(Y, axis=1) # get the number of heatwave events per year
             else:
                 logger.info(f" {label_period_start = } ;{time_start = } ;{time_end = } ;{label_period_end = } ")
@@ -2216,7 +2200,7 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
     if return_time_series:
         time_series = []
         # logger.info(f"{fields.values() = }")
-        for field in fields.values():
+        for field in fields.values():                       ## AL: what time series do you get from the other fields? over France?
             #logger.info(f"{field.area_integral =}")=
             temp = (field.area_integral.to_numpy().reshape(field.years,-1))[year_permutation]
             # flatten the time axis dropping the organizatin in years
