@@ -2658,7 +2658,6 @@ class Trainer():
             self.load_data(**load_data_kwargs) # compute self.fields
 
             self.prepare_XY(self.fields, **prepare_XY_kwargs) # compute self.X, self.Y, self.year_permutation, self.lat, self.lon
-            tau = ut.extract_nested(prepare_XY_kwargs, 'tau')
             if self.year_permutation is not None:
                 np.save(f'{folder}/year_permutation.npy',self.year_permutation)
 
@@ -2683,7 +2682,7 @@ class Trainer():
             
 
             # do kfold
-            score, info = k_fold_cross_val(folder, self.X, self.Y, tau, **k_fold_cross_val_kwargs)
+            score, info = k_fold_cross_val(folder, self.X, self.Y, **k_fold_cross_val_kwargs)
 
             # make the config file read-only after the first successful run
             if os.access(self.config_file, os.W_OK): # the file is writeable
