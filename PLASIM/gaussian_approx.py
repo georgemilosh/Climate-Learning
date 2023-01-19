@@ -124,7 +124,7 @@ class Trainer(ln.Trainer):
     def prepare_XY(self, fields, **prepare_XY_kwargs):
         if self._prepare_XY_kwargs != prepare_XY_kwargs:
             self._prepare_XY_kwargs = prepare_XY_kwargs
-            X, self.Y, self.year_permutation, self.lat, self.lon, timeseries, threshold = ln.prepare_XY(fields, **prepare_XY_kwargs)
+            X, self.Y, self.year_permutation, self.lat, self.lon, timeseries, threshold = ln.prepare_XY(fields, **prepare_XY_kwargs) # timeseries is not what we want!
 
             label_field = ut.extract_nested(prepare_XY_kwargs, 'label_field')
             if label_field not in fields:
