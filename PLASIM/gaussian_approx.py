@@ -124,18 +124,25 @@ class Trainer(ln.Trainer):
     def prepare_XY(self, fields, **prepare_XY_kwargs):
         if self._prepare_XY_kwargs != prepare_XY_kwargs:
             self._prepare_XY_kwargs = prepare_XY_kwargs
-            X, self.Y, self.year_permutation, self.lat, self.lon, timeseries, threshold = ln.prepare_XY(fields, **prepare_XY_kwargs) # timeseries is not what we want!
+            X, self.Y, self.year_permutation, self.lat, self.lon, threshold = ln.prepare_XY(fields, **prepare_XY_kwargs) # timeseries is not what we want!
 
             label_field = ut.extract_nested(prepare_XY_kwargs, 'label_field')
-            if label_field not in fields:
-                label_field = f'{label_field}_ghost'
-            if label_field not in fields:
-                logger.error(f'Unable to find label field {label_field} among the provided fields {list(self.fields.keys())}')
-                raise KeyError
-            k2i = {k:i for i,k in enumerate(fields)}
-            A = timeseries[:,k2i[label_field]]
+            try:
+                lf = fields[label_field]
+            except KeyError:
+                try:
+                    lf = fields[f'{label_field}_ghost']
+                except KeyError:
+                    logger.error(f'Unable to find label field {label_field} among the provided fields {list(self.fields.keys())}')
+                    raise KeyError
+                
+            A = lf.to_numpy(lf._time_average).reshape(lf.years, -1)[self.year_permutation].flatten()
 
             assert self.Y.shape == A.shape
+            _Y = np.array(A >= threshold, dtype=int)
+            diff = np.abs(self.Y - _Y)
+            assert diff == 0, f'{diff} datapoints do not match in labels'
+
             # here we do something very ugly and bundle A, threshold and lat together with X to pass through ln.Trainer.run function
             self.X = (X,A,threshold,self.lat)
         return self.X, self.Y, self.year_permutation, self.lat, self.lon
@@ -384,7 +391,7 @@ ln.train_model = train_model
 ln.Trainer = Trainer
 
 ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram]) # module level config dictionary
-ut.set_values_recursive(ln.CONFIG_DICT, {'return_timeseries': True, 'return_threshold': True}, inplace=True)
+ut.set_values_recursive(ln.CONFIG_DICT, {'return_threshold': True}, inplace=True)
 
 if __name__ == '__main__':
     ln.main()
