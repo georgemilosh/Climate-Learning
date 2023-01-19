@@ -13,6 +13,8 @@ keras = ln.keras
 layers = keras.layers
 pd = ln.pd
 
+import scipy.special as ss
+
 # log to stdout
 import logging
 import sys
@@ -75,12 +77,47 @@ def compute_weight_matrix(reshape_mask, lat):
     return W
 
 class GaussianCommittor(object):
-    def __init__(self):
-        pass
+    def __init__(self, regularization_matrix=None, threshold=0):
+        self.regularization_matrix = regularization_matrix or 0
+        self.threshold = threshold
+        self.p = None
+        self.f_tr = None
+        self.f = None
+
+    def fit(self, X, A):
+        # compute the covariance matrix
+        XAs = np.concatenate([X,A.reshape(-1,1)], axis=-1)
+        logger.info(f'{XAs.shape = }')
+        XAs_cov = np.cov(XAs.T)
+        logger.info(f'{XAs_cov.shape = }')
+        sigma_XX = XAs_cov[:-1,:-1]
+        sigma_XA = XAs_cov[-1,:-1]
+
+        # compute the (regularized) projection pattern
+        self.p = np.linalg.inv(sigma_XX + self.regularization_matrix) @ sigma_XA
+        self.p /= np.sqrt(np.sum(self.p**2))
+        logger.info(f'{self.p.shape = }')
+
+        # compute the projected coordinate and the rescaling
+        self.f_tr = X @ self.p
+        fA = np.stack([self.f_tr, A])
+        fA_cov = np.cov(fA)
+        logger.info(f'{fA_cov.shape = }')
+        lam = np.linalg.inv(fA_cov)
+        self.lam_AA = lam[-1,-1]
+        self.lam_fA = lam[0,-1]
+
+    def q(self,x):
+        self.f = x @ self.p
+        return 0.5*ss.erfc((self.lam_AA*self.threshold + self.lam_fA*self.f)/np.sqrt(2*self.lam_AA))
+
+    def __call__(self,x):
+        return self.q(x)
+
 
 @ut.execution_time
 @ut.indent_logger(logger)
-def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, return_metric='CrossEntropyLoss'):
+def train_model(model, X_tr, A_tr, Y_tr, X_va, A_va, Y_va, folder, return_metric='val_CrossEntropyLoss'):
     '''
     Trains a given model
 
@@ -105,67 +142,28 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, return_metric='CrossEntro
     float
         value of `return_metric` during training
     '''
-    ### preliminary operations
-    ##########################
     folder = folder.rstrip('/')
-
-
-    ### training the model
-    ######################
 
     # log the amount af data that is entering the network
     logger.info(f'Training the network on {len(Y_tr)} datapoint and validating on {len(Y_va)}')
 
-    # prepare the data
-    X0_tr = X_tr[Y_tr==0]
-    X1_tr = X_tr[Y_tr==1]
+    # fit the model
+    model.fit(X_tr, A_tr)
 
-    X0_va = X_va[Y_va==0]
-    X1_va = X_va[Y_va==1]
-    
-    # prepare the model
-    model.set_data(X0_tr,X1_tr)
-    model.compute_rotation()
+    # compute metrics
+    q_tr = model(X_tr)
+    r_tr = np.corrcoef(model.f, A_tr)[0,1]
+    ce_tr = np.mean(ut.entropy(Y_tr, q_tr))
 
-    # prepare the history
-    history = {'invFisher': [], 'val_invFisher': []}
+    q_va = model(X_va)
+    r_va = np.corrcoef(model.f, A_va)[0,1]
+    ce_va = np.mean(ut.entropy(Y_va, q_va))
 
-    # perform training for `num_epochs`
-    best_epoch = 0
-    best_value = np.inf
-    non_improving_epochs = 0
-    for epoch in range(1, num_epochs+1):
-        model.compute_projection(n_directions=epoch)
-
-        tr_score = model.inv_fisher
-        va_score = 1./ms.score(model(X0_va), model(X1_va))
-
-        history['invFisher'].append(tr_score)
-        history['val_invFisher'].append(va_score)
-
-        print(f'{epoch = }: {tr_score = }, {va_score = }')
-
-        if checkpoint_every and epoch % checkpoint_every == 0:
-            model.save_proj(f'{folder}/cp-{epoch:04d}.npy')
-
-        if patience:
-            if va_score < best_value:
-                best_epoch = epoch
-                non_improving_epochs = 0
-                best_value = va_score
-            else:
-                non_improving_epochs += 1
-                if non_improving_epochs > patience:
-                    # checkpoint back and exit the loop
-                    model.compute_projection(n_directions=best_epoch+1)
-                    if not os.path.exists(f'{folder}/cp-{best_epoch:04d}.npy'):
-                        model.save_proj(f'{folder}/cp-{best_epoch:04d}.npy')
-                    break
+    history = {'CrossEntropyLoss': [ce_tr], 'val_CrossEntropyLoss': [ce_va], 'r': [r_tr], 'val_r': [r_va]}
 
     ## save Y_va and Y_pred_unbiased
     np.save(f'{folder}/Y_va.npy', Y_va)
-    Y_pred = model(X_va)
-    np.save(f'{folder}/Y_pred_unbiased.npy', Y_pred)
+    np.save(f'{folder}/Y_pred_unbiased.npy', q_va)
 
     ## deal with history
     np.save(f'{folder}/history.npy', history)

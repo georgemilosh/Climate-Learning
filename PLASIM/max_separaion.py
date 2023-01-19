@@ -23,7 +23,7 @@ import MaxSeparator as ms
 @ut.execution_time
 @ut.indent_logger(logger)
 def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, patience=0,
-                checkpoint_every=1, return_metric='invFisher'):
+                checkpoint_every=1, return_metric='val_invFisher'):
     '''
     Trains a given model checkpointing its weights
 
