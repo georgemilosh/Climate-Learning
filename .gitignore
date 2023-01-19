@@ -3,6 +3,7 @@
 *.ipynb_checkpoints*
 *.vscode*
 *.pb
+*.orig
 *.png
 *variables.index
 *checkpoint
@@ -13,10 +14,12 @@
 *log.log
 *.npy
 *.csv
+**/usr/**
 **/Data_CESM/**
 **/CESM/H2SOI/**
 **/CESM/Hayashi/**
 **/Climate/Data_Plasim/**
+**/Climate/Data_Plasim_LONG/**
 **/Climate/Plasim/**
 **/Climate/Plasim_tas/**
 **/Climate/Images/**
@@ -27,6 +30,7 @@
 **/Climate/Image/**
 **/Climate/movies/**
 **/ERA/Images/**
+**/ERA/Data_ERA5/**
 **/Gyro/**
 **/PINNS/Utilities/IRK_weights/**
 **/PLASIM/Images/**
@@ -46,6 +50,8 @@
 **/VAE/tests.old.old/**
 **/VAE/Images/**
 **/VAE/models/**
+**/VAE/noxmodels/**
+**/VAE/xforanalogsL2loss/**
 **/VAE/xforanalogs/**
 **/VAE/xmodels/**
 **/gmiloshe/MachineLearning/**
