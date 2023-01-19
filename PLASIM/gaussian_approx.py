@@ -140,7 +140,7 @@ class Trainer(ln.Trainer):
 
             assert self.Y.shape == A.shape
             _Y = np.array(A >= threshold, dtype=int)
-            diff = np.abs(self.Y - _Y)
+            diff = np.sum(np.abs(self.Y - _Y))
             assert diff == 0, f'{diff} datapoints do not match in labels'
 
             # here we do something very ugly and bundle A, threshold and lat together with X to pass through ln.Trainer.run function
