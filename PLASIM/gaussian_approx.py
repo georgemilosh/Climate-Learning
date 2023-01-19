@@ -107,9 +107,14 @@ class GaussianCommittor(object):
         self.lam_AA = lam[-1,-1]
         self.lam_fA = lam[0,-1]
 
+        # compute the coefficients for the rescaling
+        self.a = np.sqrt(self.lam_AA/2)*self.threshold
+        self.b = self.lam_fA/np.sqrt(2*self.lam_AA)
+
     def q(self,x):
         self.f = x @ self.p
-        return 0.5*ss.erfc((self.lam_AA*self.threshold + self.lam_fA*self.f)/np.sqrt(2*self.lam_AA))
+        # return 0.5*ss.erfc((self.lam_AA*self.threshold + self.lam_fA*self.f)/np.sqrt(2*self.lam_AA))
+        return 0.5*ss.erfc(self.a + self.b*self.f)
 
     def __call__(self,x):
         return self.q(x)
@@ -131,7 +136,7 @@ class Trainer(ln.Trainer):
             A = timeseries[k2i[label_field]]
 
             assert self.Y.shape == A.shape
-            # here we do something very ugly and bundle A,threshold and lat together with X to pass through ln.Trainer.run function
+            # here we do something very ugly and bundle A, threshold and lat together with X to pass through ln.Trainer.run function
             self.X = (X,A,threshold,self.lat)
         return self.X, self.Y, self.year_permutation, self.lat, self.lon
 
@@ -206,7 +211,7 @@ def train_model(model, X_tr, A_tr, Y_tr, X_va, A_va, Y_va, folder, return_metric
 @ut.execution_time
 @ut.indent_logger(logger)
 def k_fold_cross_val(folder, X, Y, train_model_kwargs=None, optimal_checkpoint_kwargs=None, load_from=None, nfolds=10, val_folds=1, u=1, normalization_mode='pointwise',
-                    training_epochs=40):
+                    regularization='gradient', reg_c=0):
     '''
     Performs k fold cross validation on a model architecture.
 
@@ -245,27 +250,11 @@ def k_fold_cross_val(folder, X, Y, train_model_kwargs=None, optimal_checkpoint_k
         number of folds to be used for the validation set for every split
     u : float, optional
         undersampling factor (>=1). If = 1 no undersampling is performed
-    fullmetrics : bool, optional
-        whether to use a set of evaluation metrics or just the loss
-    training_epochs : int, optional
-        number of training epochs when creating a model from scratch
-    training_epochs_tl : int, optional 
-        numer of training epochs when using transfer learning
-    loss : str, optional
-        loss function to minimize, by default 'sparse_categorical_crossentropy'
-        another possibility is 'unbiased_crossentropy',
-        which will unbias the logits with the undersampling factor and then proceeds with the sparse_categorical_crossentropy
-    lr : float, optional
-        learning_rate for Adam optimizer
-
-    prune_threshold : float, optional
-        if the average score in the first `min_folds_before_pruning` is above `prune_threshold`, the run is pruned.
-        This means that the run is considered not promising and hence we avoid losing time in computing the remaining folds.
-        This is particularly useful when performing a hyperparameter optimization procedure.
-        By default is None, which means that pruning is disabled
-    min_folds_before_pruning : int, optional
-        minimum number of folds to train before checking whether to prune the run
-        By default None, which means that pruning is disabled
+    
+    regularization : 'identity' or 'gradient'
+        How to regularize the covariance matrix
+    reg_c : float
+        Amount of regularization
 
     Returns
     -------
@@ -280,12 +269,41 @@ def k_fold_cross_val(folder, X, Y, train_model_kwargs=None, optimal_checkpoint_k
 
     if load_from is not None:
         raise NotImplementedError('Sorry: cannot do transfer learning with this code')
+    if u != 1:
+        raise NotImplementedError('Sorry, cannot use undersampling with this code')
     # get the folders from which to load the models
     load_from, info = ln.get_transfer_learning_folders(load_from, folder, nfolds, optimal_checkpoint_kwargs=optimal_checkpoint_kwargs)
     # here load_from is either None (no transfer learning) or a list of strings
 
     my_memory = []
     info['status'] = 'RUNNING'
+
+    # unbundle X
+    X, A, threshold, lat = X
+
+    # reshape X to remove zero_variance features
+    geosep = ut.Reshaper(np.std(X[:10], axis=0) != 0)
+    logger.info(f'{geosep.reshape_mask.shape = }, {np.sum(geosep.reshape_mask) = }')
+
+    logger.info(f'{X.shape = }, reshaping')
+    X = geosep.reshape(X)
+    logger.info(f'{X.shape = }')
+
+    # compute regularization matrix
+    reg_matrix = 0
+    if reg_c:
+        if regularization == 'identity':
+            W = np.identity(geosep.surviving_coords)
+        elif regularization == 'gradient':
+            W = compute_weight_matrix(geosep.reshape_mask,lat)
+            np.save(f'{folder}/W.npy', W)
+        else:
+            logger.error(f'Unrecognized regularization mode {regularization}')
+            raise KeyError()
+        reg_matrix = reg_c*W
+
+    # create the model
+    model = GaussianCommittor(reg_matrix,threshold=threshold)
 
     # k fold cross validation
     scores = []
@@ -298,10 +316,7 @@ def k_fold_cross_val(folder, X, Y, train_model_kwargs=None, optimal_checkpoint_k
         os.mkdir(fold_folder)
 
         # split data
-        X_tr, Y_tr, X_va, Y_va = ln.k_fold_cross_val_split(i, X, Y, nfolds=nfolds, val_folds=val_folds)
-
-        # perform undersampling
-        X_tr, Y_tr = ln.undersample(X_tr, Y_tr, u=u)
+        X_tr, A_tr, Y_tr, X_va, A_va, Y_va = ln.k_fold_cross_val_split(i, X, A, Y, nfolds=nfolds, val_folds=val_folds)
 
         n_pos_tr = np.sum(Y_tr)
         n_neg_tr = len(Y_tr) - n_pos_tr
@@ -318,23 +333,16 @@ def k_fold_cross_val(folder, X, Y, train_model_kwargs=None, optimal_checkpoint_k
             
         logger.info(f'{X_tr.shape = }, {X_va.shape = }')
 
-        # at this point data is ready to be fed to the networks
-
-
-        # create the model
-        model = ms.GeoSeparator()
-
-        # number of training epochs
-        num_epochs = train_model_kwargs.pop('num_epochs', None) # if num_epochs is not provided in train_model_kwargs, which is most of the time,
-                                                                # we assign it according if we have to do transfer learning or not
-        if num_epochs is None:
-            num_epochs = training_epochs
-
-
         # train the model
-        score = train_model(model, X_tr, Y_tr, X_va, Y_va, # arguments that are always computed inside this function
-                            folder=fold_folder, num_epochs=num_epochs, # arguments that may come from train_model_kwargs for advanced uses but usually are computed here
+        score = train_model(model, X_tr, A_tr, Y_tr, X_va, A_va, Y_va, # arguments that are always computed inside this function
+                            folder=fold_folder, # arguments that may come from train_model_kwargs for advanced uses but usually are computed here
                             **train_model_kwargs) # arguments which have a default value in the definition of `train_model` and thus appear in the config file
+
+        # retrieve the projection pattern and save it
+        np.save(f'{fold_folder}/proj.npy', geosep.inv_reshape(model.p))
+        np.save(f'{fold_folder}/ab.npy', np.array([model.a, model.b])) # rescaling coefficients
+        # with the knowledge of these two we can compute the committor
+        
 
         scores.append(score)
 
@@ -343,42 +351,7 @@ def k_fold_cross_val(folder, X, Y, train_model_kwargs=None, optimal_checkpoint_k
 
         ln.gc.collect() # Garbage collector which removes some extra references to the objects. This is an attempt to micromanage the python handling of RAM
         
-    np.save(f'{folder}/RAM_stats.npy', my_memory)
-
-    # recompute the scores if collective=True
-    # Here we want to use the `optimal_checkpoint` function to compute the best checkpoint for this network. 
-    # Mind that before we used it to determine the optimal checkpoint from the network from which to perform transfer learning, so we need to change the parameters
-    try:
-        collective = optimal_checkpoint_kwargs['collective']
-    except KeyError:
-        collective = ln.get_default_params(ln.optimal_checkpoint)['collective']
-    if collective:
-        logger.log(35, 'recomputing scores and network predictions with the collective optimal checkpoint')
-        try:
-            return_metric = train_model_kwargs['return_metric']
-        except KeyError:
-            return_metric = ln.get_default_params(train_model)['return_metric']
-        try:
-            first_epoch = optimal_checkpoint_kwargs['first_epoch']
-        except KeyError:
-            first_epoch = ln.get_default_params(ln.optimal_checkpoint)['first_epoch']
-            
-        opt_checkpoint, fold_subfolder = ln.optimal_checkpoint(folder,nfolds, **optimal_checkpoint_kwargs)
-
-        # recompute the scores
-        for i in range(nfolds):
-            scores[i] = np.load(f'{folder}/fold_{i}/{fold_subfolder}history.npy', allow_pickle=True).item()[return_metric][opt_checkpoint - first_epoch]
-
-        # reload the models at their proper checkpoint and recompute Y_pred_unbiased
-        for i in range(nfolds):
-            _, _, X_va, Y_va = ln.k_fold_cross_val_split(i, X, Y, nfolds=nfolds, val_folds=val_folds)
-            fold_folder = f'{folder}/fold_{i}'
-            model = ms.GeoSeparator()
-            model = ms.load_proj(f'{fold_folder}/{fold_subfolder}cp-{opt_checkpoint:04d}.npy')
-
-            Y_pred = model(X_va)
-            np.save(f'{fold_folder}/Y_pred_unbiased.npy', Y_pred)
-        
+    np.save(f'{folder}/RAM_stats.npy', my_memory)        
 
     score_mean = np.mean(scores)
     score_std = np.std(scores)
@@ -407,8 +380,10 @@ def k_fold_cross_val(folder, X, Y, train_model_kwargs=None, optimal_checkpoint_k
 #######################################################
 ln.k_fold_cross_val = k_fold_cross_val
 ln.train_model = train_model
+ln.Trainer = Trainer
 
 ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram]) # module level config dictionary
+ut.set_values_recursive(ln.CONFIG_DICT, {'return_timeseries': True, 'return_threshold': True})
 
 if __name__ == '__main__':
     ln.main()
