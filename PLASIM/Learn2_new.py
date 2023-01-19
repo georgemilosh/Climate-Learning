@@ -2208,7 +2208,7 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
     if return_time_series:
         time_series = []
         # logger.info(f"{fields.values() = }")
-        for field in fields.values():                       ## AL: what time series do you get from the other fields? over France?
+        for field in fields.values():
             #logger.info(f"{field.area_integral =}")=
             temp = (field.area_integral.to_numpy().reshape(field.years,-1))[year_permutation]
             # flatten the time axis dropping the organizatin in years
@@ -2232,7 +2232,7 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
             return X, Y, year_permutation, lat, lon, time_series
     
     if return_threshold:
-        return X, Y, year_permutation, lat, lon,  threshold
+        return X, Y, year_permutation, lat, lon, threshold
     else:
         return X, Y, year_permutation, lat, lon
 
