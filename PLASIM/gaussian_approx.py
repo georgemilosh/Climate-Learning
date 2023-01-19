@@ -133,7 +133,7 @@ class Trainer(ln.Trainer):
                 logger.error(f'Unable to find label field {label_field} among the provided fields {list(self.fields.keys())}')
                 raise KeyError
             k2i = {k:i for i,k in enumerate(fields)}
-            A = timeseries[k2i[label_field]]
+            A = timeseries[:,k2i[label_field]]
 
             assert self.Y.shape == A.shape
             # here we do something very ugly and bundle A, threshold and lat together with X to pass through ln.Trainer.run function
@@ -187,7 +187,8 @@ def train_model(model, X_tr, A_tr, Y_tr, X_va, A_va, Y_va, folder, return_metric
 
     history = {'CrossEntropyLoss': [ce_tr], 'val_CrossEntropyLoss': [ce_va], 'r': [r_tr], 'val_r': [r_va]}
 
-    ## save Y_va and Y_pred_unbiased
+    ## save A_va, Y_va and Y_pred_unbiased
+    np.save(f'{folder}/A_va.npy', A_va)
     np.save(f'{folder}/Y_va.npy', Y_va)
     np.save(f'{folder}/Y_pred_unbiased.npy', q_va)
 
@@ -383,7 +384,7 @@ ln.train_model = train_model
 ln.Trainer = Trainer
 
 ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram]) # module level config dictionary
-ut.set_values_recursive(ln.CONFIG_DICT, {'return_timeseries': True, 'return_threshold': True})
+ut.set_values_recursive(ln.CONFIG_DICT, {'return_timeseries': True, 'return_threshold': True}, inplace=True)
 
 if __name__ == '__main__':
     ln.main()
