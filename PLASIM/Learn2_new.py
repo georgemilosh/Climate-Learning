@@ -226,7 +226,7 @@ def get_default_params(func, recursive=False):
     ...     print(greeting)
     ...     return roll_X(X, **roll_X_kwargs)
     >>> get_default_params(pnroll, recursive=True)
-    {'greeting': 'Hello there!', 'roll_X_kwargs': {'roll_axis': 'lon', 'roll_steps': 64}}
+    {'greeting': 'Hello there!', 'roll_X_kwargs': {'roll_axis': 'lon', 'roll_steps': 0}}
     '''
     s = inspect.signature(func)
     default_params = {
@@ -1602,18 +1602,16 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
 
 @ut.execution_time
 @ut.indent_logger(logger)
-def k_fold_cross_val_split(i, X, Y, nfolds=10, val_folds=1):
+def k_fold_cross_val_split(i, *arr, nfolds=10, val_folds=1):
     '''
-    Splits X and Y in a training and validation set according to k fold cross validation algorithm
+    Splits a series of arrays in a training and validation set according to k fold cross validation algorithm
 
     Parameters
     ----------
     i : int
         fold number from 0 to `nfolds`-1
-    X : np.ndarray
-        data
-    Y : np.ndarray
-        labels
+    *arr : np.ndarray
+        Series of arrays to split
     nfolds : int, optional
         number of folds
     val_folds : int, optional
@@ -1621,33 +1619,36 @@ def k_fold_cross_val_split(i, X, Y, nfolds=10, val_folds=1):
 
     Returns
     -------
-    X_tr : np.ndarray
+    a_tr for a in arr : series of np.arrays
         training data
-    Y_tr : np.ndarray
-        training labels
-    X_va : np.ndarray
+    a_va for a in arr : series of np.arrays
         validation data
-    Y_va : np.ndarray
-        validation labels
+
+    Examples
+    --------
+    >>> X = np.arange(5)
+    >>> Y = np.arange(5)*2
+    >>> k_fold_cross_val_split(0, X, Y, nfolds=5)
+    (array([1, 2, 3, 4]), array([2, 4, 6, 8]), array([0]), array([0]))
     '''
     if i < 0 or i >= nfolds:
         raise ValueError(f'fold number i is out of the range [0, {nfolds - 1}]')
     if val_folds >= nfolds or val_folds <= 0:
         raise ValueError(f'val_folds out of the range [1, {nfolds - 1}]')
-    fold_len = X.shape[0]//nfolds
-    lower = i*fold_len % X.shape[0]
-    upper = (i+val_folds)*fold_len % X.shape[0]
+    arr_tr = []
+    arr_va = []
+    fold_len = arr[0].shape[0]//nfolds
+    lower = i*fold_len % arr[0].shape[0]
+    upper = (i+val_folds)*fold_len % arr[0].shape[0]
     if lower < upper:
-        X_va = X[lower:upper]
-        Y_va = Y[lower:upper]
-        X_tr = np.concatenate([X[upper:], X[:lower]], axis=0)
-        Y_tr = np.concatenate([Y[upper:], Y[:lower]], axis=0)
+        for a in arr:
+            arr_va.append(a[lower:upper])
+            arr_tr.append(np.concatenate([a[upper:], a[:lower]], axis=0))
     else: # `upper` overshoots
-        X_va = np.concatenate([X[lower:], X[:upper]], axis=0)
-        Y_va = np.concatenate([Y[lower:], Y[:upper]], axis=0)
-        X_tr = X[upper:lower]
-        Y_tr = Y[upper:lower]
-    return X_tr, Y_tr, X_va, Y_va
+        for a in arr:
+            arr_va.append(np.concatenate([a[lower:], a[:upper]], axis=0))
+            arr_tr.append(a[upper:lower])
+    return *arr_tr, *arr_va
 
 
 def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='minimize', first_epoch=1, collective=True, fold_subfolder=None):
