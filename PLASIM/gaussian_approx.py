@@ -77,8 +77,8 @@ def compute_weight_matrix(reshape_mask, lat):
     return W
 
 class GaussianCommittor(object):
-    def __init__(self, regularization_matrix=None, threshold=0):
-        self.regularization_matrix = regularization_matrix or 0
+    def __init__(self, regularization_matrix=0, threshold=0):
+        self.regularization_matrix = regularization_matrix
         self.threshold = threshold
         self.p = None
         self.f_tr = None
