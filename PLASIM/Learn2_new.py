@@ -112,7 +112,7 @@ level   name                events
 
 45                          Added and removed telegram logger
                             Tell number of scheduled runs
-                            Skipping already performed run
+                            Skipping/rerunning already performed run
                             Average score of the run
 
 49                          All runs completed
