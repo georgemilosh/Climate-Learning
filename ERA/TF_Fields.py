@@ -38,8 +38,8 @@ class PCAencoder(PCA):
     
     def predict(self,*args,**kwargs):
         _X = self.transform(args[0].reshape(args[0].shape[0],-1))
-        return _X, _X, _X # PCA expects the input of type fit(X) such that X is 2 dimensional and encoder generally has three outputs that we will set to the same number
-        
+        return _X, _X, _X # PCA expects the input of type fit(X) such that X is 2 dimensional and encoder generally has three outputs that we will set to the same number. This is done to be consistent with the functionality of class VAE(tf.keras.Model)
+    
     def summary(self):
         print(f'We are computing PCA')
 

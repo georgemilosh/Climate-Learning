@@ -1,7 +1,7 @@
 # George Miloshevich 2022
 # This routine is written for two parameters: input folder for VAE weights and the given epoch. It computes the analogs based on the projected states using VAE
-# The new usage analogue.py <folder> <epochs>
-#   example <epochs> = [10,100,1000]
+# The new usage analogue.py <folder> <epochs> <PCAwhitening>
+#   example <epochs> = [10,100,1000] true
 import os, sys
 import shutil
 import json
@@ -14,6 +14,10 @@ folder = Path(sys.argv[1])  # The name of the folder where the weights have been
      
 checkpoints = sys.argv[2].split(',') # The checkpoint at which the weights have been stored
 checkpoints = [int(checkpoint_el) for checkpoint_el in checkpoints]
+
+PCAwhitening = False
+if len(sys.argv) > 3:
+    PCAwhitening = sys.argv[3] == 'true' # this decides if we normalize the pca components prior to computing the analogs and can only be used if the autoencoder is actually a pca
 
 import logging
 from colorama import Fore # support colored output in terminal
@@ -104,23 +108,28 @@ def classify(fold_folder, evaluate_epoch, vae, X_tr, z_tr, Y_tr, X_va, z_va, Y_v
     dist_va = {}
     ind_new_va = {}
     ind_va = {}
-    for checkpoint in checkpoints:
+    for checkpoint in checkpoints: # The original intent for this line was to loop over checkpoints of the autoencoder training. 
         found = 0
         while found == 0:
             checkpoint_path = str(fold_folder)+f"/cp_vae-{checkpoint:04d}.ckpt" # TODO: convert checkpoints to f-strings
             checkpoint_path_check = checkpoint_path+".index" 
-            if not os.path.exists(checkpoint_path_check): # it could be that the training was unstable and we have to look for a checkpoint just before:
+            if not os.path.exists(checkpoint_path_check) and not PCAwhitening: # it could be that the training was unstable and we have to look for a checkpoint just before (also we should not be working in PCAwhitening mode)
                 found = 0
                 logger.info(f"there is no {checkpoint_path_check}")
                 checkpoint = checkpoint - 1
             else:
                 found = 1
-                logger.info(f"==loading the model: {checkpoint_path}")
+                
                 # vae = tf.keras.models.load_model(fold_folder, compile=False) # i commented this because vae is already supplied as the input to the classifier
-                vae.load_weights(f'{checkpoint_path}').expect_partial()
-                logger.info(f'{checkpoint_path} weights loaded')
-                _,_,z_tr = vae.encoder.predict(X_tr)
-                _,_,z_va = vae.encoder.predict(X_va)
+                if PCAwhitening: # We want covariance matrix to be normalized
+                    z_tr = (np.diag(np.sqrt(len(X_tr))/vae.encoder.singular_values_) @ vae.encoder.predict(X_tr)[2].T).T
+                    z_tr = (np.diag(np.sqrt(len(X_tr))/vae.encoder.singular_values_) @ vae.encoder.predict(X_va)[2].T).T
+                else:
+                    logger.info(f"==loading the model: {checkpoint_path}")
+                    vae.load_weights(f'{checkpoint_path}').expect_partial()
+                    logger.info(f'{checkpoint_path} weights loaded')
+                    _,_,z_tr = vae.encoder.predict(X_tr)
+                    _,_,z_va = vae.encoder.predict(X_va)
                 #z = np.concatenate((z_tr,z_va),axis=0) # This structure will be preserved for each fold
                 dim = z_tr.shape[1] #dim = z.shape[1]
                 siz = z_tr.shape[0] #siz = z.shape[0]
