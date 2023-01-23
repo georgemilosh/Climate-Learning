@@ -1492,9 +1492,15 @@ class Plasim_Field:
 
 
         logger.info(f'Opening field {self.name}')
+        
+        try:
+            self.datas = xr.open_dataset(ut.first_valid_path(self.mylocal,self.filename))
+            self.field = self.datas[name]
+        except KeyError:
+            logger.error(f'Unable to find key "{name}" among the provided fields {list(self.datas.keys())}')
+            raise KeyError
 
-        self.field = xr.open_dataset(ut.first_valid_path(self.mylocal,self.filename))[name]
-
+        self.field.data [np.isnan(self.field.data)] = 0 # The issue is that Francesco put a land mask on TAS.nc which has nan values on the sea. For machine learning purposes nan could be a problem
         self.field = discard_all_dimensions_but(self.field, dims_to_keep=['time', 'lon', 'lat'])
         
         self.field, yrs = monotonize_years(self.field)
@@ -1544,7 +1550,9 @@ class Plasim_Field:
             end index for longitude, by default None
         '''
         if lat_start or lat_end:
-            self.field = self.field.isel(lat=slice(lat_start, lat_end))
+            _latitudes = self.field.lat.isel(lat=slice(lat_start, lat_end))
+            _latitudes = _latitudes.sortby(_latitudes, ascending=False) # This is done to make the _latitudes of CESM consistent with they way they are stored in Plasim.
+            self.field = self.field.sel(lat=_latitudes)
             self.area_weights = self.area_weights.sel(lat=self.field.lat)
             self.land_area_weights = self.land_area_weights.sel(lat=self.field.lat)
             if self.mask is not None:
@@ -2135,16 +2143,22 @@ def discard_all_dimensions_but(xa:xr.DataArray, dims_to_keep:list):
     return xa
 
 def get_lsm(mylocal,Model):
-    if Model != 'Plasim':
+    if Model == 'Plasim':
+        lsm = xr.open_dataset(ut.first_valid_path(mylocal, 'Data_Plasim_inter/CONTROL_lsmask.nc')).lsm
+    elif Model == 'CESM':
+        lsm = xr.open_dataset(ut.first_valid_path(mylocal, 'Data_CESM/CAM_landmask.nc')).landmask
+    else:
         raise NotImplementedError()
-    lsm = xr.open_dataset(ut.first_valid_path(mylocal, 'Data_Plasim_inter/CONTROL_lsmask.nc')).lsm
     lsm = discard_all_dimensions_but(lsm, ['lon', 'lat'])
     return lsm
 
 def get_cell_area(mylocal,Model):
-    if Model != 'Plasim':
+    if Model == 'Plasim':
+        cell_area = xr.open_dataset(ut.first_valid_path(mylocal, 'Data_Plasim_inter/CONTROL_gparea.nc')).cell_area
+    elif Model == 'CESM':
+        cell_area = xr.open_dataset(ut.first_valid_path(mylocal, 'Data_CESM/CAM_cellarea.nc')).cell_area
+    else:
         raise NotImplementedError()
-    cell_area = xr.open_dataset(ut.first_valid_path(mylocal, 'Data_Plasim_inter/CONTROL_gparea.nc')).cell_area
     cell_area = discard_all_dimensions_but(cell_area, ['lon', 'lat'])
     return cell_area
 

@@ -721,25 +721,25 @@ def move_to_folder(folder, additional_files=None):
 ############################################
 
 fields_infos = {
-    't2m': { # temperature
-        'name': 'tas',
-        'filename_suffix': 'tas',
+    't2m': { # how we label the field
+        'name': 'tas', # how the variable is called in the *.nc files
+        'filename_suffix': 'tas', # the ending of the filename
         'label': 'Temperature',
     },
-    'mrso': { # soil moisture
-        'name': 'mrso',
-        'filename_suffix': 'mrso',
+    'mrso': { # how we label the field
+        'name': 'mrso', # how the variable is called in the *.nc files
+        'filename_suffix': 'mrso', # the ending of the filename
         'label': 'Soil Moisture',
     },
-    't2m_inter': { # temperature
-        'name': 'tas',
-        'filename_suffix': 'tas_inter',
-        'label': '3 day Temperature',
+    't2m_inter': { # how we label the field
+        'name': 'tas', # how the variable is called in the *.nc files
+        'filename_suffix': 'tas_inter', # the ending of the filename
+        'label': '3 day Temperature', # interpolated data
     },
-    'mrso_inter': { # soil moisture
-        'name': 'mrso',
-        'filename_suffix': 'mrso_inter',
-        'label': '3 day Soil Moisture',
+    'mrso_inter': { # how we label the field
+        'name': 'mrso', # how the variable is called in the *.nc files
+        'filename_suffix': 'mrso_inter', # the ending of the filename
+        'label': '3 day Soil Moisture', # interpolated data
     },
 }
 
@@ -759,7 +759,8 @@ for h in [200,300,500,850]: # geopotential heights
 @ut.execution_time  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function
 def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', area='France', filter_area='France',
-              lon_start=-64, lon_end=64, lat_start=0, lat_end=22, mylocal='/local/gmiloshe/PLASIM/',fields=['t2m','zg500','mrso_filtered'], preprefix='ANO_'):
+              lon_start=-64, lon_end=64, lat_start=0, lat_end=22, mylocal='/local/gmiloshe/PLASIM/',
+              fields=['t2m','zg500','mrso_filtered'], preprefix='ANO_', datafolder='Data_Plasim'):
     '''
     Loads the data into Plasim_Fields objects
 
@@ -793,7 +794,9 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
         This happens when you need to compute the labels on a field that won't be fed to the network.
     preprefix: str, optional
         The name of the input file starts with preprefix. In practice it is either null or 'ANO' which indicates precomputed anomalies
-
+    datafolder: str, optional
+        The name of the folder which lies inside `mylocal`, it defaults to Data_Plasim
+    
     Returns
     -------
     _fields: dict
@@ -824,16 +827,16 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
     if sampling == '3hrs': 
         prefix = ''
         if dataset_suffix == '':
-            file_suffix = f'../Climate/Data_Plasim/'
+            file_suffix = f'../Climate/{datafolder}/'
         else:
-            file_suffix = f'../Climate/Data_Plasim_{dataset_suffix}/'
+            file_suffix = f'../Climate/{datafolder}_{dataset_suffix}/'
     else:
         if dataset_suffix == '':
             prefix = f'{preprefix}{dataset_suffix}'
-            file_suffix = f'Data_Plasim{dataset_suffix}/'
+            file_suffix = f'{datafolder}{dataset_suffix}/'
         else:
             prefix = f'{preprefix}{dataset_suffix}_'
-            file_suffix = f'Data_Plasim_{dataset_suffix}/'
+            file_suffix = f'{datafolder}_{dataset_suffix}/'
 
     # load the fields
     _fields = {}
