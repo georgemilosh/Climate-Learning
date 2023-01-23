@@ -37,7 +37,8 @@ def compute_weight_matrix(reshape_mask, lat):
     #j -> lon
     for f in range(shape[-1]):
         for i in range(shape[-3]):
-            w = 1./np.cos(lat[i]*np.pi/180)
+            w = np.cos(lat[i]*np.pi/180)
+            wi = 1./w
             for j in range(shape[-2]):
                 # add latitude gradient
                 try:
@@ -46,10 +47,10 @@ def compute_weight_matrix(reshape_mask, lat):
                 except IndexError:
                     print(f'IndexError: {(i,j,f)}-{(i+1,j,f)}')
                 else:
-                    W[ind1,ind1] += 1
-                    W[ind2,ind2] += 1
-                    W[ind1,ind2] += -1
-                    W[ind2,ind1] += -1
+                    W[ind1,ind1] += w
+                    W[ind2,ind2] += w
+                    W[ind1,ind2] += -w
+                    W[ind2,ind1] += -w
                 
                 # add longitude gradient
                 try:
@@ -58,10 +59,10 @@ def compute_weight_matrix(reshape_mask, lat):
                 except IndexError:
                     print(f'IndexError: {(i,j,f)}-{(i,j+1,f)}')
                 else:
-                    W[ind1,ind1] += w
-                    W[ind2,ind2] += w
-                    W[ind1,ind2] += -w
-                    W[ind2,ind1] += -w
+                    W[ind1,ind1] += wi
+                    W[ind2,ind2] += wi
+                    W[ind1,ind2] += -wi
+                    W[ind2,ind1] += -wi
                 
             # add periodic longitude point
             try:
@@ -70,10 +71,10 @@ def compute_weight_matrix(reshape_mask, lat):
             except IndexError:
                 print(f'IndexError: {(i,shape[-2] - 1,f)}-{(i,0,f)}')
             else:
-                W[ind1,ind1] += w
-                W[ind2,ind2] += w
-                W[ind1,ind2] += -w
-                W[ind2,ind1] += -w
+                W[ind1,ind1] += wi
+                W[ind2,ind2] += wi
+                W[ind1,ind2] += -wi
+                W[ind2,ind1] += -wi
     return W
 
 class GaussianCommittor(object):
