@@ -761,6 +761,7 @@ for h in [200,300,500,850]: # geopotential heights
 def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', area='France', filter_area='France',
               lon_start=-64, lon_end=64, lat_start=0, lat_end=22, mylocal='/local/gmiloshe/PLASIM/',
               fields=['t2m','zg500','mrso_filtered'], preprefix='ANO_', datafolder='Data_Plasim'):
+    # AL: can't you use the `Model` argument to reconstruct datafolder?
     '''
     Loads the data into Plasim_Fields objects
 

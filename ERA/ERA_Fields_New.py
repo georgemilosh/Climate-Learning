@@ -1549,6 +1549,7 @@ class Plasim_Field:
         lon_end : int, optional
             end index for longitude, by default None
         '''
+        # AL: latitudes are not sorted if you are not performing a selection. Is that ok?
         if lat_start or lat_end:
             _latitudes = self.field.lat.isel(lat=slice(lat_start, lat_end))
             _latitudes = _latitudes.sortby(_latitudes, ascending=False) # This is done to make the _latitudes of CESM consistent with they way they are stored in Plasim.
@@ -2142,6 +2143,7 @@ def discard_all_dimensions_but(xa:xr.DataArray, dims_to_keep:list):
     xa = xa.drop(dims_to_drop)
     return xa
 
+# AL: These two functions maybe should also sort the latitudes? It doesn't seem necessary at the moment because we do .sel(field.lat) anyways... however it may be a weak point of the code for the future
 def get_lsm(mylocal,Model):
     if Model == 'Plasim':
         lsm = xr.open_dataset(ut.first_valid_path(mylocal, 'Data_Plasim_inter/CONTROL_lsmask.nc')).lsm
