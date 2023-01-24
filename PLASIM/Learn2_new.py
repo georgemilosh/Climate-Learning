@@ -871,6 +871,9 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
 
         # prepare to compute area integral when needed
         field.set_mask(area)
+        
+        # Sort the latitudes
+        field.sort_lat()
 
         if ghost:
             field_name += '_ghost'

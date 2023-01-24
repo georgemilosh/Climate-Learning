@@ -1510,6 +1510,7 @@ class Plasim_Field:
 
         self.land_area_weights = get_lsm(self.mylocal,self.Model).sel(lat=self.field.lat, lon=self.field.lon)
         self.area_weights = get_cell_area(self.mylocal, self.Model).sel(lat=self.field.lat, lon=self.field.lon)
+        
         self.land_area_weights.data *= self.area_weights.data
         self.area_weights.data /= np.sum(self.area_weights.data)
         self.land_area_weights.data /= np.sum(self.land_area_weights.data)
@@ -1530,6 +1531,19 @@ class Plasim_Field:
         if year_list is not None:
             self.field = self.field.sel(time=self.field.time.dt.year.isin(year_list))
             self.years = len(year_list)
+    @ut.execution_time
+    def sort_lat(self):
+        '''
+        Sorts the latitudes so that they always increase from the North Pole to the South Pole
+        This is done so that the latitude order be `Model` indepdendent
+        '''
+        _latitudes = self.field.lat
+        _latitudes = _latitudes.sortby(_latitudes, ascending=False) 
+        self.field = self.field.sel(lat=_latitudes)
+        self.area_weights = self.area_weights.sel(lat=self.field.lat)
+        self.land_area_weights = self.land_area_weights.sel(lat=self.field.lat)
+        if self.mask is not None:
+            self.mask = self.mask.sel(lat=self.field.lat)
 
     @ut.execution_time
     def select_lonlat(self, lat_start=None, lat_end=None, lon_start=None, lon_end=None):
@@ -1549,11 +1563,8 @@ class Plasim_Field:
         lon_end : int, optional
             end index for longitude, by default None
         '''
-        # AL: latitudes are not sorted if you are not performing a selection. Is that ok?
         if lat_start or lat_end:
-            _latitudes = self.field.lat.isel(lat=slice(lat_start, lat_end))
-            _latitudes = _latitudes.sortby(_latitudes, ascending=False) # This is done to make the _latitudes of CESM consistent with they way they are stored in Plasim.
-            self.field = self.field.sel(lat=_latitudes)
+            self.field = self.field.isel(lat=slice(lat_start, lat_end))
             self.area_weights = self.area_weights.sel(lat=self.field.lat)
             self.land_area_weights = self.land_area_weights.sel(lat=self.field.lat)
             if self.mask is not None:
