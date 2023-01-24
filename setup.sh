@@ -8,7 +8,7 @@ echo "To create a new environment run"
 echo "    conda create -n <env name>"
 
 proceed=false
-read -p "Proceed? (Y/n)" -n 1 -r
+read -p "Proceed? (Y/n) " -n 1 -r
 # read -n 1 REPLY
 echo    # (optional) move to a new line
 if [[ $REPLY =~ ^[Y]$ ]] ; then
@@ -26,30 +26,30 @@ kernel_name="clk"
 echo "Installing jupyter kernel"
 
 # create jupyter kernel
-conda install ipykernel
+conda install -y ipykernel
 ipython kernel install --user --name="$kernel_name"
 
 # install jupyter nbextensions
-conda install -c conda-forge jupyter_contrib_nbextensions
+conda install -c conda-forge -y jupyter_contrib_nbextensions
 jupyter contrib nbextension install --user
 
 # install jupyter widgets
-conda install -c conda-forge ipywidgets ipympl
+conda install -c conda-forge -y ipywidgets ipympl
 jupyter nbextension enable --py widgetsnbextension
 
 # install jupyter lab
-conda install -c conda-forge jupyterlab
+conda install -c conda-forge -y jupyterlab
 
 # install jupyther themes
-conda install -c conda-forge jupyterthemes
+conda install -c conda-forge -y jupyterthemes
 
 echo "Installing packages"
 
 echo "Geoscience packages"
-conda install -c conda-forge xarray netcdf4 scipy cartopy cmocean
+conda install -c conda-forge -y xarray netcdf4 scipy cartopy cmocean
 
 echo "Machine Learning packages"
-conda install -c conda-forge tensorflow tensorflow-gpu scikit-learn scikit-image imbalanced-learn
+conda install -c conda-forge -y tensorflow tensorflow-gpu scikit-learn scikit-image imbalanced-learn
 
 echo "Additional packages"
-conda install -c conda-forge plotly tqdm uncertainties #lmfit optuna
+conda install -c conda-forge -y plotly tqdm uncertainties #lmfit optuna
