@@ -1500,7 +1500,7 @@ class Plasim_Field:
             logger.error(f'Unable to find key "{name}" among the provided fields {list(self.datas.keys())}')
             raise KeyError
 
-        self.field.data [np.isnan(self.field.data)] = 0 # The issue is that Francesco put a land mask on TAS.nc which has nan values on the sea. For machine learning purposes nan could be a problem
+        self.field.data[np.isnan(self.field.data)] = 0 # The issue is that Francesco put a land mask on TAS.nc which has nan values on the sea. For machine learning purposes nan could be a problem
         self.field = discard_all_dimensions_but(self.field, dims_to_keep=['time', 'lon', 'lat'])
         
         self.field, yrs = monotonize_years(self.field)
@@ -1531,6 +1531,7 @@ class Plasim_Field:
         if year_list is not None:
             self.field = self.field.sel(time=self.field.time.dt.year.isin(year_list))
             self.years = len(year_list)
+    
     @ut.execution_time
     def sort_lat(self):
         '''
@@ -1538,8 +1539,10 @@ class Plasim_Field:
         This is done so that the latitude order be `Model` indepdendent
         '''
         _latitudes = self.field.lat
-        _latitudes = _latitudes.sortby(_latitudes, ascending=False) 
-        self.field = self.field.sel(lat=_latitudes)
+        _latitudes_sorted = _latitudes.sortby(_latitudes, ascending=False)
+        if (_latitudes == _latitudes_sorted).all():
+            return
+        self.field = self.field.sel(lat=_latitudes_sorted)
         self.area_weights = self.area_weights.sel(lat=self.field.lat)
         self.land_area_weights = self.land_area_weights.sel(lat=self.field.lat)
         if self.mask is not None:

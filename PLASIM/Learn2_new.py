@@ -860,6 +860,10 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
                                 years=dataset_years, mylocal=mylocal)
         # select years
         field.select_years(year_list)
+
+        # Sort the latitudes
+        field.sort_lat()
+
         # select longitude and latitude
         field.select_lonlat(lat_start,lat_end,lon_start,lon_end)
 
@@ -871,9 +875,6 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
 
         # prepare to compute area integral when needed
         field.set_mask(area)
-        
-        # Sort the latitudes
-        field.sort_lat()
 
         if ghost:
             field_name += '_ghost'
