@@ -1305,7 +1305,7 @@ def undersample(X, Y, u=1, random_state=42):
 
 def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=1,
                  batch_normalizations=True, conv_activations='relu', conv_dropouts=0.2, max_pool_sizes=[2,2,False],
-                 dense_units=[64,2], dense_activations=['relu', None], dense_dropouts=[0.2,False]):
+                 dense_units=[64,2], dense_activations=['relu', None], dense_dropouts=[0.2,False], l2coef=None):
     '''
     Creates a model consisting of a series of convolutional layers followed by fully connected ones
 
@@ -1333,6 +1333,7 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
     dense_activations : str or list of str, optional
         activation functions after each fully connected layer
     dense_dropouts : float in [0,1] or list of floats in [0,1], optional
+    l2coef : list of floats which encodes the values of L2 regularizers in dense layers, optional
 
     Returns
     -------
@@ -1340,6 +1341,8 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
     '''
     model = models.Sequential()
 
+    if l2coef is None:
+        l2coef = [None for dense_unit in dense_units]
     # convolutional layers
     # adjust the shape of the arguments to be of the same length as conv_channels
     args = [kernel_sizes, strides, batch_normalizations, conv_activations, conv_dropouts, max_pool_sizes]
@@ -1381,7 +1384,12 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
     dense_activations, dense_dropouts = args
     # build the dense layers
     for i in range(len(dense_units)):
-        model.add(layers.Dense(dense_units[i], activation=dense_activations[i]))
+        if l2coef[i] is not None:
+            kernel_regularizer=tf.keras.regularizers.l2(l2coef[i])
+        else:
+            kernel_regularizer=None
+        model.add(layers.Dense(dense_units[i], activation=dense_activations[i],kernel_regularizer=kernel_regularizer))
+        
         if dense_dropouts[i]:
             model.add(layers.Dropout(dense_dropouts[i]))
 
