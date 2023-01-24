@@ -101,7 +101,7 @@ class Dense2D(layers.Layer):
 
 
 class GradientRegularizer(keras.regularizers.Regularizer):
-    def __init__(self, mode='l2', c=1, weights=None, periodic_lon=True, normalize=True):
+    def __init__(self, mode='l2', c=1, weights=None, periodic_lon=True, normalize=True, lat=None):
         '''
         Makes a filter smooth by penalizing the difference between adjacent pixels
 
@@ -132,22 +132,24 @@ class GradientRegularizer(keras.regularizers.Regularizer):
         self.weights = weights
         self.periodic_lon = periodic_lon
         self.normalize = normalize
+        self.lat = lat
 
         if self.weights is not None:
             if isinstance(self.weights, str):
                 if self.weights == 'sphere':
-                    lat = 87.863799 - 2.7886687*np.arange(22) # TODO: this is not very versatile
-                    self.coslat = np.cos(lat*np.pi/180)
+                    if self.lat is None:
+                        raise ValueError(f'{self.weights} regularization mode requires latitude vector')
+                    self.coslat = np.cos(self.lat*np.pi/180)
                     self.broadcasted_coslat = None
                 elif self.weights in ['auto', 'compromise']: # for backward compatibility
                     logger.warning(f"Deprecation warning: regularization weight in mode {self.weights} is deprecated. Please use None or 'sphere'")
                     apply_sqrt = self.weights == 'compromise'
-                    # TODO: this si not very versatile
-                    lat = 87.863799 - 2.7886687*np.arange(22)
+                    if self.lat is None:
+                        raise ValueError(f'{self.weights} regularization mode requires latitude vector')
                     self.weights = np.ones((22,128,2), dtype=np.float32)
                     # gradient in the lat (x) direction is uniform so we don't do anything
                     # gradient in the lon direction depends on latitude
-                    self.weights[...,1] = (self.weights[...,1].T/np.cos(lat*np.pi/180)).T # these double transposition helps using numpy native operators
+                    self.weights[...,1] = (self.weights[...,1].T/np.cos(self.lat*np.pi/180)).T # these double transposition helps using numpy native operators
                     if apply_sqrt:
                         self.weights = np.sqrt(self.weights)
                 else:
@@ -214,6 +216,13 @@ class GradientRegularizer(keras.regularizers.Regularizer):
 
     def get_config(self):
         return {'c': self.c, 'weights': self.weights, 'periodic_lon': self.periodic_lon, 'normalize': self.normalize}
+    
+class Trainer(ln.Trainer):
+    def prepare_XY(self, fields, **prepare_XY_kwargs):
+        res =  super().prepare_XY(fields, **prepare_XY_kwargs)
+        logger.info('Saving latitude as module level variable')
+        ln.lat = self.lat
+        return res
 
 
 def create_model(input_shape, filters_per_field=[1,1,1], merge_to_one=False, batch_normalization=False, reg_mode='l2', reg_c=1, reg_weights=None, reg_periodicity=True, reg_norm=True, dense_units=[8,2], dense_activations=['relu', None], dense_dropouts=False):
@@ -256,7 +265,7 @@ def create_model(input_shape, filters_per_field=[1,1,1], merge_to_one=False, bat
     '''
     regularizer = None
     if reg_c:
-        regularizer = GradientRegularizer(mode=reg_mode, c=reg_c, weights=reg_weights, periodic_lon=reg_periodicity, normalize=reg_norm)
+        regularizer = GradientRegularizer(mode=reg_mode, c=reg_c, weights=reg_weights, periodic_lon=reg_periodicity, normalize=reg_norm, lat=ln.lat)
     
     model = keras.models.Sequential()
 
@@ -391,6 +400,7 @@ def load_model(checkpoint, compile=False):
 ln.create_model = create_model
 ln.train_model = train_model
 ln.load_model = load_model
+ln.Trainer = Trainer
 ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram]) # module level config dictionary
 
 if __name__ == '__main__':
