@@ -720,41 +720,46 @@ def move_to_folder(folder, additional_files=None):
 ########## DATA PREPROCESSING ##############
 ############################################
 
-fields_infos = {
-    't2m': { # how we label the field
-        'name': 'tas', # how the variable is called in the *.nc files
-        'filename_suffix': 'tas', # the ending of the filename
-        'label': 'Temperature',
-    },
-    'mrso': { # how we label the field
-        'name': 'mrso', # how the variable is called in the *.nc files
-        'filename_suffix': 'mrso', # the ending of the filename
-        'label': 'Soil Moisture',
-    },
-    't2m_inter': { # how we label the field
-        'name': 'tas', # how the variable is called in the *.nc files
-        'filename_suffix': 'tas_inter', # the ending of the filename
-        'label': '3 day Temperature', # interpolated data
-    },
-    'mrso_inter': { # how we label the field
-        'name': 'mrso', # how the variable is called in the *.nc files
-        'filename_suffix': 'mrso_inter', # the ending of the filename
-        'label': '3 day Soil Moisture', # interpolated data
-    },
-}
+try:
+    fields_infos = ut.json2dict('fields_infos.json')
+    logger.info('Loaded field_infos from file')
+except FileNotFoundError:
+    logger.warning("Could not load field_infos: using the hardcoded version")
+    fields_infos = {
+        't2m': { # how we label the field
+            'name': 'tas', # how the variable is called in the *.nc files
+            'filename_suffix': 'tas', # the ending of the filename
+            'label': 'Temperature',
+        },
+        'mrso': { # how we label the field
+            'name': 'mrso', # how the variable is called in the *.nc files
+            'filename_suffix': 'mrso', # the ending of the filename
+            'label': 'Soil Moisture',
+        },
+        't2m_inter': { # how we label the field
+            'name': 'tas', # how the variable is called in the *.nc files
+            'filename_suffix': 'tas_inter', # the ending of the filename
+            'label': '3 day Temperature', # interpolated data
+        },
+        'mrso_inter': { # how we label the field
+            'name': 'mrso', # how the variable is called in the *.nc files
+            'filename_suffix': 'mrso_inter', # the ending of the filename
+            'label': '3 day Soil Moisture', # interpolated data
+        },
+    }
 
-for h in [200,300,500,850]: # geopotential heights
-    fields_infos[f'zg{h}'] = {
-        'name': 'zg',
-        'filename_suffix': f'zg{h}',
-        'label': f'{h} mbar Geopotential',
-    }
-for h in [200,300,500,850]: # geopotential heights
-    fields_infos[f'zg{h}_inter'] = {
-        'name': 'zg',
-        'filename_suffix': f'zg{h}_inter',
-        'label': f'3 day {h} mbar Geopotential',
-    }
+    for h in [200,300,500,850]: # geopotential heights
+        fields_infos[f'zg{h}'] = {
+            'name': 'zg',
+            'filename_suffix': f'zg{h}',
+            'label': f'{h} mbar Geopotential',
+        }
+    for h in [200,300,500,850]: # geopotential heights
+        fields_infos[f'zg{h}_inter'] = {
+            'name': 'zg',
+            'filename_suffix': f'zg{h}_inter',
+            'label': f'3 day {h} mbar Geopotential',
+        }
 
 @ut.execution_time  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function
@@ -1341,7 +1346,7 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
     model : keras.models.Model
     '''
     model = models.Sequential()
-    
+
     # convolutional layers
     # adjust the shape of the arguments to be of the same length as conv_channels
     args = [kernel_sizes, strides, batch_normalizations, conv_activations, conv_dropouts, max_pool_sizes, conv_l2coef]
@@ -2926,6 +2931,7 @@ def deal_with_lock(**kwargs):
 
             # runs file (which will keep track of various runs performed in newly created folder)
             ut.dict2json({},f'{folder}/runs.json')
+            ut.dict2json(fields_infos, f'{folder}/fields_infos.json')
 
             return True
         else:
