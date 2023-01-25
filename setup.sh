@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # This script installs all the dependecies to successfully run the code of this repository
-# We recommend working in a dedicated conda environment
+# We recommend working in a dedicated conda environment, see the guide @: https://conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html
 
 echo "This script will intall packages and alter your current conda environment. We highly recommend running it inside a virgin new conda environment."
 echo "To create a new environment run"
