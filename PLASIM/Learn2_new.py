@@ -810,8 +810,10 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
     '''
     
     if area != filter_area:
-        logger.warn(f'Fields will be filtered on a different area ({filter_area}) than the region of interest ({area}). If {area} is not a subset of {filter_area} the area integral will be different with and without filtering.')
-
+        logger.warning(f'Fields will be filtered on a different area ({filter_area}) than the region of interest ({area}). If {area} is not a subset of {filter_area} the area integral will be different with and without filtering.')
+    if Model.lower() not in datafolder.lower():
+        logger.warning(f'{datafolder = } does not contain the name of the model ({Model})')
+    
     if dataset_years == 1000:
         dataset_suffix = ''
     elif dataset_years == 8000:
