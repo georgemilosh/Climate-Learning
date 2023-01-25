@@ -1305,8 +1305,8 @@ def undersample(X, Y, u=1, random_state=42):
 ################################################
 
 def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=1,
-                 batch_normalizations=True, conv_activations='relu', conv_dropouts=0.2, max_pool_sizes=[2,2,False],
-                 dense_units=[64,2], dense_activations=['relu', None], dense_dropouts=[0.2,False], l2coef=None):
+                 batch_normalizations=True, conv_activations='relu', conv_dropouts=0.2, max_pool_sizes=[2,2,False], conv_l2coef=None,
+                 dense_units=[64,2], dense_activations=['relu', None], dense_dropouts=[0.2,False], dense_l2coef=None):
     '''
     Creates a model consisting of a series of convolutional layers followed by fully connected ones
 
@@ -1342,36 +1342,45 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
     '''
     model = models.Sequential()
 
-    if l2coef is None:
-        l2coef = [None for dense_unit in dense_units]
+    if dense_l2coef is None and dense_units is not None:
+        dense_l2coef =  [None for _ in dense_units]
+    if conv_l2coef is None and conv_channels is not None:
+        conv_l2coef = [None for _ in conv_channels]
     # convolutional layers
     # adjust the shape of the arguments to be of the same length as conv_channels
     args = [kernel_sizes, strides, batch_normalizations, conv_activations, conv_dropouts, max_pool_sizes]
-    for j,arg in enumerate(args):
-        if not isinstance(arg, list):
-            args[j] = [arg]*len(conv_channels)
-        elif len(arg) != len(conv_channels):
-            raise ValueError(f'Invalid length for argument {arg}')
-    logger.info(f'convolutional args = {args}')
-    kernel_sizes, strides, batch_normalizations, conv_activations, conv_dropouts, max_pool_sizes = args
-    # build the convolutional layers
-    for i in range(len(conv_channels)):
-        if i == 0:
-            model.add(layers.Conv2D(conv_channels[i], kernel_sizes[i],
-                      strides=strides[i], input_shape=input_shape))
-        else:
-            model.add(layers.Conv2D(conv_channels[i], kernel_sizes[i],
-                      strides=strides[i]))
-        if batch_normalizations[i]:
-            model.add(layers.BatchNormalization())
-        model.add(layers.Activation(conv_activations[i]))
-        if conv_dropouts[i]:
-            model.add(layers.SpatialDropout2D(conv_dropouts[i]))
-        if max_pool_sizes[i] > 1:
-            model.add(layers.MaxPooling2D(max_pool_sizes[i]))
-
-    # flatten
-    model.add(layers.Flatten())
+    
+    if conv_channels is not None:
+        for j,arg in enumerate(args):
+            if not isinstance(arg, list):
+                args[j] = [arg]*len(conv_channels)
+            elif len(arg) != len(conv_channels):
+                raise ValueError(f'Invalid length for argument {arg}')
+        logger.info(f'convolutional args = {args}')
+        kernel_sizes, strides, batch_normalizations, conv_activations, conv_dropouts, max_pool_sizes = args
+        # build the convolutional layers
+        for i in range(len(conv_channels)):
+            if conv_l2coef[i] is not None:
+                kernel_regularizer=tf.keras.regularizers.l2(conv_l2coef[i])
+            else:
+                kernel_regularizer=None
+            if i == 0:
+                model.add(layers.Conv2D(conv_channels[i], kernel_sizes[i],
+                        strides=strides[i], input_shape=input_shape,kernel_regularizer=kernel_regularizer))
+            else:
+                model.add(layers.Conv2D(conv_channels[i], kernel_sizes[i],
+                        strides=strides[i],kernel_regularizer=kernel_regularizer))
+            if batch_normalizations[i]:
+                model.add(layers.BatchNormalization())
+            model.add(layers.Activation(conv_activations[i]))
+            if conv_dropouts[i]:
+                model.add(layers.SpatialDropout2D(conv_dropouts[i]))
+            if max_pool_sizes[i] > 1:
+                model.add(layers.MaxPooling2D(max_pool_sizes[i]))
+        # flatten
+        model.add(layers.Flatten())
+    else: # if there are no convolutions the flatten is supposed to be input
+        model.add(layers.Flatten(input_shape=input_shape))
 
     # dense layers
     # adjust the shape of the arguments to be of the same length as conv_channels
@@ -1385,8 +1394,8 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
     dense_activations, dense_dropouts = args
     # build the dense layers
     for i in range(len(dense_units)):
-        if l2coef[i] is not None:
-            kernel_regularizer=tf.keras.regularizers.l2(l2coef[i])
+        if dense_l2coef[i] is not None:
+            kernel_regularizer=tf.keras.regularizers.l2(dense_l2coef[i])
         else:
             kernel_regularizer=None
         model.add(layers.Dense(dense_units[i], activation=dense_activations[i],kernel_regularizer=kernel_regularizer))
