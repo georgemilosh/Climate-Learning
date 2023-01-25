@@ -22,6 +22,10 @@ Because the events are rare we pursue importance sampling that can be achieved b
 
 ## User guide
 
+- To install the relevant packages run `setup.sh` that is included
+- To see how to work with our routines (such as working with data and training neural networks) consult `Plasim/tutorial.ipynb`
+- tbd: describe the datasets
+
 ```
 import tensorflow as tf
 ```
