@@ -1341,14 +1341,10 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
     model : keras.models.Model
     '''
     model = models.Sequential()
-
-    if dense_l2coef is None and dense_units is not None:
-        dense_l2coef =  [None for _ in dense_units]
-    if conv_l2coef is None and conv_channels is not None:
-        conv_l2coef = [None for _ in conv_channels]
+    
     # convolutional layers
     # adjust the shape of the arguments to be of the same length as conv_channels
-    args = [kernel_sizes, strides, batch_normalizations, conv_activations, conv_dropouts, max_pool_sizes]
+    args = [kernel_sizes, strides, batch_normalizations, conv_activations, conv_dropouts, max_pool_sizes, conv_l2coef]
     
     if conv_channels is not None:
         for j,arg in enumerate(args):
@@ -1357,7 +1353,7 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
             elif len(arg) != len(conv_channels):
                 raise ValueError(f'Invalid length for argument {arg}')
         logger.info(f'convolutional args = {args}')
-        kernel_sizes, strides, batch_normalizations, conv_activations, conv_dropouts, max_pool_sizes = args
+        kernel_sizes, strides, batch_normalizations, conv_activations, conv_dropouts, max_pool_sizes, conv_l2coef = args
         # build the convolutional layers
         for i in range(len(conv_channels)):
             if conv_l2coef[i] is not None:
@@ -1384,14 +1380,14 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
 
     # dense layers
     # adjust the shape of the arguments to be of the same length as conv_channels
-    args = [dense_activations, dense_dropouts]
+    args = [dense_activations, dense_dropouts, dense_l2coef]
     for j,arg in enumerate(args):
         if not isinstance(arg, list):
             args[j] = [arg]*len(dense_units)
         elif len(arg) != len(dense_units):
             raise ValueError(f'Invalid length for argument {arg}')
     logger.info(f'dense args = {args}')
-    dense_activations, dense_dropouts = args
+    dense_activations, dense_dropouts, dense_l2coef = args
     # build the dense layers
     for i in range(len(dense_units)):
         if dense_l2coef[i] is not None:
