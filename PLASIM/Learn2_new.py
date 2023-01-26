@@ -2408,6 +2408,7 @@ class Trainer():
             rf = Path(self.root_folder).resolve()
             rf.mkdir(parents=True, exist_ok=True)
         self.config_file = f'{self.root_folder}/config.json'
+        self.fields_infos_file = f'{self.root_folder}/fields_infos.json'
         self.runs_file = f'{self.root_folder}/runs.json'
         self.allow_run = None
 
@@ -2721,9 +2722,11 @@ class Trainer():
             # do kfold
             score, info = k_fold_cross_val(folder, self.X, self.Y, **k_fold_cross_val_kwargs)
 
-            # make the config file read-only after the first successful run
+            # make the config file and field_infos file read-only after the first successful run
             if os.access(self.config_file, os.W_OK): # the file is writeable
                 os.chmod(self.config_file, S_IREAD|S_IRGRP|S_IROTH) # we make it readable for all users
+            if os.access(self.fields_infos_file, os.W_OK): # the file is writeable
+                os.chmod(self.fields_infos_file, S_IREAD|S_IRGRP|S_IROTH) # we make it readable for all users
         
         except Exception as e:
             logger.critical(f'Run on {folder = } failed due to {repr(e)}')
