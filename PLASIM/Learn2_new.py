@@ -720,46 +720,53 @@ def move_to_folder(folder, additional_files=None):
 ########## DATA PREPROCESSING ##############
 ############################################
 
-fields_infos = {
-    't2m': { # temperature
-        'name': 'tas',
-        'filename_suffix': 'tas',
-        'label': 'Temperature',
-    },
-    'mrso': { # soil moisture
-        'name': 'mrso',
-        'filename_suffix': 'mrso',
-        'label': 'Soil Moisture',
-    },
-    't2m_inter': { # temperature
-        'name': 'tas',
-        'filename_suffix': 'tas_inter',
-        'label': '3 day Temperature',
-    },
-    'mrso_inter': { # soil moisture
-        'name': 'mrso',
-        'filename_suffix': 'mrso_inter',
-        'label': '3 day Soil Moisture',
-    },
-}
+try:
+    fields_infos = ut.json2dict('fields_infos.json')
+    logger.info('Loaded field_infos from file')
+except FileNotFoundError:
+    logger.warning("Could not load field_infos: using the hardcoded version")
+    fields_infos = {
+        't2m': { # how we label the field
+            'name': 'tas', # how the variable is called in the *.nc files
+            'filename_suffix': 'tas', # the ending of the filename
+            'label': 'Temperature',
+        },
+        'mrso': { # how we label the field
+            'name': 'mrso', # how the variable is called in the *.nc files
+            'filename_suffix': 'mrso', # the ending of the filename
+            'label': 'Soil Moisture',
+        },
+        't2m_inter': { # how we label the field
+            'name': 'tas', # how the variable is called in the *.nc files
+            'filename_suffix': 'tas_inter', # the ending of the filename
+            'label': '3 day Temperature', # interpolated data
+        },
+        'mrso_inter': { # how we label the field
+            'name': 'mrso', # how the variable is called in the *.nc files
+            'filename_suffix': 'mrso_inter', # the ending of the filename
+            'label': '3 day Soil Moisture', # interpolated data
+        },
+    }
 
-for h in [200,300,500,850]: # geopotential heights
-    fields_infos[f'zg{h}'] = {
-        'name': 'zg',
-        'filename_suffix': f'zg{h}',
-        'label': f'{h} mbar Geopotential',
-    }
-for h in [200,300,500,850]: # geopotential heights
-    fields_infos[f'zg{h}_inter'] = {
-        'name': 'zg',
-        'filename_suffix': f'zg{h}_inter',
-        'label': f'3 day {h} mbar Geopotential',
-    }
+    for h in [200,300,500,850]: # geopotential heights
+        fields_infos[f'zg{h}'] = {
+            'name': 'zg',
+            'filename_suffix': f'zg{h}',
+            'label': f'{h} mbar Geopotential',
+        }
+    for h in [200,300,500,850]: # geopotential heights
+        fields_infos[f'zg{h}_inter'] = {
+            'name': 'zg',
+            'filename_suffix': f'zg{h}_inter',
+            'label': f'3 day {h} mbar Geopotential',
+        }
 
 @ut.execution_time  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function
 def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', area='France', filter_area='France',
-              lon_start=-64, lon_end=64, lat_start=0, lat_end=22, mylocal='/local/gmiloshe/PLASIM/',fields=['t2m','zg500','mrso_filtered'], preprefix='ANO_'):
+              lon_start=-64, lon_end=64, lat_start=0, lat_end=22, mylocal='/local/gmiloshe/PLASIM/',
+              fields=['t2m','zg500','mrso_filtered'], preprefix='ANO_', datafolder='Data_Plasim'):
+    # AL: can't you use the `Model` argument to reconstruct datafolder?
     '''
     Loads the data into Plasim_Fields objects
 
@@ -793,7 +800,9 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
         This happens when you need to compute the labels on a field that won't be fed to the network.
     preprefix: str, optional
         The name of the input file starts with preprefix. In practice it is either null or 'ANO' which indicates precomputed anomalies
-
+    datafolder: str, optional
+        The name of the folder which lies inside `mylocal`, it defaults to Data_Plasim
+    
     Returns
     -------
     _fields: dict
@@ -801,8 +810,10 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
     '''
     
     if area != filter_area:
-        logger.warn(f'Fields will be filtered on a different area ({filter_area}) than the region of interest ({area}). If {area} is not a subset of {filter_area} the area integral will be different with and without filtering.')
-
+        logger.warning(f'Fields will be filtered on a different area ({filter_area}) than the region of interest ({area}). If {area} is not a subset of {filter_area} the area integral will be different with and without filtering.')
+    if Model.lower() not in datafolder.lower():
+        logger.warning(f'{datafolder = } does not contain the name of the model ({Model})')
+    
     if dataset_years == 1000:
         dataset_suffix = ''
     elif dataset_years == 8000:
@@ -824,16 +835,16 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
     if sampling == '3hrs': 
         prefix = ''
         if dataset_suffix == '':
-            file_suffix = f'../Climate/Data_Plasim/'
+            file_suffix = f'../Climate/{datafolder}/'
         else:
-            file_suffix = f'../Climate/Data_Plasim_{dataset_suffix}/'
+            file_suffix = f'../Climate/{datafolder}_{dataset_suffix}/'
     else:
         if dataset_suffix == '':
             prefix = f'{preprefix}{dataset_suffix}'
-            file_suffix = f'Data_Plasim{dataset_suffix}/'
+            file_suffix = f'{datafolder}{dataset_suffix}/'
         else:
             prefix = f'{preprefix}{dataset_suffix}_'
-            file_suffix = f'Data_Plasim_{dataset_suffix}/'
+            file_suffix = f'{datafolder}_{dataset_suffix}/'
 
     # load the fields
     _fields = {}
@@ -856,6 +867,10 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
                                 years=dataset_years, mylocal=mylocal)
         # select years
         field.select_years(year_list)
+
+        # Sort the latitudes
+        field.sort_lat()
+
         # select longitude and latitude
         field.select_lonlat(lat_start,lat_end,lon_start,lon_end)
 
@@ -1297,8 +1312,8 @@ def undersample(X, Y, u=1, random_state=42):
 ################################################
 
 def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=1,
-                 batch_normalizations=True, conv_activations='relu', conv_dropouts=0.2, max_pool_sizes=[2,2,False],
-                 dense_units=[64,2], dense_activations=['relu', None], dense_dropouts=[0.2,False]):
+                 batch_normalizations=True, conv_activations='relu', conv_dropouts=0.2, max_pool_sizes=[2,2,False], conv_l2coef=None,
+                 dense_units=[64,2], dense_activations=['relu', None], dense_dropouts=[0.2,False], dense_l2coef=None):
     '''
     Creates a model consisting of a series of convolutional layers followed by fully connected ones
 
@@ -1326,6 +1341,7 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
     dense_activations : str or list of str, optional
         activation functions after each fully connected layer
     dense_dropouts : float in [0,1] or list of floats in [0,1], optional
+    l2coef : list of floats which encodes the values of L2 regularizers in dense layers, optional
 
     Returns
     -------
@@ -1335,46 +1351,58 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
 
     # convolutional layers
     # adjust the shape of the arguments to be of the same length as conv_channels
-    args = [kernel_sizes, strides, batch_normalizations, conv_activations, conv_dropouts, max_pool_sizes]
-    for j,arg in enumerate(args):
-        if not isinstance(arg, list):
-            args[j] = [arg]*len(conv_channels)
-        elif len(arg) != len(conv_channels):
-            raise ValueError(f'Invalid length for argument {arg}')
-    logger.info(f'convolutional args = {args}')
-    kernel_sizes, strides, batch_normalizations, conv_activations, conv_dropouts, max_pool_sizes = args
-    # build the convolutional layers
-    for i in range(len(conv_channels)):
-        if i == 0:
-            model.add(layers.Conv2D(conv_channels[i], kernel_sizes[i],
-                      strides=strides[i], input_shape=input_shape))
-        else:
-            model.add(layers.Conv2D(conv_channels[i], kernel_sizes[i],
-                      strides=strides[i]))
-        if batch_normalizations[i]:
-            model.add(layers.BatchNormalization())
-        model.add(layers.Activation(conv_activations[i]))
-        if conv_dropouts[i]:
-            model.add(layers.SpatialDropout2D(conv_dropouts[i]))
-        if max_pool_sizes[i] > 1:
-            model.add(layers.MaxPooling2D(max_pool_sizes[i]))
-
-    # flatten
-    model.add(layers.Flatten())
+    args = [kernel_sizes, strides, batch_normalizations, conv_activations, conv_dropouts, max_pool_sizes, conv_l2coef]
+    
+    if conv_channels is not None:
+        for j,arg in enumerate(args):
+            if not isinstance(arg, list):
+                args[j] = [arg]*len(conv_channels)
+            elif len(arg) != len(conv_channels):
+                raise ValueError(f'Invalid length for argument {arg}')
+        logger.info(f'convolutional args = {args}')
+        kernel_sizes, strides, batch_normalizations, conv_activations, conv_dropouts, max_pool_sizes, conv_l2coef = args
+        # build the convolutional layers
+        for i in range(len(conv_channels)):
+            if conv_l2coef[i] is not None:
+                kernel_regularizer=tf.keras.regularizers.l2(conv_l2coef[i])
+            else:
+                kernel_regularizer=None
+            if i == 0:
+                model.add(layers.Conv2D(conv_channels[i], kernel_sizes[i],
+                        strides=strides[i], input_shape=input_shape,kernel_regularizer=kernel_regularizer))
+            else:
+                model.add(layers.Conv2D(conv_channels[i], kernel_sizes[i],
+                        strides=strides[i],kernel_regularizer=kernel_regularizer))
+            if batch_normalizations[i]:
+                model.add(layers.BatchNormalization())
+            model.add(layers.Activation(conv_activations[i]))
+            if conv_dropouts[i]:
+                model.add(layers.SpatialDropout2D(conv_dropouts[i]))
+            if max_pool_sizes[i] > 1:
+                model.add(layers.MaxPooling2D(max_pool_sizes[i]))
+        # flatten
+        model.add(layers.Flatten())
+    else: # if there are no convolutions the flatten is supposed to be input
+        model.add(layers.Flatten(input_shape=input_shape))
 
     # dense layers
     # adjust the shape of the arguments to be of the same length as conv_channels
-    args = [dense_activations, dense_dropouts]
+    args = [dense_activations, dense_dropouts, dense_l2coef]
     for j,arg in enumerate(args):
         if not isinstance(arg, list):
             args[j] = [arg]*len(dense_units)
         elif len(arg) != len(dense_units):
             raise ValueError(f'Invalid length for argument {arg}')
     logger.info(f'dense args = {args}')
-    dense_activations, dense_dropouts = args
+    dense_activations, dense_dropouts, dense_l2coef = args
     # build the dense layers
     for i in range(len(dense_units)):
-        model.add(layers.Dense(dense_units[i], activation=dense_activations[i]))
+        if dense_l2coef[i] is not None:
+            kernel_regularizer=tf.keras.regularizers.l2(dense_l2coef[i])
+        else:
+            kernel_regularizer=None
+        model.add(layers.Dense(dense_units[i], activation=dense_activations[i],kernel_regularizer=kernel_regularizer))
+        
         if dense_dropouts[i]:
             model.add(layers.Dropout(dense_dropouts[i]))
 
@@ -2905,6 +2933,7 @@ def deal_with_lock(**kwargs):
 
             # runs file (which will keep track of various runs performed in newly created folder)
             ut.dict2json({},f'{folder}/runs.json')
+            ut.dict2json(fields_infos, f'{folder}/fields_infos.json')
 
             return True
         else:

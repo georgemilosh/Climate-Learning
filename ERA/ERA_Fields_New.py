@@ -1492,9 +1492,15 @@ class Plasim_Field:
 
 
         logger.info(f'Opening field {self.name}')
+        
+        try:
+            self.datas = xr.open_dataset(ut.first_valid_path(self.mylocal,self.filename))
+            self.field = self.datas[name]
+        except KeyError:
+            logger.error(f'Unable to find key "{name}" among the provided fields {list(self.datas.keys())}')
+            raise KeyError
 
-        self.field = xr.open_dataset(ut.first_valid_path(self.mylocal,self.filename))[name]
-
+        self.field.data[np.isnan(self.field.data)] = 0 # The issue is that Francesco put a land mask on TAS.nc which has nan values on the sea. For machine learning purposes nan could be a problem
         self.field = discard_all_dimensions_but(self.field, dims_to_keep=['time', 'lon', 'lat'])
         
         self.field, yrs = monotonize_years(self.field)
@@ -1504,6 +1510,7 @@ class Plasim_Field:
 
         self.land_area_weights = get_lsm(self.mylocal,self.Model).sel(lat=self.field.lat, lon=self.field.lon)
         self.area_weights = get_cell_area(self.mylocal, self.Model).sel(lat=self.field.lat, lon=self.field.lon)
+        
         self.land_area_weights.data *= self.area_weights.data
         self.area_weights.data /= np.sum(self.area_weights.data)
         self.land_area_weights.data /= np.sum(self.land_area_weights.data)
@@ -1524,6 +1531,22 @@ class Plasim_Field:
         if year_list is not None:
             self.field = self.field.sel(time=self.field.time.dt.year.isin(year_list))
             self.years = len(year_list)
+    
+    @ut.execution_time
+    def sort_lat(self):
+        '''
+        Sorts the latitudes so that they always increase from the North Pole to the South Pole
+        This is done so that the latitude order be `Model` indepdendent
+        '''
+        _latitudes = self.field.lat
+        _latitudes_sorted = _latitudes.sortby(_latitudes, ascending=False)
+        if (_latitudes == _latitudes_sorted).all():
+            return
+        self.field = self.field.sel(lat=_latitudes_sorted)
+        self.area_weights = self.area_weights.sel(lat=self.field.lat)
+        self.land_area_weights = self.land_area_weights.sel(lat=self.field.lat)
+        if self.mask is not None:
+            self.mask = self.mask.sel(lat=self.field.lat)
 
     @ut.execution_time
     def select_lonlat(self, lat_start=None, lat_end=None, lon_start=None, lon_end=None):
@@ -2134,17 +2157,24 @@ def discard_all_dimensions_but(xa:xr.DataArray, dims_to_keep:list):
     xa = xa.drop(dims_to_drop)
     return xa
 
+# AL: These two functions maybe should also sort the latitudes? It doesn't seem necessary at the moment because we do .sel(field.lat) anyways... however it may be a weak point of the code for the future
 def get_lsm(mylocal,Model):
-    if Model != 'Plasim':
+    if Model == 'Plasim':
+        lsm = xr.open_dataset(ut.first_valid_path(mylocal, 'Data_Plasim_inter/CONTROL_lsmask.nc')).lsm
+    elif Model == 'CESM':
+        lsm = xr.open_dataset(ut.first_valid_path(mylocal, 'Data_CESM/CAM_landmask.nc')).landmask
+    else:
         raise NotImplementedError()
-    lsm = xr.open_dataset(ut.first_valid_path(mylocal, 'Data_Plasim_inter/CONTROL_lsmask.nc')).lsm
     lsm = discard_all_dimensions_but(lsm, ['lon', 'lat'])
     return lsm
 
 def get_cell_area(mylocal,Model):
-    if Model != 'Plasim':
+    if Model == 'Plasim':
+        cell_area = xr.open_dataset(ut.first_valid_path(mylocal, 'Data_Plasim_inter/CONTROL_gparea.nc')).cell_area
+    elif Model == 'CESM':
+        cell_area = xr.open_dataset(ut.first_valid_path(mylocal, 'Data_CESM/CAM_cellarea.nc')).cell_area
+    else:
         raise NotImplementedError()
-    cell_area = xr.open_dataset(ut.first_valid_path(mylocal, 'Data_Plasim_inter/CONTROL_gparea.nc')).cell_area
     cell_area = discard_all_dimensions_but(cell_area, ['lon', 'lat'])
     return cell_area
 
