@@ -471,7 +471,7 @@ def remove_args_at_default(run_args, config_dict_flat):
         _run_args[k] = new_args
     return _run_args
 
-def group_by_varying(run_args, variable='tau', config_dict_flat=None):
+def group_by_varying(run_args, variable='tau', config_dict_flat=None, sort=False):
     '''
     Groups a series of runs into sets where only `variable` varies and other parameters are shared inside the set
 
@@ -483,6 +483,8 @@ def group_by_varying(run_args, variable='tau', config_dict_flat=None):
         argument that varies inside each group, by default 'tau'
     config_dict_flat : dict, optional
         flattened config dictionary with the default values, by default None
+    sort: True, False or 'descending', optional
+        wether and how to sort the runs according to the variable, default False, i.e. no sorting, which means the runs will be in chronological order
 
     Returns
     -------
@@ -496,6 +498,8 @@ def group_by_varying(run_args, variable='tau', config_dict_flat=None):
     [{'args': {'percent': 5}, 'runs': ['1'], 'tau': [0]}, {'args': {'percent': 1}, 'runs': ['2', '3'], 'tau': [0, -5]}]
     >>> group_by_varying(run_args, 'percent')
     [{'args': {'tau': 0}, 'runs': ['1', '2'], 'percent': [5, 1]}, {'args': {'tau': -5}, 'runs': ['3'], 'percent': [1]}]
+    >>> group_by_varying(run_args, 'percent', sort=True)
+    [{'args': {'tau': 0}, 'runs': ['2', '1'], 'percent': [1, 5]}, {'args': {'tau': -5}, 'runs': ['3'], 'percent': [1]}]
     '''
     _run_args = deepcopy(run_args)
     # add default values for the varaible of interest
@@ -505,7 +509,7 @@ def group_by_varying(run_args, variable='tau', config_dict_flat=None):
                 args[variable] = config_dict_flat[variable]
     
     # find the groups
-    variable_dict = {k:v.pop(variable) for k,v in _run_args.items()} # move the variable to a separate dictionary removing it from the arguments in run_args
+    variable_dict = {k:v.pop(variable) for k,v in _run_args.items()} # move the variable to a separate dictionary removing it from the arguments in _run_args
 
     group_args = []
     group_runs = []
@@ -520,9 +524,19 @@ def group_by_varying(run_args, variable='tau', config_dict_flat=None):
     groups = []
     for i in range(len(group_args)):
         groups.append({'args': group_args[i], 'runs': group_runs[i], variable:[variable_dict[k] for k in group_runs[i]]})
+
+    if sort:
+        for g in groups:
+            isort = np.argsort(g[variable])
+            if sort == 'descending':
+                isort = isort[::-1]
+
+            g['runs'] = [g['runs'][i] for i in isort]
+            g[variable] = [g[variable][i] for i in isort]
+
     return groups
 
-def make_groups(runs, variable='tau', config_dict_flat=None):
+def make_groups(runs, variable='tau', config_dict_flat=None, sort=False):
     '''
     A wrapper of `group by varying` that allows to use directly the runs dictionary rather then needing to extract the run arguments
 
@@ -534,6 +548,8 @@ def make_groups(runs, variable='tau', config_dict_flat=None):
         argument that varies inside each group, by default 'tau'
     config_dict_flat : dict, optional
         flattened config dictionary with the default values, by default None
+    sort: True, False or 'descending', optional
+        wether and how to sort the runs according to the variable, default False, i.e. no sorting, which means the runs will be in chronological order
 
     Returns
     -------
@@ -542,10 +558,35 @@ def make_groups(runs, variable='tau', config_dict_flat=None):
         Each group is a dictionary with the same structure as the output of `group_by_varying` but the argument 'runs' contains the full run dictionary instead of just the run numbers
     '''
     run_args = {k:v['args'] for k,v in runs.items()}
-    groups = group_by_varying(run_args, variable=variable, config_dict_flat=config_dict_flat)
+    groups = group_by_varying(run_args, variable=variable, config_dict_flat=config_dict_flat, sort=sort)
     for g in groups:
         g['runs'] = [runs[k] for k in g['runs']]
     return groups
+
+def get_subset(runs, conditions, config_dict=None):
+    '''
+    Wrapper of `select_compatible` that allows to extract a subset of runs that satisfy certain conditions
+
+    Parameters
+    ----------
+    runs : dict
+        dictionary with the runs
+    conditions : dict
+        dictionary of run arguments that has to be contained in the arguments of a compatible run
+    config : dict or str, optional
+        if dict: config file
+        if str: path to the config file
+        If provided allows to beter check when a condition is at its default level, since it won't appear in the list of arguments of the run
+
+    Returns
+    -------
+    dict
+        subset of `runs`
+    '''
+    run_args = {k:v['args'] for k,v in runs.items()}
+    subset = select_compatible(run_args, conditions, require_unique=False, config_dict=config_dict)
+    subset = {k:runs[k] for k in subset}
+    return subset
 
 def get_run(load_from, current_run_name=None, runs_path='./runs.json'):
     '''
