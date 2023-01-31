@@ -105,7 +105,7 @@ level   name                events
                             Final score of k_fold_cross_val
                             Run pruned
 
-42                          Folder name of the run and progressive number among the scheduled runs
+42                          Folder name of the run
                             Single run completes
 
 44                          Non default arguments of the run
@@ -114,6 +114,8 @@ level   name                events
                             Tell number of scheduled runs
                             Skipping/rerunning already performed run
                             Average score of the run
+
+48                          Progressive number among the scheduled runs
 
 49                          All runs completed
 
@@ -2656,9 +2658,9 @@ class Trainer():
         logger.log(45, f"Starting {nruns} run{'' if nruns == 1 else 's'}")
         try:
             for i,kwargs in enumerate(self.scheduled_kwargs):
-                logger.log(42, f'Run {i+1}/{len(self.scheduled_kwargs)}')
+                logger.log(48, f'{HOSTNAME}: Run {i+1}/{nruns}')
                 self._run(**kwargs)
-            logger.log(49, '\n\n\n\n\n\nALL RUNS COMPLETED\n\n')
+            logger.log(49, f'{HOSTNAME}: \n\n\n\n\n\nALL RUNS COMPLETED\n\n')
         finally:
             # remove telegram logger
             if th is not None:
