@@ -1378,13 +1378,14 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
         dropout to be applied after the BatchNormalization layer. If 0 no dropout is applied
     max_pool_sizes : int or list of int, optional
         size of max pooling layer to be applied after dropout. If 0 no max pool is applied
+    conv_l2coef : list of floats which encodes the values of L2 regularizers in convolutional layers, optional, defaults to None
 
     dense_units : list of int, optional
         number of neurons for each fully connected layer
     dense_activations : str or list of str, optional
         activation functions after each fully connected layer
     dense_dropouts : float in [0,1] or list of floats in [0,1], optional
-    l2coef : list of floats which encodes the values of L2 regularizers in dense layers, optional
+    dense_l2coef : list of floats which encodes the values of L2 regularizers in dense layers, optional, defaults to None
 
     Returns
     -------
@@ -3026,12 +3027,12 @@ def main():
 
     trainer_kwargs = get_default_params(Trainer)
     trainer_kwargs.pop('config')
-    trainer_kwargs.pop('root_folder') # this two parameters cannot be changed
+    trainer_kwargs.pop('root_folder') # these two parameters cannot be changed
     for k in trainer_kwargs:
         if k in arg_dict:
             trainer_kwargs[k] = arg_dict.pop(k)
 
-    # check if we want to import the parameters from another run
+    # check if we want to import the parameters from another run (see usage description in the beginnig of this file)
     import_params_from = arg_dict.pop('import_params_from', None)
     if import_params_from is not None:
         runs = ut.json2dict('./runs.json')
