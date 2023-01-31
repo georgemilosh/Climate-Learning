@@ -584,7 +584,7 @@ def get_subset(runs, conditions, config_dict=None):
         subset of `runs`
     '''
     run_args = {k:v['args'] for k,v in runs.items()}
-    subset = select_compatible(run_args, conditions, require_unique=False, config_dict=config_dict)
+    subset = select_compatible(run_args, conditions, require_unique=False, config=config_dict)
     subset = {k:runs[k] for k in subset}
     return subset
 
