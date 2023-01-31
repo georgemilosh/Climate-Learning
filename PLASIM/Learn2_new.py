@@ -1295,7 +1295,9 @@ def undersample(X, Y, u=1, random_state=42):
     logger.info(f'number of training data before undersampling: {len(Y)} of which {n_neg_tr} negative and {n_pos_tr} positive')
     
     undersampling_strategy = n_pos_tr/(n_neg_tr/u)
-    if undersampling_strategy > 1: # you cannot undersample so much that the majority class becomes the minority one
+    # TODO #52 seems that this condition is restrictive. I don't see a reason why we need to limit the majority class to never be smaller@georgemilosh
+    # as indicated by Alessandro there could be problems if we tried to remove this valueerror
+    if undersampling_strategy > 1: # you cannot undersample so much that the majority class becomes the minority one 
         raise ValueError(f'Too high undersmapling factor, maximum for this dataset is u={n_neg_tr/n_pos_tr}')
     pipeline = Pipeline(steps=[('u', RandomUnderSampler(random_state=random_state, sampling_strategy=undersampling_strategy))])
     # reshape data to feed it to the pipeline
@@ -2908,7 +2910,9 @@ CONFIG_DICT = build_config_dict([Trainer.run, Trainer.telegram]) # module level 
 
 def deal_with_lock(**kwargs):
     '''
-    Checks if there is a lock and performs the necessary operations. **kwargs are passed to `move_to_folder`
+    Checks if there is a lock and moves the code to the folder parsed from the input as well as 
+    control json dictionaries such as `config.json`, `runs.json` and `fields_infos.json`.
+    **kwargs are passed to `move_to_folder`
 
     Returns
     -------
