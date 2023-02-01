@@ -8,17 +8,20 @@ usage
 First you need to move the code to a desired folder by running
     python hyperparameter_optimization.py <folder>
     
-This will copy this code and its dependencies to your desired location and will create a config file from the default values in the functions specified in this module (Just like for Learn2_new.py).
+This will copy this code and its dependencies to your desired location and will create a config file from the default
+values in the functions specified in this module (Just like for Learn2_new.py).
 
-`cd` into your folder and have a look at the config file, modify all the parameters you want BEFORE the first run, but AFTER the first successful run the config file becomes read-only. There is a reason for it, so don't try to modify it anyways!
+`cd` into your folder and have a look at the config file, modify all the parameters you want BEFORE the first run, 
+but AFTER the first successful run the config file becomes read-only. There is a reason for it, so don't try to modify it anyways!
 
 When running the code you can specify some parameters to deviate from their default value, for example running inside
     python hyperparameter_optimization.py n_trials=10
+
     
 will run the code with all parameters at their default values but `n_trials` will select 10 trials for optuna to optimize the hyperparameters with (optuna will only be given 10 runs in this case)
 Other parameters include:
     study_name: (string)
-        The name of the study which tells optuna how to call the file storing the trials
+        The name of the study which tells optuna how to call the file storing the trials. We recommend only one study per folder, otherwise the way optuna labels the runs (IDs) is not consistent with `runs.json`
     count_pruned: (bool)
         Whether optuna counts the runs which were pruned, i.e. the runs that were stopped because they looked not promising
         
@@ -68,43 +71,48 @@ class ScoreOptimizer():
 
         hyp = {}
 
-        lr = trial.suggest_float('lr', 1e-5, 1e-3, log=True) # learning rate
-        lr = literal_eval(f'{lr:.7f}') # limit the resolution of the learning rate
-        hyp['lr'] = lr
-        hyp['batch_size'] = trial.suggest_int('batch_size', 128, 2048, log=True)
-        """
+        #lr = trial.suggest_float('lr', 1e-5, 1e-3, log=True) # learning rate
+        #lr = literal_eval(f'{lr:.7f}') # limit the resolution of the learning rate
+        #hyp['lr'] = lr
+        #hyp['batch_size'] = trial.suggest_int('batch_size', 128, 2048, log=True)
         # convolutional layers
-        n_conv_layers = trial.suggest_int('n_conv_layers', 1, 4)
-        hyp['conv_channels'] = []
-        hyp['kernel_sizes'] = []
-        hyp['strides'] = []
+        #n_conv_layers = trial.suggest_int('n_conv_layers', 1, 4)
+        #hyp['conv_channels'] = []
+        #hyp['kernel_sizes'] = []
+        #hyp['strides'] = []
         hyp['batch_normalizations'] = []
         hyp['conv_dropouts'] = []
-        hyp['max_pool_sizes'] = []
+        #hyp['max_pool_sizes'] = []
         hyp['conv_l2coef'] = []
-        for i in range(n_conv_layers):
-            hyp['conv_channels'].append(trial.suggest_int(f'conv_channels_{i+1}', 8, 128))
-            hyp['kernel_sizes'].append(trial.suggest_int(f'kernel_sizes_{i+1}', 2, 10))
-            hyp['strides'].append(trial.suggest_int(f'strides_{i+1}', 1, hyp['kernel_sizes'][-1]))
+        conv_channels = ut.extract_nested(self.trainer.config_dict,'conv_channels')
+        for i in range(len(conv_channels)):
+        
+        #for i in range(n_conv_layers):
+            #hyp['conv_channels'].append(trial.suggest_int(f'conv_channels_{i+1}', 8, 128))
+            #hyp['kernel_sizes'].append(trial.suggest_int(f'kernel_sizes_{i+1}', 2, 10))
+            #hyp['strides'].append(trial.suggest_int(f'strides_{i+1}', 1, hyp['kernel_sizes'][-1]))
             hyp['batch_normalizations'].append(trial.suggest_categorical(f'batch_normalizations_{i+1}', [True, False]))
             hyp['conv_dropouts'].append(literal_eval(f"{trial.suggest_float(f'conv_dropouts_{i+1}', 0, 0.8, step=0.01):.2f}"))
-            hyp['max_pool_sizes'].append(trial.suggest_int(f'max_pool_sizes_{i+1}', 1, 4))
+            #hyp['max_pool_sizes'].append(trial.suggest_int(f'max_pool_sizes_{i+1}', 1, 4))
             hyp['conv_l2coef'].append(literal_eval(f"{trial.suggest_float(f'conv_l2coef_{i+1}', 1e-6, 1e6, log=True):.7f}"))
 
         # fully connected layers
-        n_dense_layers = trial.suggest_int('n_dense_layers', 1, 4)
+        #n_dense_layers = trial.suggest_int('n_dense_layers', 1, 4)
         hyp['dense_units'] = []
-        hyp['dense_activations'] = ['relu']*(n_dense_layers - 1) + [None]
+        #hyp['dense_activations'] = ['relu']*(n_dense_layers - 1) + [None]
         hyp['dense_dropouts'] = []
         hyp['dense_l2coef'] = []
-        for i in range(n_dense_layers - 1):
-            hyp['dense_units'].append(trial.suggest_int(f'dense_units_{i+1}', 8, 128))
+        
+        dense_units = ut.extract_nested(self.trainer.config_dict,'dense_units')
+        for i in range(len(dense_units)):
+        
+        #for i in range(n_dense_layers - 1):
+            #hyp['dense_units'].append(trial.suggest_int(f'dense_units_{i+1}', 8, 128))
             hyp['dense_dropouts'].append(literal_eval(f"{trial.suggest_float(f'dense_dropouts_{i+1}', 0, 0.8, step=0.01):.2f}"))
             hyp['dense_l2coef'].append(literal_eval(f"{trial.suggest_float(f'dense_l2coef_{i+1}', 1e-6, 1e6, log=True):.7f}"))
         hyp['dense_units'].append(2)
         hyp['dense_dropouts'].append(False)
         
-        """
 
         # remove arguments that remained empty lists (this facilitates commenting lines to remove kwargs to optimize)
         kw_to_remove = []
@@ -173,16 +181,16 @@ def main():
 
     arg_dict = ln.parse_command_line()
 
-    trainer_kwargs = ln.get_default_params(ln.Trainer)
+    trainer_kwargs = ln.get_default_params(ln.Trainer) # extract default parameters for Trainer class
     trainer_kwargs.pop('config')
     trainer_kwargs.pop('root_folder') # this two parameters cannot be changed
     trainer_kwargs['upon_failed_run'] = 'continue'
     for k in arg_dict:
         if k in trainer_kwargs:
-            trainer_kwargs[k] = arg_dict.pop(k)
+            trainer_kwargs[k] = arg_dict.pop(k) # add kwargs parsed from the input to hyperparameter_optimization.py
 
     # create trainer
-    trainer = ln.Trainer(config='./config.json', **trainer_kwargs)
+    trainer = ln.Trainer(config='./config.json', **trainer_kwargs) #create Trainer class based on `config.json` and trainer_kwargs supplied above
 
     # deal with telegram kwargs
     for k in trainer.telegram_kwargs:
