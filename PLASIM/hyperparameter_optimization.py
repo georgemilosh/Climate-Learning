@@ -70,49 +70,98 @@ class ScoreOptimizer():
         #### select hyperparameters ####
 
         hyp = {}
-
-        #lr = trial.suggest_float('lr', 1e-5, 1e-3, log=True) # learning rate
-        #lr = literal_eval(f'{lr:.7f}') # limit the resolution of the learning rate
-        #hyp['lr'] = lr
-        #hyp['batch_size'] = trial.suggest_int('batch_size', 128, 2048, log=True)
-        # convolutional layers
-        #n_conv_layers = trial.suggest_int('n_conv_layers', 1, 4)
-        #hyp['conv_channels'] = []
-        #hyp['kernel_sizes'] = []
-        #hyp['strides'] = []
+        # oncomment a portion of the code which you would like to engage for optimization
+        """ # optimizing learning rate and batch size:
+        lr = trial.suggest_float('lr', 1e-5, 1e-3, log=True) # learning rate
+        lr = literal_eval(f'{lr:.7f}') # limit the resolution of the learning rate
+        hyp['lr'] = lr
+        hyp['batch_size'] = trial.suggest_int('batch_size', 128, 2048, log=True)
+        """
+        
+        """ # optimizing batch normalization, l2 coefs and dropouts layerwise:
         hyp['batch_normalizations'] = []
         hyp['conv_dropouts'] = []
-        #hyp['max_pool_sizes'] = []
         hyp['conv_l2coef'] = []
         conv_channels = ut.extract_nested(self.trainer.config_dict,'conv_channels')
         for i in range(len(conv_channels)):
-        
-        #for i in range(n_conv_layers):
-            #hyp['conv_channels'].append(trial.suggest_int(f'conv_channels_{i+1}', 8, 128))
-            #hyp['kernel_sizes'].append(trial.suggest_int(f'kernel_sizes_{i+1}', 2, 10))
-            #hyp['strides'].append(trial.suggest_int(f'strides_{i+1}', 1, hyp['kernel_sizes'][-1]))
-            hyp['batch_normalizations'].append(trial.suggest_categorical(f'batch_normalizations_{i+1}', [True, False]))
+        hyp['batch_normalizations'].append(trial.suggest_categorical(f'batch_normalizations_{i+1}', [True, False]))
             hyp['conv_dropouts'].append(literal_eval(f"{trial.suggest_float(f'conv_dropouts_{i+1}', 0, 0.8, step=0.01):.2f}"))
-            #hyp['max_pool_sizes'].append(trial.suggest_int(f'max_pool_sizes_{i+1}', 1, 4))
             hyp['conv_l2coef'].append(literal_eval(f"{trial.suggest_float(f'conv_l2coef_{i+1}', 1e-6, 1e6, log=True):.7f}"))
-
-        # fully connected layers
-        #n_dense_layers = trial.suggest_int('n_dense_layers', 1, 4)
+            hyp['conv_l2coef'].append(literal_eval(f"{trial.suggest_float(f'conv_l2coef_{i+1}', 1e-6, 1e6, log=True):.7f}"))
+        
         hyp['dense_units'] = []
-        #hyp['dense_activations'] = ['relu']*(n_dense_layers - 1) + [None]
         hyp['dense_dropouts'] = []
         hyp['dense_l2coef'] = []
         
-        dense_units = ut.extract_nested(self.trainer.config_dict,'dense_units')
-        for i in range(len(dense_units)):
-        
-        #for i in range(n_dense_layers - 1):
-            #hyp['dense_units'].append(trial.suggest_int(f'dense_units_{i+1}', 8, 128))
+        ense_units = ut.extract_nested(self.trainer.config_dict,'dense_units')
+        for i in range(len(dense_units)-1):
             hyp['dense_dropouts'].append(literal_eval(f"{trial.suggest_float(f'dense_dropouts_{i+1}', 0, 0.8, step=0.01):.2f}"))
             hyp['dense_l2coef'].append(literal_eval(f"{trial.suggest_float(f'dense_l2coef_{i+1}', 1e-6, 1e6, log=True):.7f}"))
         hyp['dense_units'].append(2)
         hyp['dense_dropouts'].append(False)
+        """
         
+        """ # t2 of alessandro lovo
+        lr = trial.suggest_float('lr', 1e-5, 1e-3, log=True) # learning rate
+        lr = literal_eval(f'{lr:.7f}') # limit the resolution of the learning rate
+        hyp['lr'] = lr
+        hyp['batch_size'] = trial.suggest_int('batch_size', 128, 2048, log=True)
+
+        # convolutional layers
+        n_conv_layers = trial.suggest_int('n_conv_layers', 1, 4)
+        hyp['conv_channels'] = []
+        hyp['kernel_sizes'] = []
+        hyp['strides'] = []
+        hyp['batch_normalizations'] = []
+        hyp['conv_dropouts'] = []
+        hyp['max_pool_sizes'] = []
+        for i in range(n_conv_layers):
+            hyp['conv_channels'].append(trial.suggest_int(f'conv_channels_{i+1}', 8, 128))
+            hyp['kernel_sizes'].append(trial.suggest_int(f'kernel_sizes_{i+1}', 2, 10))
+            hyp['strides'].append(trial.suggest_int(f'strides_{i+1}', 1, hyp['kernel_sizes'][-1]))
+            hyp['batch_normalizations'].append(trial.suggest_categorical(f'batch_normalizations_{i+1}', [True, False]))
+            hyp['conv_dropouts'].append(trial.suggest_float(f'conv_dropouts_{i+1}', 0, 0.8, step=0.01))
+            hyp['max_pool_sizes'].append(trial.suggest_int(f'max_pool_sizes_{i+1}', 1, 4))
+
+        # fully connected layers
+        n_dense_layers = trial.suggest_int('n_dense_layers', 1, 4)
+        hyp['dense_units'] = []
+        hyp['dense_activations'] = ['relu']*(n_dense_layers - 1) + [None]
+        hyp['dense_dropouts'] = []
+        for i in range(n_dense_layers - 1):
+            hyp['dense_units'].append(trial.suggest_int(f'dense_units_{i+1}', 8, 128))
+            hyp['dense_dropouts'].append(trial.suggest_float(f'dense_dropouts_{i+1}', 0, 0.8, step=0.01))
+        hyp['dense_units'].append(2)
+        hyp['dense_dropouts'].append(False)
+        """
+        
+        # Optimizing layerwise batchnormalization dropouts and weight decay
+        hyp['batch_normalizations'] = []
+        hyp['conv_dropouts'] = []
+        hyp['conv_l2coef'] = []
+        unique_layers = False # controls whether to reuse the same value for each layer
+        conv_channels = ut.extract_nested(self.trainer.config_dict,'conv_channels')
+        for i in range(len(conv_channels)):
+            if unique_layers or i == 0:
+                batch_normalizations_trial = trial.suggest_categorical(f'batch_normalizations_{i+1}', [True, False])
+                conv_dropouts_trial = literal_eval(f"{trial.suggest_float(f'conv_dropouts_{i+1}', 0, 0.8, step=0.01):.2f}")
+                conv_l2coef_trial = literal_eval(f"{trial.suggest_float(f'conv_l2coef_{i+1}', 1e-6, 1e6, log=True):.7f}")
+            hyp['batch_normalizations'].append(batch_normalizations_trial)
+            hyp['conv_dropouts'].append(conv_dropouts_trial)
+            hyp['conv_l2coef'].append(conv_l2coef_trial)
+
+        hyp['dense_dropouts'] = []
+        hyp['dense_l2coef'] = []
+        
+        dense_units = ut.extract_nested(self.trainer.config_dict,'dense_units')
+        for i in range(len(dense_units)-1):
+            if unique_layers or i == 0:
+                dense_dropouts_trial = literal_eval(f"{trial.suggest_float(f'dense_dropouts_{i+1}', 0, 0.8, step=0.01):.2f}")
+                dense_l2coef_trial = literal_eval(f"{trial.suggest_float(f'dense_l2coef_{i+1}', 1e-6, 1e6, log=True):.7f}")
+            hyp['dense_dropouts'].append(dense_dropouts_trial)
+            hyp['dense_l2coef'].append(dense_l2coef_trial)
+        hyp['dense_dropouts'].append(None)
+        hyp['dense_l2coef'].append(None)
 
         # remove arguments that remained empty lists (this facilitates commenting lines to remove kwargs to optimize)
         kw_to_remove = []
