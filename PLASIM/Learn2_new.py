@@ -2829,7 +2829,7 @@ class Trainer():
 
         # get run number
         run_id = str(len(runs))
-
+        # TODO #55 it would be convenient to call a function here that tests if the provided architecture would result in a valid neural network, thus avoiding waiting for the data to be loaded for no reason
         # create run name from kwargs
         folder = make_run_name(run_id, **kwargs)
 
