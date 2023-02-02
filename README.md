@@ -22,6 +22,16 @@ Because the events are rare we pursue importance sampling that can be achieved b
 
 ## User guide
 
+
+- To install the repo to your local space you need to execute commands:
+'''
+    git clone git@github.com:georgemilosh/Climate-Learning.git
+'''
+- This repo links to a submodule repo which can be installed by commands like
+'''
+    git submodule init
+    git submodule update
+'''
 - To install the relevant packages run `setup.sh` that is included
 - To see how to work with our routines (such as working with data and training neural networks) consult `Plasim/tutorial.ipynb`
 - tbd: describe the datasets
