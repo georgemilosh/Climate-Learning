@@ -29,27 +29,35 @@ echo "Installing jupyter kernel"
 conda install -y ipykernel
 ipython kernel install --user --name="$kernel_name"
 
+# ==== If you would like to have fancy widgets uncomment the lines below ===
 # install jupyter nbextensions
-conda install -c conda-forge -y jupyter_contrib_nbextensions
-jupyter contrib nbextension install --user
+#conda install -c conda-forge -y jupyter_contrib_nbextensions
+#jupyter contrib nbextension install --user
 
 # install jupyter widgets
-conda install -c conda-forge -y ipywidgets ipympl
-jupyter nbextension enable --py widgetsnbextension
+#conda install -c conda-forge -y ipywidgets ipympl
+#jupyter nbextension enable --py widgetsnbextension
 
 # install jupyter lab
-conda install -c conda-forge -y jupyterlab
+#conda install -c conda-forge -y jupyterlab
 
 # install jupyther themes
-conda install -c conda-forge -y jupyterthemes
+#conda install -c conda-forge -y jupyterthemes
+# ======== up to here ======================================================
 
-echo "Installing packages"
+echo "Installing necessary packages"
 
 echo "Geoscience packages"
 conda install -c conda-forge -y xarray netcdf4 scipy cartopy cmocean
 
 echo "Machine Learning packages"
-conda install -c conda-forge -y tensorflow tensorflow-gpu scikit-learn scikit-image imbalanced-learn
+# if you plain to run this on cpu uncomment:
+# conda install -c conda-forge -y tensorflow
+# and comment out the following:
+conda install -c conda-forge -y tensorflow-gpu=2.6 # at the moment our scripts work only up to this version
+# the rest is ok
+
+conda install -c conda-forge -y scikit-learn scikit-image imbalanced-learn
 
 echo "Additional packages"
 conda install -c conda-forge -y plotly tqdm uncertainties #lmfit optuna
