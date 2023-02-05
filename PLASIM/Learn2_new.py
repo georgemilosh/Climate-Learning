@@ -1356,7 +1356,7 @@ def undersample(X, Y, u=1, random_state=42):
 ########## NEURAL NETWORK DEFINITION ###########
 ################################################
 
-def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=1,
+def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=1, padding='valid',
                  batch_normalizations=True, conv_activations='relu', conv_dropouts=0.2, max_pool_sizes=[2,2,False], conv_l2coef=None,
                  dense_units=[64,2], dense_activations=['relu', None], dense_dropouts=[0.2,False], dense_l2coef=None):
     '''
@@ -1372,6 +1372,9 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
         If list must be of the same size of `conv_channels`
     strides : int, 2-tuple or list of ints or 2-tuples, optional
         same as kernel_sizes
+    padding : string, optional defaults to 'valid'
+        one of "valid" or "same" (case-insensitive). "valid" means no padding. "same" results in padding with zeros evenly to 
+        the left/right or up/down of the input. When padding="same" and strides=1, the output has the same size as the input
     batch_normalizations : bool or list of bools, optional
         whether to add a BatchNormalization layer after each Conv2D layer
     conv_activations : str or list of str, optional
@@ -1397,16 +1400,16 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
 
     # convolutional layers
     # adjust the shape of the arguments to be of the same length as conv_channels
-    args = [kernel_sizes, strides, batch_normalizations, conv_activations, conv_dropouts, max_pool_sizes, conv_l2coef]
-    
+    args = [kernel_sizes, strides, batch_normalizations, conv_activations, conv_dropouts, max_pool_sizes, conv_l2coef, padding]
+    logger.info(f'{args = }')
     if conv_channels is not None:
         for j,arg in enumerate(args):
             if not isinstance(arg, list):
                 args[j] = [arg]*len(conv_channels)
             elif len(arg) != len(conv_channels):
-                raise ValueError(f'Invalid length for argument {arg}')
+                raise ValueError(f'Invalid length for argument {arg = } when compared with {conv_channels = }')
         logger.info(f'convolutional args = {args}')
-        kernel_sizes, strides, batch_normalizations, conv_activations, conv_dropouts, max_pool_sizes, conv_l2coef = args
+        kernel_sizes, strides, batch_normalizations, conv_activations, conv_dropouts, max_pool_sizes, conv_l2coef, padding = args
         # build the convolutional layers
         for i in range(len(conv_channels)):
             if conv_l2coef[i] is not None:
@@ -1415,17 +1418,18 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
                 kernel_regularizer=None
             if i == 0:
                 model.add(layers.Conv2D(conv_channels[i], kernel_sizes[i],
-                        strides=strides[i], input_shape=input_shape,kernel_regularizer=kernel_regularizer))
+                        strides=strides[i], input_shape=input_shape, padding=padding[i], kernel_regularizer=kernel_regularizer))
             else:
                 model.add(layers.Conv2D(conv_channels[i], kernel_sizes[i],
-                        strides=strides[i],kernel_regularizer=kernel_regularizer))
+                        strides=strides[i], padding=padding[i],kernel_regularizer=kernel_regularizer))
             if batch_normalizations[i]:
                 model.add(layers.BatchNormalization())
             model.add(layers.Activation(conv_activations[i]))
             if conv_dropouts[i]:
                 model.add(layers.SpatialDropout2D(conv_dropouts[i]))
-            if max_pool_sizes[i] > 1:
-                model.add(layers.MaxPooling2D(max_pool_sizes[i]))
+            if max_pool_sizes[i] is not None:
+                if max_pool_sizes[i] > 1:
+                    model.add(layers.MaxPooling2D(max_pool_sizes[i]))
         # flatten
         model.add(layers.Flatten())
     else: # if there are no convolutions the flatten is supposed to be input
@@ -1438,7 +1442,7 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
         if not isinstance(arg, list):
             args[j] = [arg]*len(dense_units)
         elif len(arg) != len(dense_units):
-            raise ValueError(f'Invalid length for argument {arg}')
+            raise ValueError(f'Invalid length for argument {arg = } when compared with {dense_units = }')
     logger.info(f'dense args = {args}')
     dense_activations, dense_dropouts, dense_l2coef = args
     # build the dense layers

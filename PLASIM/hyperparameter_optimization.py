@@ -101,41 +101,55 @@ class ScoreOptimizer():
         hyp['dense_dropouts'].append(False)
         """
         
-        """ # t2 of alessandro lovo
-        lr = trial.suggest_float('lr', 1e-5, 1e-3, log=True) # learning rate
-        lr = literal_eval(f'{lr:.7f}') # limit the resolution of the learning rate
-        hyp['lr'] = lr
-        hyp['batch_size'] = trial.suggest_int('batch_size', 128, 2048, log=True)
 
-        # convolutional layers
-        n_conv_layers = trial.suggest_int('n_conv_layers', 1, 4)
+        # Optimizing number of layers, kernel sizes, strides and dense units
+        n_conv_layers = trial.suggest_int('n_conv_layers', 1, 6)
         hyp['conv_channels'] = []
         hyp['kernel_sizes'] = []
         hyp['strides'] = []
-        hyp['batch_normalizations'] = []
-        hyp['conv_dropouts'] = []
-        hyp['max_pool_sizes'] = []
+        hyp['padding'] = ['same']*(n_conv_layers - 1) + ['valid']
         for i in range(n_conv_layers):
-            hyp['conv_channels'].append(trial.suggest_int(f'conv_channels_{i+1}', 8, 128))
+            hyp['conv_channels'].append(trial.suggest_int(f'conv_channels_{i+1}', 32, 128))
             hyp['kernel_sizes'].append(trial.suggest_int(f'kernel_sizes_{i+1}', 2, 10))
-            hyp['strides'].append(trial.suggest_int(f'strides_{i+1}', 1, hyp['kernel_sizes'][-1]))
-            hyp['batch_normalizations'].append(trial.suggest_categorical(f'batch_normalizations_{i+1}', [True, False]))
-            hyp['conv_dropouts'].append(trial.suggest_float(f'conv_dropouts_{i+1}', 0, 0.8, step=0.01))
-            hyp['max_pool_sizes'].append(trial.suggest_int(f'max_pool_sizes_{i+1}', 1, 4))
+            hyp['strides'].append(trial.suggest_int(f'strides_{i+1}', 1, 2))
 
         # fully connected layers
-        n_dense_layers = trial.suggest_int('n_dense_layers', 1, 4)
+        n_dense_layers = trial.suggest_int('n_dense_layers', 1, 3)
         hyp['dense_units'] = []
+        hyp['dense_dropouts'] = [0.3]*(n_dense_layers - 1) + [None]
         hyp['dense_activations'] = ['relu']*(n_dense_layers - 1) + [None]
-        hyp['dense_dropouts'] = []
+        hyp['dense_l2coef'] = [0.001]*(n_dense_layers - 1) + [None]
         for i in range(n_dense_layers - 1):
             hyp['dense_units'].append(trial.suggest_int(f'dense_units_{i+1}', 8, 128))
-            hyp['dense_dropouts'].append(trial.suggest_float(f'dense_dropouts_{i+1}', 0, 0.8, step=0.01))
         hyp['dense_units'].append(2)
-        hyp['dense_dropouts'].append(False)
-        """
         
-        # Optimizing layerwise batchnormalization dropouts and weight decay
+        """# Optimizing filter sizes, kernel sizes, activation functions
+        unique_layers = False # controls whether to reuse the same value for each layer
+        hyp['conv_channels'] = []
+        hyp['kernel_sizes'] = []
+        hyp['conv_activations'] = []
+        for i in range(3):
+            if unique_layers or i == 0:
+                conv_channels = trial.suggest_int(f'conv_channels_{i+1}', 8, 256)
+                kernel_sizes = trial.suggest_int(f'kernel_sizes_{i+1}', 2, 10)
+                conv_activations = trial.suggest_categorical(f'conv_activations_{i+1}', ['relu', 'elu'])
+            hyp['conv_channels'].append(conv_channels)
+            hyp['kernel_sizes'].append(kernel_sizes)
+            hyp['conv_activations'].append(conv_activations)
+        
+        hyp['dense_units'] = []
+        hyp['dense_dropouts'] = []
+        hyp['dense_activations'] = []
+        for i in range(2-1):
+            if unique_layers or i == 0:
+                dense_units = trial.suggest_int(f'dense_units_{i+1}', 8, 256)
+                dense_activations = trial.suggest_categorical(f'dense_activations_{i+1}', ['relu', 'elu'])
+            hyp['dense_units'].append(dense_units)
+            hyp['dense_activations'].append(dense_activations)
+        hyp['dense_units'].append(2)
+        hyp['dense_activations'].append(None)"""
+        
+        """# Optimizing layerwise batchnormalization dropouts and weight decay
         hyp['batch_normalizations'] = []
         hyp['conv_dropouts'] = []
         hyp['conv_l2coef'] = []
@@ -161,7 +175,7 @@ class ScoreOptimizer():
             hyp['dense_dropouts'].append(dense_dropouts_trial)
             hyp['dense_l2coef'].append(dense_l2coef_trial)
         hyp['dense_dropouts'].append(None)
-        hyp['dense_l2coef'].append(None)
+        hyp['dense_l2coef'].append(None)"""
 
         # remove arguments that remained empty lists (this facilitates commenting lines to remove kwargs to optimize)
         kw_to_remove = []
