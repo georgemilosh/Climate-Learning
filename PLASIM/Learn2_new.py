@@ -144,6 +144,8 @@ import logging
 from uncertainties import ufloat
 from functools import wraps
 import socket
+from functools import partial # this one we use for the scheduler
+
 
 if __name__ == '__main__':
     logger = logging.getLogger()
@@ -1462,6 +1464,46 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
 ###### TRAINING THE NETWORK ############
 ########################################
 
+
+def scheduler(epoch, lr=5e-4, epoch_tol=None, warmup=False, lr_min=5e-4, decay=0.1):
+    '''
+    If `warmup`=False this function keeps the initial learning rate for the first `epoch_tol` epochs
+      and decreases it exponentially after that.
+    If `warmup`=True starts with 0 learning rate and increases it until we reach epoch_tol
+    Parameters
+    ----------
+    epoch_tol: int
+        epoch until which we apply flat lr learning rate, if None learning rate will be fixed
+    lr: float
+        base learning rate
+    lr_min: float
+        minimal learning rate we are supposed to reach asymptotically
+    decay: float
+        the parameter which defines how quickly our learning rate decays
+  '''
+    if epoch_tol is None:
+        return lr
+    elif epoch < epoch_tol:
+        if warmup: # we assume linearly increasing learning rate
+            return lr*epoch/epoch_tol
+        else:
+            return lr
+    else:
+        new_lr = lr*tf.math.exp(-decay*(epoch-epoch_tol+1))
+        if new_lr < lr_min:
+            new_lr = lr_min
+        return new_lr
+
+
+class PrintLR(tf.keras.callbacks.Callback):
+    '''
+        Prints learning rate given the input model
+    '''
+    def __init__(self, model):
+        self.model = model
+    def on_epoch_end(self, epoch, logs=None):
+        logger.info('\nLearning rate for epoch {} is {}'.format(        epoch + 1, self.model.optimizer.lr.numpy()))
+
 def early_stopping(monitor='val_CustomLoss', min_delta=0, patience=0, mode='auto'):
     '''
     Creates an early stopping callback
@@ -1544,7 +1586,7 @@ def make_checkpoint_callback(file_path, checkpoint_every=1):
 
 @ut.execution_time
 @ut.indent_logger(logger)
-def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics, early_stopping_kwargs=None, enable_early_stopping=False,
+def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics, early_stopping_kwargs=None, enable_early_stopping=False, scheduler_kwargs=None,
                 u=1, batch_size=1024, checkpoint_every=1, additional_callbacks=['csv_logger'], return_metric='val_CustomLoss'):
     '''
     Trains a given model checkpointing its weights
@@ -1567,6 +1609,8 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     optimizer : keras.Optimizer object
     loss : keras.losses.Loss object
     metrics : list of keras.metrics.Metric or str
+    scheduler_kwargs: dict
+        arguments which define the behavior of the learning rate schedule.
     early_stopping_kwargs : dict
         arguments to create the early stopping callback. Ignored if `enable_early_stopping` = False
     enable_early_stopping : bool, optional
@@ -1600,6 +1644,8 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
 
     ## deal with callbacks
     callbacks = []
+    
+    
 
     # additional callbacks
     if additional_callbacks is not None:
@@ -1625,6 +1671,16 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
             enable_early_stopping = False
         else:
             callbacks.append(early_stopping(**early_stopping_kwargs))
+            
+     
+    if scheduler_kwargs is None:
+        scheduler_kwargs = {}
+    logger.info(f"{scheduler_kwargs = }")
+    #cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=ckpt_path_callback,save_weights_only=True,verbose=1)
+    scheduler_callback = tf.keras.callbacks.LearningRateScheduler(partial(scheduler, **scheduler_kwargs)) 
+    callbacks.append(scheduler_callback)
+    callbacks.append(PrintLR(**dict(model=model))) # print learning rate in the terminal
+    #callbacks.append(TerminateOnNaN()) # fail during training on NaN loss
 
     ### training the model
     ######################
@@ -1890,7 +1946,7 @@ def load_model(checkpoint, compile=False):
 @ut.execution_time
 @ut.indent_logger(logger)
 def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=None, optimal_checkpoint_kwargs=None, load_from='last', nfolds=10, val_folds=1, u=1, normalization_mode='pointwise',
-                     fullmetrics=True, training_epochs=40, training_epochs_tl=10, loss='sparse_categorical_crossentropy', lr=1e-4, prune_threshold=None, min_folds_before_pruning=None):
+                     fullmetrics=True, training_epochs=40, training_epochs_tl=10, loss='sparse_categorical_crossentropy', prune_threshold=None, min_folds_before_pruning=None):
     '''
     Performs k fold cross validation on a model architecture.
 
@@ -1939,8 +1995,6 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
         loss function to minimize, by default 'sparse_categorical_crossentropy'
         another possibility is 'unbiased_crossentropy',
         which will unbias the logits with the undersampling factor and then proceeds with the sparse_categorical_crossentropy
-    lr : float, optional
-        learning_rate for Adam optimizer
 
     prune_threshold : float, optional
         if the average score in the first `min_folds_before_pruning` is above `prune_threshold`, the run is pruned.
@@ -2042,7 +2096,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
                 metrics=['loss']
 
         # optimizer
-        optimizer = train_model_kwargs.pop('optimizer',keras.optimizers.Adam(learning_rate=lr)) # if optimizer is not provided in train_model_kwargs use Adam
+        optimizer = train_model_kwargs.pop('optimizer',keras.optimizers.Adam()) # if optimizer is not provided in train_model_kwargs use Adam
         # loss function
         loss_fn = train_model_kwargs.pop('loss',None)
         if loss_fn is None:

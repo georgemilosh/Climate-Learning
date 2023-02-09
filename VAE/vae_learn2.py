@@ -582,7 +582,7 @@ def k_fold_cross_val(folder, myinput, mask, X, Y, time_series, year_permutation,
 
 def scheduler(epoch, lr=5e-4, epoch_tol=None, lr_min=5e-4):
     '''
-    This function keeps the initial learning rate for the first ten epochs
+    This function keeps the initial learning rate for the first `epoch_tol` epochs
       and decreases it exponentially after that.
     Parameters
     ----------
