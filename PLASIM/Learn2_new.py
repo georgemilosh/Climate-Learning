@@ -1963,6 +1963,29 @@ def load_model(checkpoint, compile=False):
     model.load_weights(checkpoint)
     return model
 
+def get_loss_function(loss_name: str, u=1):
+    loss_name = loss_name.lower()
+    if loss_name.startswith('unbiased'):
+        return tff.UnbiasedCrossentropyLoss(undersampling_factor=u)
+    elif 'crossentropy' in loss_name:
+        return keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+    else:
+        raise ValueError(f'Could not parse {loss_name = }')
+    
+def get_default_metrics(fullmetrics=False, u=1):
+    if fullmetrics:
+        tf_sampling = tf.cast([0.5*np.log(u), -0.5*np.log(u)], tf.float32) # Debiasor of logits (this translates into debiasing the probabilities)
+        metrics=[
+            'accuracy',
+            tff.MCCMetric(undersampling_factor=1),
+            tff.MCCMetric(undersampling_factor=u, name='UnbiasedMCC'),
+            tff.ConfusionMatrixMetric(2, undersampling_factor=u),
+            tff.BrierScoreMetric(undersampling_factor=u),
+            tff.CustomLoss(tf_sampling)
+        ]# the last two make the code run longer but give precise discrete prediction benchmarks
+    else:
+        metrics=['loss']
+    return metrics
 
 @ut.execution_time
 @ut.indent_logger(logger)
@@ -2101,30 +2124,16 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
                 num_epochs = training_epochs_tl
 
         # metrics
-        tf_sampling = tf.cast([0.5*np.log(u), -0.5*np.log(u)], tf.float32) # Debiasor of logits (this translates into debiasing the probabilities)
         metrics = train_model_kwargs.pop('metrics', None)
         if metrics is None:
-            if fullmetrics:
-                metrics=[
-                    'accuracy',
-                    tff.MCCMetric(undersampling_factor=1),
-                    tff.MCCMetric(undersampling_factor=u, name='UnbiasedMCC'),
-                    tff.ConfusionMatrixMetric(2, undersampling_factor=u),
-                    tff.BrierScoreMetric(undersampling_factor=u),
-                    tff.CustomLoss(tf_sampling)
-                ]# the last two make the code run longer but give precise discrete prediction benchmarks
-            else:
-                metrics=['loss']
+            metrics = get_default_metrics(fullmetrics, u=u)
 
         # optimizer
         optimizer = train_model_kwargs.pop('optimizer',keras.optimizers.Adam()) # if optimizer is not provided in train_model_kwargs use Adam
         # loss function
         loss_fn = train_model_kwargs.pop('loss',None)
         if loss_fn is None:
-            if loss.startswith('unbiased'):
-                loss_fn = tff.UnbiasedCrossentropyLoss(undersampling_factor=u)
-            else:
-                loss_fn = keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+            loss_fn = get_loss_function(loss, u=u)
         logger.info(f'Using {loss_fn.name} loss')
 
 

@@ -22,7 +22,6 @@ Because the events are rare we pursue importance sampling that can be achieved b
 
 ## User guide
 
-
 - To install the repo to your local space you need to execute:
 ```
     git clone --recursive git@github.com:georgemilosh/Climate-Learning.git
@@ -39,6 +38,17 @@ Because the events are rare we pursue importance sampling that can be achieved b
 - To see how to work with our routines (such as working with data and training neural networks) consult `Plasim/tutorial.ipynb`
 - tbd: describe the datasets
 
-```
+<!-- ```
 import tensorflow as tf
-```
+``` -->
+
+### Customization
+
+One of the big advantages of this repository is that it easily supports customization.
+
+The simplest way is to `import Learn2_new as ln` and then simply use the features that you need. But this is hardly customization.
+
+The second option is to leverage the full potential of the code by changing only some of its functions. Examples of this are [gaussian_approx](PLASIM/gaussian_approx.py), [committor_projection_NN](PLASIM/committor_projection_NN.py) or [hyperparameter_optimization](PLASIM/hyperparameter_optimization.py).
+These modules _inherit_ from `Learn2_new`.
+
+A template for how to properly implement this inheritance is available [here](PLASIM/inheritance_template.py)
