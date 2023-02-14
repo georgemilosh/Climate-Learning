@@ -71,12 +71,18 @@ class ScoreOptimizer():
 
         hyp = {}
         # oncomment a portion of the code which you would like to engage for optimization
-        """ # optimizing learning rate and batch size:
-        lr = trial.suggest_float('lr', 1e-5, 1e-3, log=True) # learning rate
+        # optimizing learning rate and batch size:
+        lr = trial.suggest_float('lr', 1e-5, 1e-2, log=True) # learning rate
         lr = literal_eval(f'{lr:.7f}') # limit the resolution of the learning rate
+        lr_min = trial.suggest_float('lr_min', 1e-7, lr, log=True) 
+        lr_min = literal_eval(f'{lr_min:.7f}') 
         hyp['lr'] = lr
-        hyp['batch_size'] = trial.suggest_int('batch_size', 128, 2048, log=True)
-        """
+        hyp['lr_min'] = lr_min
+        hyp['epoch_tol'] =  trial.suggest_int('epoch_tol', 1, 5)
+        hyp['decay'] = (literal_eval(f"{trial.suggest_float(f'decay', 0.01, 1, log=True):.05f}"))
+        hyp['warmup'] = trial.suggest_categorical(f'warmup', [True, False])
+        #hyp['batch_size'] = trial.suggest_int('batch_size', 128, 2048, log=True)
+        
         
         """ # optimizing batch normalization, l2 coefs and dropouts layerwise:
         hyp['batch_normalizations'] = []
@@ -102,7 +108,7 @@ class ScoreOptimizer():
         """
         
 
-        # Optimizing number of layers, kernel sizes, strides and dense units
+        """# Optimizing number of layers, kernel sizes, strides and dense units
         n_conv_layers = trial.suggest_int('n_conv_layers', 1, 6)
         hyp['conv_channels'] = []
         hyp['kernel_sizes'] = []
@@ -121,7 +127,7 @@ class ScoreOptimizer():
         hyp['dense_l2coef'] = [0.001]*(n_dense_layers - 1) + [None]
         for i in range(n_dense_layers - 1):
             hyp['dense_units'].append(trial.suggest_int(f'dense_units_{i+1}', 8, 128))
-        hyp['dense_units'].append(2)
+        hyp['dense_units'].append(2)"""
         
         """# Optimizing filter sizes, kernel sizes, activation functions
         unique_layers = False # controls whether to reuse the same value for each layer

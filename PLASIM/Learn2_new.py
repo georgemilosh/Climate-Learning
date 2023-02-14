@@ -770,7 +770,7 @@ try:
     logger.info('Loaded field_infos from file')
 except FileNotFoundError:
     logger.warning("Could not load field_infos: using the hardcoded version")
-    fields_infos = {
+    fields_infos_Plasim = {
         't2m': { # how we label the field
             'name': 'tas', # how the variable is called in the *.nc files
             'filename_suffix': 'tas', # the ending of the filename
@@ -794,17 +794,38 @@ except FileNotFoundError:
     }
 
     for h in [200,300,500,850]: # geopotential heights
-        fields_infos[f'zg{h}'] = {
+        fields_infos_Plasim[f'zg{h}'] = {
             'name': 'zg',
             'filename_suffix': f'zg{h}',
             'label': f'{h} mbar Geopotential',
         }
     for h in [200,300,500,850]: # geopotential heights
-        fields_infos[f'zg{h}_inter'] = {
+        fields_infos_Plasim[f'zg{h}_inter'] = {
             'name': 'zg',
             'filename_suffix': f'zg{h}_inter',
             'label': f'3 day {h} mbar Geopotential',
         }
+    
+    fields_infos = {
+        'Plasim' : fields_infos_Plasim,
+        'CESM'   : {
+            "t2m": {
+                "name": "TSA",
+                "filename_suffix": "TSA",
+                "label": "Temperature"
+            },
+            "mrso": {
+                "name": "H2OSOI",
+                "filename_suffix": "H2OSOI",
+                "label": "Soil Moisture"},
+            "zg500": {
+                "name": "Z3",
+                "filename_suffix": "Z3.500hPa",
+                "label": "500 mbar Geopotential"
+            }
+        }
+    }
+    
 
 @ut.execution_time  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function
@@ -904,9 +925,9 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
             field_name = field_name.rsplit('_', 1)[0] # remove '_filtered'
             do_filter = True
             
-        if field_name not in fields_infos:
+        if field_name not in fields_infos[Model]:
             raise KeyError(f'Unknown field {field_name}')
-        f_infos = fields_infos[field_name]
+        f_infos = fields_infos[Model][field_name]
         # create the field object
         field = ef.Plasim_Field(f_infos['name'], f"{file_suffix}{prefix}{f_infos['filename_suffix']}.nc", f_infos['label'], Model,
                                 years=dataset_years, mylocal=mylocal)
@@ -2826,7 +2847,7 @@ class Trainer():
             # do kfold
             score, info = k_fold_cross_val(folder, self.X, self.Y, **k_fold_cross_val_kwargs)
 
-            # make the config file and field_infos file read-only after the first successful run
+            # make the config file and fields_infos file read-only after the first successful run
             if os.access(self.config_file, os.W_OK): # the file is writeable
                 os.chmod(self.config_file, S_IREAD|S_IRGRP|S_IROTH) # we make it readable for all users
             if os.access(self.fields_infos_file, os.W_OK): # the file is writeable
