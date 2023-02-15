@@ -1154,19 +1154,27 @@ def roll_X(X, roll_axis='lon', roll_steps=0):
     # at this point roll_axis is an int
     return np.roll(X,roll_steps,axis=roll_axis)
 
-def normalize_X(X, mode='pointwise'):
+@ut.execution_time
+@ut.indent_logger(logger)
+def normalize_X(X, fold_folder, mode='pointwise', dont_recompute=True):
     '''
-    Performs data normalization x_norm = (x - x_mean)/x_std
+    Performs data normalization x_norm = (x - x_mean)/x_std and saves it into fold_folder
+    if the normalization already exists the x_mean and x_std are reloaded and mode is ignored
 
     Parameters
     ----------
     X : np.ndarray of shape (N, lat, lon, fields)
         data
+    fold_folder:
+        where the normalization and other fold specific parameters are stored
     mode : str, optional
         how to perform the normalization, possibilities are:
             'pointwise': every gridpoint of every field is treated independenly (default)
             'global': mean and std are computed globally on each field
             'mean': mean and std are computed pointwise and then averaged over each field
+    dont_recompute: bool
+        If false the normalization will be computed again based on the inputs, even if the 
+        normalization files already exists. Notice, this action will overwrite the files
 
     Returns
     -------
@@ -1182,35 +1190,44 @@ def normalize_X(X, mode='pointwise'):
     NotImplementedError
         if mode != 'pointwise'
     '''
-    if mode == 'pointwise':
-        # renormalize data with pointwise mean and std
-        X_mean = np.mean(X, axis=0)
-        X_std = np.std(X, axis=0)
-    elif mode == 'global':
-        # mean over all axes except the last one (field axis). This does not work very well with filtered fields
-        axis = tuple(range(len(X.shape) - 1))
-        X_mean = np.mean(X, axis=axis)
-        X_std = np.std(X, axis=axis)
-    elif mode == 'mean':
-        X_mean = np.mean(X, axis=0)
-        X_std = np.std(X, axis=0)
-        nfields = X.shape[-1]
-        for i in range(nfields):
-            mask = X_std[...,i] != 0 # work only on the points that display some fluctuations
-            non_zero_non_fluctuating_points = np.sum(X_mean[...,i][~mask] != 0) # number of gridpoints that have a non zero value that is always the same
-            if non_zero_non_fluctuating_points:
-                logger.warning(f'Field {i} has {non_zero_non_fluctuating_points} non zero non fluctuating gridpoints')
-            X_mean[...,i][mask] = np.mean(X_mean[...,i][mask])
-            X_std[...,i][mask] = np.mean(X_std[...,i][mask])
+    if os.path.exists(f'{fold_folder}/X_mean.npy') and os.path.exists(f'{fold_folder}/X_std.npy') and dont_recompute:
+        logger.info(f'loading from: {fold_folder}/X_mean.npy and {fold_folder}/X_std.npy')
+        X_mean = np.load(f'{fold_folder}/X_mean.npy')
+        X_std = np.load(f'{fold_folder}/X_std.npy')
     else:
-        raise NotImplementedError(f'Unknown normalization {mode = }')
+        if mode == 'pointwise':
+            # renormalize data with pointwise mean and std
+            X_mean = np.mean(X, axis=0)
+            X_std = np.std(X, axis=0)
+        elif mode == 'global':
+            # mean over all axes except the last one (field axis). This does not work very well with filtered fields
+            axis = tuple(range(len(X.shape) - 1))
+            X_mean = np.mean(X, axis=axis)
+            X_std = np.std(X, axis=axis)
+        elif mode == 'mean':
+            X_mean = np.mean(X, axis=0)
+            X_std = np.std(X, axis=0)
+            nfields = X.shape[-1]
+            for i in range(nfields):
+                mask = X_std[...,i] != 0 # work only on the points that display some fluctuations
+                non_zero_non_fluctuating_points = np.sum(X_mean[...,i][~mask] != 0) # number of gridpoints that have a non zero value that is always the same
+                if non_zero_non_fluctuating_points:
+                    logger.warning(f'Field {i} has {non_zero_non_fluctuating_points} non zero non fluctuating gridpoints')
+                X_mean[...,i][mask] = np.mean(X_mean[...,i][mask])
+                X_std[...,i][mask] = np.mean(X_std[...,i][mask])
+        else:
+            raise NotImplementedError(f'Unknown normalization {mode = }')
 
-    logger.info(f'{np.sum((X_std < 1e-4)*(X_std > 0))/np.product(X_std.shape)*100 :.4f}\% of the data have non zero std below 1e-4')
-    X_std[X_std==0] = 1 # If there is no variance we shouldn't divide by zero ### hmmm: this may create discontinuities
-                        # This is necessary because we will be masking (filtering) certain parts of the map 
-                        #     for certain fields, e.g. mrso, setting them to zero. Also there are some fields that don't
-                        #     vary over the ocean. I've tried normalizing by field, rather than by grid point, in which case
-                        #     the problem X_std==0 does not arise, but then the results came up slightly worse.
+        logger.info(f'{np.sum((X_std < 1e-4)*(X_std > 0))/np.product(X_std.shape)*100 :.4f}\% of the data have non zero std below 1e-4')
+        X_std[X_std==0] = 1 # If there is no variance we shouldn't divide by zero ### hmmm: this may create discontinuities
+                            # This is necessary because we will be masking (filtering) certain parts of the map 
+                            #     for certain fields, e.g. mrso, setting them to zero. Also there are some fields that don't
+                            #     vary over the ocean. I've tried normalizing by field, rather than by grid point, in which case
+                            #     the problem X_std==0 does not arise, but then the results came up slightly worse.
+        # save X_mean and X_std
+        logger.info(f'saving to: {fold_folder}/X_mean.npy and {fold_folder}/X_std.npy')
+        np.save(f'{fold_folder}/X_mean.npy', X_mean) 
+        np.save(f'{fold_folder}/X_std.npy', X_std)
     
     return  (X - X_mean)/X_std, X_mean, X_std
 
@@ -2090,12 +2107,9 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
         logger.info(f'number of training data: {len(Y_tr)} of which {n_neg_tr} negative and {n_pos_tr} positive')
 
         if normalization_mode: # normalize X_tr and X_va
-            X_tr, X_mean, X_std = normalize_X(X_tr, mode=normalization_mode)
-            X_va = (X_va - X_mean)/X_std 
-
-            # save X_mean and X_std
-            np.save(f'{fold_folder}/X_mean.npy', X_mean) # GM: Why not include all of this in normalize_X? It may simplify the code -> AL: Because normalize_X doesn't know about fold_folder
-            np.save(f'{fold_folder}/X_std.npy', X_std)
+            X_tr, X_mean, X_std = normalize_X(X_tr, fold_folder, mode=normalization_mode)
+            #X_va = (X_va - X_mean)/X_std 
+            X_va, _, _ = normalize_X(X_va, fold_folder, mode=normalization_mode) # we expect that the previous operation stores X_mean, X_std
         
             
         logger.info(f'{X_tr.shape = }, {X_va.shape = }')
