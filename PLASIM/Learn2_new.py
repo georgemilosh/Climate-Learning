@@ -1190,7 +1190,7 @@ def normalize_X(X, fold_folder, mode='pointwise', recompute=False):
     NotImplementedError
         if mode != 'pointwise'
     '''
-    if os.path.exists(f'{fold_folder}/X_mean.npy') and os.path.exists(f'{fold_folder}/X_std.npy') and recompute:
+    if os.path.exists(f'{fold_folder}/X_mean.npy') and os.path.exists(f'{fold_folder}/X_std.npy') and not recompute:
         logger.info(f'loading from: {fold_folder}/X_mean.npy and {fold_folder}/X_std.npy')
         X_mean = np.load(f'{fold_folder}/X_mean.npy')
         X_std = np.load(f'{fold_folder}/X_std.npy')
@@ -2109,7 +2109,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
         if normalization_mode: # normalize X_tr and X_va
             X_tr, X_mean, X_std = normalize_X(X_tr, fold_folder, mode=normalization_mode)
             #X_va = (X_va - X_mean)/X_std 
-            X_va, _, _ = normalize_X(X_va, fold_folder, mode=normalization_mode) # we expect that the previous operation stores X_mean, X_std
+            X_va, _, _ = normalize_X(X_va, fold_folder) # we expect that the previous operation stores X_mean, X_std
         
             
         logger.info(f'{X_tr.shape = }, {X_va.shape = }')
