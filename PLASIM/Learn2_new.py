@@ -1157,7 +1157,7 @@ def roll_X(X, roll_axis='lon', roll_steps=0):
 
 @ut.execution_time
 @ut.indent_logger(logger)
-def normalize_X(X, fold_folder, mode='pointwise', dont_recompute=True):
+def normalize_X(X, fold_folder, mode='pointwise', recompute=False):
     '''
     Performs data normalization x_norm = (x - x_mean)/x_std and saves it into fold_folder
     if the normalization already exists the x_mean and x_std are reloaded and mode is ignored
@@ -1173,8 +1173,8 @@ def normalize_X(X, fold_folder, mode='pointwise', dont_recompute=True):
             'pointwise': every gridpoint of every field is treated independenly (default)
             'global': mean and std are computed globally on each field
             'mean': mean and std are computed pointwise and then averaged over each field
-    dont_recompute: bool
-        If false the normalization will be computed again based on the inputs, even if the 
+    recompute: bool
+        If True the normalization will be computed again based on the inputs, even if the 
         normalization files already exists. Notice, this action will overwrite the files
 
     Returns
@@ -1191,7 +1191,7 @@ def normalize_X(X, fold_folder, mode='pointwise', dont_recompute=True):
     NotImplementedError
         if mode != 'pointwise'
     '''
-    if os.path.exists(f'{fold_folder}/X_mean.npy') and os.path.exists(f'{fold_folder}/X_std.npy') and dont_recompute:
+    if os.path.exists(f'{fold_folder}/X_mean.npy') and os.path.exists(f'{fold_folder}/X_std.npy') and not recompute:
         logger.info(f'loading from: {fold_folder}/X_mean.npy and {fold_folder}/X_std.npy')
         X_mean = np.load(f'{fold_folder}/X_mean.npy')
         X_std = np.load(f'{fold_folder}/X_std.npy')
@@ -2166,7 +2166,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
         if normalization_mode: # normalize X_tr and X_va
             X_tr, _, _ = normalize_X(X_tr, fold_folder, mode=normalization_mode)
             #X_va = (X_va - X_mean)/X_std 
-            X_va, _, _ = normalize_X(X_va, fold_folder, mode=normalization_mode) # we expect that the previous operation stores X_mean, X_std
+            X_va, _, _ = normalize_X(X_va, fold_folder) # we expect that the previous operation stores X_mean, X_std
         
         if pca['pca_mode']:
             pcaer = PCAer(Z_DIM=pca['Z_DIM'], folder=fold_folder)
