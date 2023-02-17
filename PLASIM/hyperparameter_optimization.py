@@ -71,7 +71,7 @@ class ScoreOptimizer():
 
         hyp = {}
         # oncomment a portion of the code which you would like to engage for optimization
-        # optimizing learning rate and batch size:
+        """# optimizing learning rate and batch size:
         lr = trial.suggest_float('lr', 1e-5, 1e-2, log=True) # learning rate
         lr = literal_eval(f'{lr:.7f}') # limit the resolution of the learning rate
         lr_min = trial.suggest_float('lr_min', 1e-7, lr, log=True) 
@@ -81,7 +81,7 @@ class ScoreOptimizer():
         hyp['epoch_tol'] =  trial.suggest_int('epoch_tol', 1, 5)
         hyp['decay'] = (literal_eval(f"{trial.suggest_float(f'decay', 0.01, 1, log=True):.05f}"))
         hyp['warmup'] = trial.suggest_categorical(f'warmup', [True, False])
-        #hyp['batch_size'] = trial.suggest_int('batch_size', 128, 2048, log=True)
+        #hyp['batch_size'] = trial.suggest_int('batch_size', 128, 2048, log=True)"""
         
         
         """ # optimizing batch normalization, l2 coefs and dropouts layerwise:
@@ -128,6 +128,30 @@ class ScoreOptimizer():
         for i in range(n_dense_layers - 1):
             hyp['dense_units'].append(trial.suggest_int(f'dense_units_{i+1}', 8, 128))
         hyp['dense_units'].append(2)"""
+        
+        # Optimizing number of dense layers and regularizers
+        hyp['Z_DIM'] = trial.suggest_int('Z_DIM', 2, 256)
+        n_dense_layers = trial.suggest_int('n_dense_layers', 1, 5)
+        hyp['dense_units'] = []
+        hyp['dense_dropouts'] = []
+        hyp['dense_l2coef'] = []
+        hyp['dense_activations'] = []
+        
+        unique_layers = False # controls whether to reuse the same value for each layer
+        for i in range(n_dense_layers-1):
+            if unique_layers or i == 0:
+                dense_units_trial = trial.suggest_int(f'dense_units_{i+1}', 8, 256)
+                dense_dropouts_trial = literal_eval(f"{trial.suggest_float(f'dense_dropouts_{i+1}', 0, 0.8, step=0.01):.2f}")
+                dense_l2coef_trial = literal_eval(f"{trial.suggest_float(f'dense_l2coef_{i+1}', 1e-6, 1e6, log=True):.7f}")
+                dense_activations_trial = trial.suggest_categorical(f'conv_activations_{i+1}', ['relu', 'elu'])
+            hyp['dense_units'].append(dense_units_trial)
+            hyp['dense_dropouts'].append(dense_dropouts_trial)
+            hyp['dense_l2coef'].append(dense_l2coef_trial)
+            hyp['dense_activations'].append(dense_activations_trial)
+        hyp['dense_units'].append(2)
+        hyp['dense_dropouts'].append(None)
+        hyp['dense_l2coef'].append(None)
+        hyp['dense_activations'].append(None)
         
         """# Optimizing filter sizes, kernel sizes, activation functions
         unique_layers = False # controls whether to reuse the same value for each layer

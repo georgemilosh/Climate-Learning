@@ -145,6 +145,7 @@ from uncertainties import ufloat
 from functools import wraps
 import socket
 from functools import partial # this one we use for the scheduler
+from sklearn.decomposition import PCA
 
 
 if __name__ == '__main__':
@@ -1231,6 +1232,61 @@ def normalize_X(X, fold_folder, mode='pointwise', dont_recompute=True):
     
     return  (X - X_mean)/X_std, X_mean, X_std
 
+
+#####################################################
+########### PCA Autoencoder  ################        
+##################################################### 
+
+class PCAencoder(PCA):
+    """_summary_
+
+    Args:
+        PCA (_type_): _description_
+    """
+    def predict(self,*args,**kwargs):
+        _X = self.transform(args[0].reshape(args[0].shape[0],-1))
+        return _X
+    def summary(self):
+        print(f'We are computing PCA')
+class PCAer:
+    """_summary_
+        Essentially decorator class that keeps the inputs and outputs maximally similar to autoencoder so that we could using the same routines
+        Z_DIM: int
+            dimensionality of the latent space
+        folder: string
+            where PCAer stores its encoder
+    """
+    def __init__(self, *args, Z_DIM=2, folder='./', **kwargs):
+        self.Z_DIM = Z_DIM
+        if os.path.exists(f'{folder}/encoder.pkl'):
+            logger.info(f"laoding existing file from {folder}/encoder.pkl")
+            with open(f'{folder}/encoder.pkl', 'rb') as file_pi:
+                self.encoder = pickle.load(file_pi)
+        else:
+            logger.info(f"The file {folder}/encoder.pkl does not exist, creating new PCAer")
+            self.encoder = PCAencoder(n_components=Z_DIM, svd_solver="randomized", whiten=True)
+        self.shape = None # it gets a value when calling method fit()
+        self.folder = folder # where the Autoencoder is saved
+    def fit(self,*args, **kwargs):
+        if os.path.exists(f'{self.folder}/encoder.pkl'):
+            logger.info("Fit will not be performed because the file exists")
+        else:
+            logger.info(f'The relevant file absent so performing fit to the shape {args[0].shape = }')
+            result_fit = self.encoder.fit(args[0].reshape(args[0].shape[0],-1)) # PCA expects the input of type fit(X) such that X is 2 dimensional
+            self.shape = args[0].shape[0]
+            logger.info(f'{np.sum(self.encoder.explained_variance_ratio_) = }')
+            logger.info(f'saving in {self.folder}/encoder.pkl')
+            with open(f'{self.folder}/encoder.pkl', 'wb') as file_pi:
+                pickle.dump(self.encoder, file_pi)
+            
+        return result_fit 
+    def score(self,*args,**kwargs):
+        return self.encoder.score(args[0].reshape(args[0].shape[0],-1))
+    def decoder(self,X):
+        return self.encoder.inverse_transform(X).reshape(self.shape)
+    def summary(self):
+        logger.info(f'PCA with {self.Z_DIM} components')
+
 ####### MIXING ########    
 
 def shuffle_years(X, permutation=None, seed=0, apply=False):
@@ -2007,7 +2063,8 @@ def get_default_metrics(fullmetrics=False, u=1):
 @ut.execution_time
 @ut.indent_logger(logger)
 def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=None, optimal_checkpoint_kwargs=None, load_from='last', nfolds=10, val_folds=1, u=1, normalization_mode='pointwise',
-                     fullmetrics=True, training_epochs=40, training_epochs_tl=10, loss='sparse_categorical_crossentropy', prune_threshold=None, min_folds_before_pruning=None):
+                     fullmetrics=True, training_epochs=40, training_epochs_tl=10, loss='sparse_categorical_crossentropy', prune_threshold=None, min_folds_before_pruning=None,
+                     pca={"pca_mode" : None, "Z_DIM" : 20}):
     '''
     Performs k fold cross validation on a model architecture.
 
@@ -2107,10 +2164,15 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
         logger.info(f'number of training data: {len(Y_tr)} of which {n_neg_tr} negative and {n_pos_tr} positive')
 
         if normalization_mode: # normalize X_tr and X_va
-            X_tr, X_mean, X_std = normalize_X(X_tr, fold_folder, mode=normalization_mode)
+            X_tr, _, _ = normalize_X(X_tr, fold_folder, mode=normalization_mode)
             #X_va = (X_va - X_mean)/X_std 
             X_va, _, _ = normalize_X(X_va, fold_folder, mode=normalization_mode) # we expect that the previous operation stores X_mean, X_std
         
+        if pca['pca_mode']:
+            pcaer = PCAer(Z_DIM=pca['Z_DIM'], folder=fold_folder)
+            pcaer.fit(X_tr)
+            X_tr = pcaer.encoder.predict(X_tr)
+            X_va = pcaer.encoder.predict(X_va)
             
         logger.info(f'{X_tr.shape = }, {X_va.shape = }')
 
@@ -2203,7 +2265,19 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
         batch_size = train_model_kwargs['batch_size']
         for i in range(nfolds):
             _, _, X_va, Y_va = k_fold_cross_val_split(i, X, Y, nfolds=nfolds, val_folds=val_folds)
+            logger.info(f'{X_tr.shape = }, {X_va.shape = }')
             fold_folder = f'{folder}/fold_{i}'
+            if normalization_mode: # normalize X_tr and X_va
+                #X_va = (X_va - X_mean)/X_std 
+                X_va, _, _ = normalize_X(X_va, fold_folder, mode=normalization_mode) # we expect that the previous operation stores X_mean, X_std
+            
+            if pca['pca_mode']:
+                pcaer = PCAer(Z_DIM=pca['Z_DIM'], folder=fold_folder) # the fit is expected to have already been performed above
+                X_va = pcaer.encoder.predict(X_va)
+                
+            logger.info(f'{X_tr.shape = }, {X_va.shape = }')
+            
+            
             model = load_model(f'{fold_folder}/{fold_subfolder}cp-{opt_checkpoint:04d}.ckpt')
 
             Y_pred = []
