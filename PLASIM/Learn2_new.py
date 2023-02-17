@@ -2269,7 +2269,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
             fold_folder = f'{folder}/fold_{i}'
             if normalization_mode: # normalize X_tr and X_va
                 #X_va = (X_va - X_mean)/X_std 
-                X_va, _, _ = normalize_X(X_va, fold_folder, mode=normalization_mode) # we expect that the previous operation stores X_mean, X_std
+                X_va, _, _ = normalize_X(X_va, fold_folder) # we expect that the previous operation stores X_mean, X_std
             
             if pca['pca_mode']:
                 pcaer = PCAer(Z_DIM=pca['Z_DIM'], folder=fold_folder) # the fit is expected to have already been performed above
