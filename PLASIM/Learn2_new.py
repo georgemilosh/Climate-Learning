@@ -68,6 +68,18 @@ You can also import parameters from a previous run by using the argument 'import
         tau=0
         T=12
         fields="['t2m']"
+        
+To facilitate debugging and development it is highly advised to work with small dataset. We have orginazed our files so that 
+    if you choose: datafolder=Data_CESM_short the code will load for a different source (with fewer number of eyars) 
+
+Somewhat less obvious is the treatment of skip connections that are used in `create_model` method. The point is that we convert the input
+to the dictionary inside the function but we couldn't include it as a kwarg for Learn2_new.py because of conflicts with file names when
+saving model checkpoints. Thus we provide an input which is subsequently processed, e.g.:
+
+    python Learn2_new.py conv_skip=[[[0,2]],[[0,2],[1,2]]]=
+will result in in two runs, one with a skip connections between layers 0 and 2, and the second run with two skip connections, one between
+0 and 2 layers and one between 1 and 2 layers. 
+
 
 FAQ
 ---
@@ -81,6 +93,7 @@ Q: What if I want to work with 1000 years that are a subset of 8000 years of Pla
 Q: what if I want to have a smaller training set and a bigger validation one
     If you want to have kfold validation where the validation dataset is bigger than the training one you can do it as well by providing the argument val_folds.
     For example `nfolds = 10, val_folds = 9` will use 90% of the data for testing and 10% for training
+
 
 Logging levels:
 level   name                events
@@ -1480,7 +1493,7 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
     max_pool_sizes : int or list of int, optional
         size of max pooling layer to be applied after dropout. If 0 no max pool is applied
     conv_l2coef : list of floats which encodes the values of L2 regularizers in convolutional layers, optional, defaults to None
-    encoder_conv_skip: list of lists that gets converted to a dictionary
+    encoder_conv_skip: a list of lists that gets converted to a dictionary
         creates a skip connection between two layers given by key and value entries in the dictionary. 
         If empty no skip connections are included. The skip connection will not work if 
         the dimensions of layers mismatch. For this convolutional architecture should be implemented in future
@@ -1499,7 +1512,12 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
     -------
     model : keras.models.Model
     '''
-    #model = models.Sequential()
+    logger.info(f'{conv_skip = }')
+    if conv_skip is not None:
+        conv_skip = dict(tuple(map(tuple, conv_skip)))
+    else:
+        conv_skip = dict({})
+    
     # convolutional layers
     # adjust the shape of the arguments to be of the same length as conv_channels
     args = [kernel_sizes, strides, batch_normalizations, conv_activations, conv_dropouts, max_pool_sizes, conv_l2coef, padding]
@@ -1552,10 +1570,12 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
                 if i in conv_skip.keys(): # The arrow of the skip connection starts here
                     # print('arrow_start = actv')
                     arrow_start = actv
+                    logger.info(f'{arrow_start = }')
                     
                 if i in conv_skip.values(): # The arrow of the skip connection end here
                     # print('conv = keras.layers.add([conv, arrow_start])')
-                    actv = keras.layers.add([actv, arrow_start])
+                    actv = keras.layers.Add()([actv, arrow_start])
+                    logger.info(f'{actv = }')
                     #if encoder_use_batch_norm:
                     #    actv = BatchNormalization()(actv)
                     #    # print("actv = BatchNormalization()(actv)")
