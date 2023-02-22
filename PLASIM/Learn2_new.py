@@ -1453,8 +1453,8 @@ def undersample(X, Y, u=1, random_state=42):
 ################################################
 
 def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=1, padding='valid',
-                 batch_normalizations=True, conv_activations='relu', conv_dropouts=0.2, max_pool_sizes=[2,2,False], conv_l2coef=None,
-                 dense_units=[64,2], dense_activations=['relu', None], dense_dropouts=[0.2,False], dense_l2coef=None):
+                 batch_normalizations=True, conv_activations='relu', conv_dropouts=0.2, max_pool_sizes=[2,2,False], conv_l2coef=None, conv_skip=None,
+                 dense_units=[64,2], dense_activations=['relu', None], dense_dropouts=[0.2,False], dense_l2coef=None, dense_batch_norm=None):
     '''
     Creates a model consisting of a series of convolutional layers followed by fully connected ones
 
@@ -1480,6 +1480,11 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
     max_pool_sizes : int or list of int, optional
         size of max pooling layer to be applied after dropout. If 0 no max pool is applied
     conv_l2coef : list of floats which encodes the values of L2 regularizers in convolutional layers, optional, defaults to None
+    encoder_conv_skip: list of lists that gets converted to a dictionary
+        creates a skip connection between two layers given by key and value entries in the dictionary. 
+        If empty no skip connections are included. The skip connection will not work if 
+        the dimensions of layers mismatch. For this convolutional architecture should be implemented in future
+        
 
     dense_units : list of int, optional
         number of neurons for each fully connected layer
@@ -1487,17 +1492,21 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
         activation functions after each fully connected layer
     dense_dropouts : float in [0,1] or list of floats in [0,1], optional
     dense_l2coef : list of floats which encodes the values of L2 regularizers in dense layers, optional, defaults to None
+    dense_batch_norm:  bool or list of bools, optional
+        whether to add a BatchNormalization layer after each dense layer
 
     Returns
     -------
     model : keras.models.Model
     '''
-    model = models.Sequential()
-
+    #model = models.Sequential()
     # convolutional layers
     # adjust the shape of the arguments to be of the same length as conv_channels
     args = [kernel_sizes, strides, batch_normalizations, conv_activations, conv_dropouts, max_pool_sizes, conv_l2coef, padding]
     logger.info(f'{args = }')
+    x = []
+    inputs = tf.keras.Input(shape=input_shape, name='input')
+    x.append(inputs)
     if conv_channels is not None:
         for j,arg in enumerate(args):
             if not isinstance(arg, list):
@@ -1506,6 +1515,60 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
                 raise ValueError(f'Invalid length for argument {arg = } when compared with {conv_channels = }')
         logger.info(f'convolutional args = {args}')
         kernel_sizes, strides, batch_normalizations, conv_activations, conv_dropouts, max_pool_sizes, conv_l2coef, padding = args
+        
+        n_layers = len(conv_channels)
+        
+        # Add convolutional layers
+        for i in range(n_layers):
+            if conv_l2coef[i] is not None:
+                kernel_regularizer=tf.keras.regularizers.l2(conv_l2coef[i])
+            else:
+                kernel_regularizer=None
+            # print(i, f"Conv2D, filters = {encoder_conv_filters[i]}, kernel_size = {encoder_conv_kernel_size[i]}, strides = {encoder_conv_strides[i]}, padding = {encoder_conv_padding[i]}")
+            conv = layers.Conv2D(filters = conv_channels[i], 
+                    kernel_size = kernel_sizes[i],
+                    strides = strides[i], 
+                    padding = padding[i],
+                    kernel_regularizer=kernel_regularizer,
+                    name = f'conv_layer_{i}')(x[i])
+
+            if batch_normalizations[i]:
+                conv = layers.BatchNormalization(name = f'batch_norm_{i}')(conv)
+                # print("conv = BatchNormalization()(conv)")
+                
+            if conv_activations[i] == 'LeakyRelu':
+                actv = layers.LeakyReLU(name = f'conv_activation_{i}')(conv)
+                # print("actv = LeakyReLU()(conv)")
+            else:
+                actv = layers.Activation(conv_activations[i],name = f'conv_activation_{i}')(conv)
+                # print("actv = Activation(conv_activation[i])(conv)")
+
+            if conv_dropouts[i]:
+                actv = layers.SpatialDropout2D(rate=conv_dropouts[i],name = f'spatial_dropout_{i}')(actv)
+                # print("actv = Dropout(rate=0.25)(actv)")
+            
+            if conv_skip is not None:
+                logger.info(f'{i = },{conv_skip = }')
+                if i in conv_skip.keys(): # The arrow of the skip connection starts here
+                    # print('arrow_start = actv')
+                    arrow_start = actv
+                    
+                if i in conv_skip.values(): # The arrow of the skip connection end here
+                    # print('conv = keras.layers.add([conv, arrow_start])')
+                    actv = keras.layers.add([actv, arrow_start])
+                    #if encoder_use_batch_norm:
+                    #    actv = BatchNormalization()(actv)
+                    #    # print("actv = BatchNormalization()(actv)")
+                
+                
+            
+            x.append(actv)
+            
+
+        #shape_before_flattening = K.int_shape(x[-1])[1:] 
+        #print("shape_before_flattening = ", shape_before_flattening)
+        x.append(layers.Flatten()(x[-1]))
+        """
         # build the convolutional layers
         for i in range(len(conv_channels)):
             if conv_l2coef[i] is not None:
@@ -1527,31 +1590,44 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
                 if max_pool_sizes[i] > 1:
                     model.add(layers.MaxPooling2D(max_pool_sizes[i]))
         # flatten
-        model.add(layers.Flatten())
+        model.add(layers.Flatten())"""
     else: # if there are no convolutions the flatten is supposed to be input
-        model.add(layers.Flatten(input_shape=input_shape))
+        #model.add(layers.Flatten(input_shape=input_shape))
+        x.append(layers.Flatten(input_shape=input_shape)(x[-1]))
 
     # dense layers
     # adjust the shape of the arguments to be of the same length as conv_channels
-    args = [dense_activations, dense_dropouts, dense_l2coef]
+    args = [dense_activations, dense_dropouts, dense_l2coef, dense_batch_norm]
     for j,arg in enumerate(args):
         if not isinstance(arg, list):
             args[j] = [arg]*len(dense_units)
         elif len(arg) != len(dense_units):
             raise ValueError(f'Invalid length for argument {arg = } when compared with {dense_units = }')
     logger.info(f'dense args = {args}')
-    dense_activations, dense_dropouts, dense_l2coef = args
+    dense_activations, dense_dropouts, dense_l2coef, dense_batch_norm = args
     # build the dense layers
     for i in range(len(dense_units)):
         if dense_l2coef[i] is not None:
             kernel_regularizer=tf.keras.regularizers.l2(dense_l2coef[i])
         else:
             kernel_regularizer=None
-        model.add(layers.Dense(dense_units[i], activation=dense_activations[i],kernel_regularizer=kernel_regularizer))
-        
+            
+        dense = layers.Dense(dense_units[i], kernel_regularizer=kernel_regularizer, name=f"dense_layer_{i}")(x[-1])
+        if dense_batch_norm[i]:
+            dense = layers.BatchNormalization(name=f"dense_batch_{i}")(dense)
+        if dense_activations[i] == 'LeakyRelu':
+            actv = layers.LeakyReLU(name=f"dense_activation_{i}")(dense)
+        else:
+            actv = layers.Activation(dense_activations[i],name=f"dense_activation_{i}")(dense)
         if dense_dropouts[i]:
-            model.add(layers.Dropout(dense_dropouts[i]))
-
+            actv = layers.Dropout(rate=dense_dropouts[i],name=f"dense_dropout_{i}")(actv)
+        x.append(actv)
+        
+        #model.add(layers.Dense(dense_units[i], activation=dense_activations[i],kernel_regularizer=kernel_regularizer))
+        
+        #if dense_dropouts[i]:
+        #    model.add(layers.Dropout(dense_dropouts[i]))
+    model = tf.keras.Model(x[0], x[-1], name="model")
     return model
 
 ########################################
