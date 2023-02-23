@@ -76,7 +76,7 @@ Somewhat less obvious is the treatment of skip connections that are used in `cre
 to the dictionary inside the function but we couldn't include it as a kwarg for Learn2_new.py because of conflicts with file names when
 saving model checkpoints. Thus we provide an input which is subsequently processed, e.g.:
 
-    python Learn2_new.py conv_skip=[[[0,2]],[[0,2],[1,2]]]=
+    python Learn2_new.py conv_skip="[[[0,2]],[[0,2],[1,2]]]"=
 will result in in two runs, one with a skip connections between layers 0 and 2, and the second run with two skip connections, one between
 0 and 2 layers and one between 1 and 2 layers. 
 
@@ -1512,7 +1512,6 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
     -------
     model : keras.models.Model
     '''
-    logger.info(f'{conv_skip = }')
     if conv_skip is not None:
         conv_skip = dict(tuple(map(tuple, conv_skip)))
     else:
@@ -1566,7 +1565,7 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
                 # print("actv = Dropout(rate=0.25)(actv)")
             
             if conv_skip is not None:
-                logger.info(f'{i = },{conv_skip = }')
+                #logger.info(f'{i = },{conv_skip = }')
                 if i in conv_skip.keys(): # The arrow of the skip connection starts here
                     # print('arrow_start = actv')
                     arrow_start = actv

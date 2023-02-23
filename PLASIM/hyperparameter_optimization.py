@@ -71,6 +71,61 @@ class ScoreOptimizer():
 
         hyp = {}
         # oncomment a portion of the code which you would like to engage for optimization
+        
+        # optimizing learning rate, batch size and regularization:
+        
+        
+        lr = trial.suggest_float('lr', 1e-5, 1e-2, log=True) # learning rate
+        lr = literal_eval(f'{lr:.7f}') # limit the resolution of the learning rate
+        lr_min = trial.suggest_float('lr_min', 1e-7, lr, log=True) 
+        lr_min = literal_eval(f'{lr_min:.7f}') 
+        hyp['lr'] = lr
+        hyp['lr_min'] = lr_min
+        hyp['epoch_tol'] =  trial.suggest_int('epoch_tol', 1, 5)
+        hyp['decay'] = (literal_eval(f"{trial.suggest_float(f'decay', 0.05, 0.5, log=True):.05f}"))
+        hyp['warmup'] = trial.suggest_categorical(f'warmup', [True, False])
+        
+        #hyp["conv_skip"] = [[0,2],    [3,5],      [6,8]]
+        
+        ResNet_trial = trial.suggest_categorical(f'warmup', [True, False])
+        hyp['ResNet'] = ResNet_trial
+        if ResNet_trial:
+            hyp["conv_skip"] = [[0,2],[3,5],[6,8]]
+        else:
+             hyp["conv_skip"] = None
+        hyp['batch_size'] = trial.suggest_int('batch_size', 32, 512, log=True)
+        hyp['batch_normalizations'] = trial.suggest_categorical('batch_normalizations', [True, False])
+        hyp['conv_dropouts'] = literal_eval(f"{trial.suggest_float('conv_dropouts', 0, 0.8, step=0.08):.2f}")
+        hyp['conv_l2coef'] = literal_eval(f"{trial.suggest_float(f'conv_l2coef', 1e-6, 1e6, log=True):.7f}")
+        hyp['conv_activations'] = trial.suggest_categorical(f'conv_activations', ['relu', 'elu','LeakyRelu'])
+        
+        conv_channel_first_trial = trial.suggest_categorical(f'conv_channel_first', [4, 8, 16, 32])
+        
+        hyp['conv_channel_first'] = conv_channel_first_trial
+        
+        hyp['conv_channels']: list(conv_channel_first_trial*np.array([32,32,32, 64,64,64, 128,128,128,  256,256]))
+        
+        
+        hyp['dense_units'] = []
+        hyp['dense_dropouts'] = []
+        hyp['dense_l2coef'] = []
+        hyp['dense_activations'] = []
+        for i in range(2-1):
+            if i == 0:
+                dense_units_trial = trial.suggest_categorical(f'dense_units_{i+1}', [32, 64, 128, 256])
+                dense_dropouts_trial = literal_eval(f"{trial.suggest_float(f'dense_dropouts_{i+1}', 0, 0.8, step=0.08):.2f}")
+                dense_l2coef_trial = literal_eval(f"{trial.suggest_float(f'dense_l2coef_{i+1}', 1e-6, 1e6, log=True):.7f}")
+                dense_activations_trial = trial.suggest_categorical(f'dense_activations_{i+1}', ['relu', 'elu','LeakyRelu'])
+            hyp['dense_units'].append(dense_units_trial)
+            hyp['dense_dropouts'].append(dense_dropouts_trial)
+            hyp['dense_l2coef'].append(dense_l2coef_trial)
+            hyp['dense_activations'].append(dense_activations_trial)
+        hyp['dense_units'].append(2)
+        hyp['dense_dropouts'].append(None)
+        hyp['dense_l2coef'].append(None)
+        hyp['dense_activations'].append(None)
+        
+        
         """# optimizing learning rate and batch size:
         lr = trial.suggest_float('lr', 1e-5, 1e-2, log=True) # learning rate
         lr = literal_eval(f'{lr:.7f}') # limit the resolution of the learning rate
@@ -153,7 +208,7 @@ class ScoreOptimizer():
         hyp['dense_l2coef'].append(None)
         hyp['dense_activations'].append(None)"""
         
-        # Optimizing filter sizes, kernel sizes, weight decay
+        """# Optimizing filter sizes, kernel sizes, weight decay
         unique_layers = False # controls whether to reuse the same value for each layer
         n_conv_layers = trial.suggest_int('n_conv_layers', 1, 6)
         hyp['n_conv_layers'] = n_conv_layers
@@ -195,7 +250,7 @@ class ScoreOptimizer():
             hyp['dense_l2coef'].append(dense_l2coef_trial)
         hyp['dense_units'].append(2)
         hyp['dense_dropouts'].append(None)
-        hyp['dense_l2coef'].append(None)
+        hyp['dense_l2coef'].append(None)"""
         
         
         """# Optimizing layerwise batchnormalization dropouts and weight decay
