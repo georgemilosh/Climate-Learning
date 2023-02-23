@@ -2159,7 +2159,7 @@ def get_default_metrics(fullmetrics=False, u=1):
 @ut.indent_logger(logger)
 def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=None, optimal_checkpoint_kwargs=None, load_from='last', nfolds=10, val_folds=1, u=1, normalization_mode='pointwise',
                      fullmetrics=True, training_epochs=40, training_epochs_tl=10, loss='sparse_categorical_crossentropy', prune_threshold=None, min_folds_before_pruning=None,
-                     pca={"pca_mode" : None, "Z_DIM" : 20}):
+                     pca={"pca_mode" : None, "Z_DIM" : 20}, T=14, time_start=30, time_end=120, label_period_start=None, label_period_end=None):
     '''
     Performs k fold cross validation on a model architecture.
 
@@ -2217,12 +2217,28 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
     min_folds_before_pruning : int, optional
         minimum number of folds to train before checking whether to prune the run
         By default None, which means that pruning is disabled
-
+    pca: PCAer class
+        "pca_mode" is not None pca decomposition of the inputs is performed
+    T : int, optional
+        width of the window for the running average  
+    time_start : int, optional 
+        first day of the period of interest (copied from make_XY to be able to compute `timestamps`)
+    time_end : int, optional
+        first day after the end of the period of interst (copied from make_XY)
+    label_period_start : int, optional
+        if provided the first day of the period of interest for the label threshold determination (copied from make_XY)
+        This variable is necessary if for some reason we need to also load data that lies outside the range of where 
+        the labels that we need for training/validation and testing directly
+    label_period_end : int, optional
+        if provided the first day after the end of the period of interst for the label threshold determination (copied from make_XY)
+        This variable is necessary if for some reason we need to also load data that lies outside the range of where 
+        the labels that we need for training/validation and testing directly
     Returns
     -------
     float
         average score of the run
     '''
+    
     if create_model_kwargs is None:
         create_model_kwargs = {}
     if train_model_kwargs is None:
@@ -2230,7 +2246,22 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
     if optimal_checkpoint_kwargs is None:
         optimal_checkpoint_kwargs = {}
     folder = folder.rstrip('/')
-
+    
+    """leftmargin: (int), optional
+        Specifies the number of timestamps that we use to make the prediction. By default is absent (one time stamp)
+        The use of `leftmargin` is only recommended if PCA was performed since otherwise too much RAM is taken"""
+    
+    # X and Y are extracted from time_start to time_end, but we only care about the part inside label_period_start to label_period_end for training and testing
+    if label_period_start is None: # label_period_start == time_start implied
+        leftmargin = None # basically left margin
+    else:
+        leftmargin = label_period_start - time_start
+    
+    if label_period_end is None:
+        rightmargin = None
+    else:
+        rightmargin = time_end - label_period_end - T + 1 # that's because when we perform running mean we have to avoid using last T days
+    
     # get the folders from which to load the models
     load_from, info = get_transfer_learning_folders(load_from, folder, nfolds, optimal_checkpoint_kwargs=optimal_checkpoint_kwargs)
     # here load_from is either None (no transfer learning) or a list of strings
@@ -2264,12 +2295,14 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
             X_va, _, _ = normalize_X(X_va, fold_folder) # we expect that the previous operation stores X_mean, X_std
         
         if pca['pca_mode']:
-            pcaer = PCAer(Z_DIM=pca['Z_DIM'], folder=fold_folder)
-            pcaer.fit(X_tr)
-            X_tr = pcaer.encoder.predict(X_tr)
-            X_va = pcaer.encoder.predict(X_va)
-            
-        logger.info(f'{X_tr.shape = }, {X_va.shape = }')
+            with PCAer(Z_DIM=pca['Z_DIM'], folder=fold_folder) as pcaer:
+                pcaer.fit(X_tr)
+                X_tr = pcaer.encoder.predict(X_tr)
+                X_va = pcaer.encoder.predict(X_va)
+        logger.info(f'before margin removal {X_tr.shape = }, {X_va.shape = }')
+        X_tr = X_tr[:,leftmargin:rightmargin,...].reshape(-1,*X_tr.shape[2:]) # skip the unnecessary margins
+        X_va = X_va[:,leftmargin:rightmargin,...].reshape(-1,*X_va.shape[2:]) # skip the unnecessary margins
+        logger.info(f'after margin removal {X_tr.shape = }, {X_va.shape = }')
 
         # at this point data is ready to be fed to the networks
 
@@ -2367,10 +2400,12 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
                 X_va, _, _ = normalize_X(X_va, fold_folder) # we expect that the previous operation stores X_mean, X_std
             
             if pca['pca_mode']:
-                pcaer = PCAer(Z_DIM=pca['Z_DIM'], folder=fold_folder) # the fit is expected to have already been performed above
-                X_va = pcaer.encoder.predict(X_va)
-                
-            logger.info(f'{X_tr.shape = }, {X_va.shape = }')
+                with PCAer(Z_DIM=pca['Z_DIM'], folder=fold_folder) as pcaer: # the fit is expected to have already been performed thus we must merely load
+                    X_va = pcaer.encoder.predict(X_va)
+            logger.info(f'before margin removal {X_tr.shape = }, {X_va.shape = }')
+            X_tr = X_tr[:,leftmargin:rightmargin,...].reshape(-1,*X_tr.shape[2:]) # skip the unnecessary margins
+            X_va = X_va[:,leftmargin:rightmargin,...].reshape(-1,*X_va.shape[2:]) # skip the unnecessary margins    
+            logger.info(f'after margin removal {X_tr.shape = }, {X_va.shape = }')
             
             
             model = load_model(f'{fold_folder}/{fold_subfolder}cp-{opt_checkpoint:04d}.ckpt')
