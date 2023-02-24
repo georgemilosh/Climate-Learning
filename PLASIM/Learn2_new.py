@@ -70,7 +70,7 @@ You can also import parameters from a previous run by using the argument 'import
         fields="['t2m']"
         
 To facilitate debugging and development it is highly advised to work with small dataset. We have orginazed our files so that 
-    if you choose: datafolder=Data_CESM_short the code will load for a different source (with fewer number of eyars) 
+    if you choose: datafolder=Data_CESM_short the code will load for a different source (with fewer number of years) 
 
 Somewhat less obvious is the treatment of skip connections that are used in `create_model` method. The point is that we convert the input
 to the dictionary inside the function but we couldn't include it as a kwarg for Learn2_new.py because of conflicts with file names when
@@ -79,6 +79,17 @@ saving model checkpoints. Thus we provide an input which is subsequently process
     python Learn2_new.py conv_skip="[[[0,2]],[[0,2],[1,2]]]"=
 will result in in two runs, one with a skip connections between layers 0 and 2, and the second run with two skip connections, one between
 0 and 2 layers and one between 1 and 2 layers. 
+
+    While originally we developed the code to work with a single time, we have subsequently modified it to allow inputs which
+    use sliding windows with time. To engage such a sliding window it is important to specify the input parameters precisely:
+        if `label_period_start` is None -> single time will be used as usual
+        if `label_period_start` is specified and it is larger than 'time_start' then the code expects that the user wishes
+        to use temporal information for the inference and thus expands X to an extra dimension which carries slided windows
+        in time. The difference that is computed `leftmargin` = `label_period_start` - `time_start` tells us how long the extra
+        time information is (going back in time). The window will be slided on a daily basis, so the extra dimension length
+        will become `leftmargin`+1. It should be noted that currently we do not support tensorflow Datasets and thus one should
+        be careful and not apply big time windows, or possibly risk to overrun RAM. having leftmargin nonzero is safer if 
+        dimensionality reduction was performed beforehand.
 
 
 FAQ
@@ -2157,6 +2168,46 @@ def get_default_metrics(fullmetrics=False, u=1):
 
 @ut.execution_time
 @ut.indent_logger(logger)
+def margin_removal_with_sliding_window(X,time_start,leftmargin,rightmargin,time_end,T,sliding=False):
+    '''
+    the procedure is to stride the time axis with the window size "leftmargin+1" 
+       <- there is a +1 because this argument of `sliding_window_view` does nothing when input is 1
+       `sliding_window_view` normally just puts the new axis at the end, but for using LSTMs, for instance, 
+       this is not well adapted so we move the axis right after the natural time (0-th axis)
+
+    Input
+        X: ndarray
+            The input array that will have its margins removed and possibly slided
+        time_start: int
+        time_end: int
+        leftmargin: int
+        rightmargin: int,
+        T: int
+        sliding: bool
+    '''
+    if (leftmargin is not None) or (rightmargin is not None):
+        X = X.reshape(-1,time_end-time_start-T+1,*X.shape[1:])
+        logger.info(f'preparing for margin removal: {X.shape = }')
+            
+    if (leftmargin is not None) and (sliding is True): # adding a dimension to X_tr and X_va with a time moving window
+        X = np.moveaxis(np.lib.stride_tricks.sliding_window_view(X, leftmargin+1, axis=1),-1,2)
+        logger.info(f'after sliding window: {X.shape = }')
+
+    if (leftmargin is not None):
+        if not sliding: # if sliding this operation should be automatic
+            X = X[:,leftmargin:None,...]
+        X = X.reshape(-1,*X.shape[2:]) # skip the unnecessary margins
+        logger.info(f'after removing margins and shaping back: {X.shape = }')
+
+    if (rightmargin is not None): # right margin affects whether or not we have sliding
+        X = X[:,None:rightmargin,...].reshape(-1,*X.shape[2:]) # skip the unnecessary margins
+        logger.info(f'after removing margins and shaping back: {X.shape = }')
+
+    return X
+
+
+@ut.execution_time
+@ut.indent_logger(logger)
 def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=None, optimal_checkpoint_kwargs=None, load_from='last', nfolds=10, val_folds=1, u=1, normalization_mode='pointwise',
                      fullmetrics=True, training_epochs=40, training_epochs_tl=10, loss='sparse_categorical_crossentropy', prune_threshold=None, min_folds_before_pruning=None,
                      pca={"pca_mode" : None, "Z_DIM" : 20}, T=14, time_start=30, time_end=120, label_period_start=None, label_period_end=None):
@@ -2260,6 +2311,8 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
         leftmargin = label_period_start - time_start
         if leftmargin < 0:
             raise ValueError(f'leftmargin = label_period_start - time_start < 0 which is not allowed!')
+        elif leftmargin == 0:
+            leftmargin = None
     
     if label_period_end is None:
         rightmargin = None
@@ -2298,29 +2351,27 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
             X_tr, _, _ = normalize_X(X_tr, fold_folder, mode=normalization_mode)
             #X_va = (X_va - X_mean)/X_std 
             X_va, _, _ = normalize_X(X_va, fold_folder) # we expect that the previous operation stores X_mean, X_std
+            logger.info(f'after normalization: {X_tr.shape = }, {X_va.shape = }, {Y_tr.shape = }, {Y_va.shape = }')
         
         if pca['pca_mode']:
             with PCAer(Z_DIM=pca['Z_DIM'], folder=fold_folder) as pcaer:
                 pcaer.fit(X_tr)
                 X_tr = pcaer.encoder.predict(X_tr)
                 X_va = pcaer.encoder.predict(X_va)
-        if leftmargin is not None or rightmargin is not None:
-            logger.info(f'before margin removal {X_tr.shape = }, {X_va.shape = }')
-            X_tr = X_tr[:,leftmargin:rightmargin,...].reshape(-1,*X_tr.shape[2:]) # skip the unnecessary margins
-            X_va = X_va[:,leftmargin:rightmargin,...].reshape(-1,*X_va.shape[2:]) # skip the unnecessary margins
-
-        """    for myfield in [t2m, zg500, mrso]: # the idea is to generate consecutive time series of length timestamps from the original series by making sure that this is done to each summer individually
-        myfield.abs_area_int_reshape = myfield.abs_area_int[:,(Tot_Mon1[6]+tau-timestamps+1):(Tot_Mon1[9]+tau - T+1)]
-        print("myfield.abs_area_int_reshape.shape = ", myfield.abs_area_int_reshape.shape)
-        myfield.abs_area_int_reshape = np.swapaxes(np.array([myfield.abs_area_int_reshape[:,i:i+timestamps] for i in range(myfield.abs_area_int_reshape.shape[1]-timestamps+1)]),0,1).reshape(-1,timestamps
-        """
-        if leftmargin is not None: # adding a dimension to X_tr and X_va with a time moving window
-            X_tr = np.swapaxes(np.array([X_tr[:,i:i+leftmargin,...] 
-                                         for _ in range(X_tr.shape[1]-leftmargin+1)]),0,1).reshape(-1,leftmargin)
-            X_va = np.swapaxes(np.array([X_va[:,i:i+leftmargin,...] 
-                                         for _ in range(X_va.shape[1]-leftmargin+1)]),0,1).reshape(-1,leftmargin)
-            
-        logger.info(f'final {X_tr.shape = }, {X_va.shape = }')
+                logger.info(f'after PCA: {X_tr.shape = }, {X_va.shape = }')
+        logger.info(f' {time_start = }, {time_end = }, {leftmargin = }, {rightmargin = }, {T = }')
+        #logger.info(f'{Y_va[1*82:2*82]}')
+        #logger.info(f'{np.where(Y_va == 1)}')
+        #logger.info(f'{X_va[5*82:6*82,12,12,0]}')
+        X_tr = margin_removal_with_sliding_window(X_tr,time_start,leftmargin,rightmargin,time_end,T,sliding=True)
+        X_va = margin_removal_with_sliding_window(X_va,time_start,leftmargin,rightmargin,time_end,T,sliding=True)
+        Y_tr = margin_removal_with_sliding_window(Y_tr,time_start,leftmargin,rightmargin,time_end,T)
+        Y_va = margin_removal_with_sliding_window(Y_va,time_start,leftmargin,rightmargin,time_end,T)
+        #logger.info(f'{Y_va[1*79:2*79]}')
+        #logger.info(f'{np.where(Y_va == 1)}')
+        #for i in range(X_va.shape[1]):   
+        #    logger.info(f'{X_va[5*79:6*79,i,12,12,0]}')
+        logger.info(f'final {X_tr.shape = }, {X_va.shape = }, {Y_tr.shape = }, {Y_va.shape = }')
 
         # at this point data is ready to be fed to the networks
 
@@ -2416,17 +2467,15 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
             if normalization_mode: # normalize X_tr and X_va
                 #X_va = (X_va - X_mean)/X_std 
                 X_va, _, _ = normalize_X(X_va, fold_folder) # we expect that the previous operation stores X_mean, X_std
-            
+                logger.info(f'after normalization: {X_va.shape = }, {Y_va.shape = }')
+
             if pca['pca_mode']:
                 with PCAer(Z_DIM=pca['Z_DIM'], folder=fold_folder) as pcaer: # the fit is expected to have already been performed thus we must merely load
                     X_va = pcaer.encoder.predict(X_va)
-            if leftmargin is not None or rightmargin is not None:
-                logger.info(f'before margin removal {X_va.shape = }')
-                X_va = X_va[:,leftmargin:rightmargin,...].reshape(-1,*X_va.shape[2:]) # skip the unnecessary margins    
-            if leftmargin is not None: # adding a dimension to X_va with a time moving window
-                X_va = np.swapaxes(np.array([X_va[:,i:i+leftmargin,...] 
-                                         for _ in range(X_va.shape[1]-leftmargin+1)]),0,1).reshape(-1,leftmargin)
-            logger.info(f'final {X_va.shape = }')
+                    logger.info(f'after PCA: {X_va.shape = }')
+            
+            X_va = margin_removal_with_sliding_window(X_va,time_start,leftmargin,rightmargin,time_end,T,sliding=True)
+            Y_va = margin_removal_with_sliding_window(Y_va,time_start,leftmargin,rightmargin,time_end,T)
             
             
             model = load_model(f'{fold_folder}/{fold_subfolder}cp-{opt_checkpoint:04d}.ckpt')
