@@ -2229,6 +2229,8 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
         if provided the first day of the period of interest for the label threshold determination (copied from make_XY)
         This variable is necessary if for some reason we need to also load data that lies outside the range of where 
         the labels that we need for training/validation and testing directly
+            leftmargin = label_period_start - time_start
+            if positive will be treated as a 
     label_period_end : int, optional
         if provided the first day after the end of the period of interst for the label threshold determination (copied from make_XY)
         This variable is necessary if for some reason we need to also load data that lies outside the range of where 
@@ -2256,12 +2258,15 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
         leftmargin = None # basically left margin
     else:
         leftmargin = label_period_start - time_start
+        if leftmargin < 0:
+            raise ValueError(f'leftmargin = label_period_start - time_start < 0 which is not allowed!')
     
     if label_period_end is None:
         rightmargin = None
     else:
         rightmargin = time_end - label_period_end - T + 1 # that's because when we perform running mean we have to avoid using last T days
-    
+        if rightmargin < 0:
+            raise ValueError(f'leftmargin = time_end - label_period_end - T + 1 which is not allowed!')
     # get the folders from which to load the models
     load_from, info = get_transfer_learning_folders(load_from, folder, nfolds, optimal_checkpoint_kwargs=optimal_checkpoint_kwargs)
     # here load_from is either None (no transfer learning) or a list of strings
@@ -2299,10 +2304,23 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
                 pcaer.fit(X_tr)
                 X_tr = pcaer.encoder.predict(X_tr)
                 X_va = pcaer.encoder.predict(X_va)
-        logger.info(f'before margin removal {X_tr.shape = }, {X_va.shape = }')
-        X_tr = X_tr[:,leftmargin:rightmargin,...].reshape(-1,*X_tr.shape[2:]) # skip the unnecessary margins
-        X_va = X_va[:,leftmargin:rightmargin,...].reshape(-1,*X_va.shape[2:]) # skip the unnecessary margins
-        logger.info(f'after margin removal {X_tr.shape = }, {X_va.shape = }')
+        if leftmargin is not None or rightmargin is not None:
+            logger.info(f'before margin removal {X_tr.shape = }, {X_va.shape = }')
+            X_tr = X_tr[:,leftmargin:rightmargin,...].reshape(-1,*X_tr.shape[2:]) # skip the unnecessary margins
+            X_va = X_va[:,leftmargin:rightmargin,...].reshape(-1,*X_va.shape[2:]) # skip the unnecessary margins
+
+        """    for myfield in [t2m, zg500, mrso]: # the idea is to generate consecutive time series of length timestamps from the original series by making sure that this is done to each summer individually
+        myfield.abs_area_int_reshape = myfield.abs_area_int[:,(Tot_Mon1[6]+tau-timestamps+1):(Tot_Mon1[9]+tau - T+1)]
+        print("myfield.abs_area_int_reshape.shape = ", myfield.abs_area_int_reshape.shape)
+        myfield.abs_area_int_reshape = np.swapaxes(np.array([myfield.abs_area_int_reshape[:,i:i+timestamps] for i in range(myfield.abs_area_int_reshape.shape[1]-timestamps+1)]),0,1).reshape(-1,timestamps
+        """
+        if leftmargin is not None: # adding a dimension to X_tr and X_va with a time moving window
+            X_tr = np.swapaxes(np.array([X_tr[:,i:i+leftmargin,...] 
+                                         for _ in range(X_tr.shape[1]-leftmargin+1)]),0,1).reshape(-1,leftmargin)
+            X_va = np.swapaxes(np.array([X_va[:,i:i+leftmargin,...] 
+                                         for _ in range(X_va.shape[1]-leftmargin+1)]),0,1).reshape(-1,leftmargin)
+            
+        logger.info(f'final {X_tr.shape = }, {X_va.shape = }')
 
         # at this point data is ready to be fed to the networks
 
@@ -2402,10 +2420,13 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
             if pca['pca_mode']:
                 with PCAer(Z_DIM=pca['Z_DIM'], folder=fold_folder) as pcaer: # the fit is expected to have already been performed thus we must merely load
                     X_va = pcaer.encoder.predict(X_va)
-            logger.info(f'before margin removal {X_tr.shape = }, {X_va.shape = }')
-            X_tr = X_tr[:,leftmargin:rightmargin,...].reshape(-1,*X_tr.shape[2:]) # skip the unnecessary margins
-            X_va = X_va[:,leftmargin:rightmargin,...].reshape(-1,*X_va.shape[2:]) # skip the unnecessary margins    
-            logger.info(f'after margin removal {X_tr.shape = }, {X_va.shape = }')
+            if leftmargin is not None or rightmargin is not None:
+                logger.info(f'before margin removal {X_va.shape = }')
+                X_va = X_va[:,leftmargin:rightmargin,...].reshape(-1,*X_va.shape[2:]) # skip the unnecessary margins    
+            if leftmargin is not None: # adding a dimension to X_va with a time moving window
+                X_va = np.swapaxes(np.array([X_va[:,i:i+leftmargin,...] 
+                                         for _ in range(X_va.shape[1]-leftmargin+1)]),0,1).reshape(-1,leftmargin)
+            logger.info(f'final {X_va.shape = }')
             
             
             model = load_model(f'{fold_folder}/{fold_subfolder}cp-{opt_checkpoint:04d}.ckpt')
