@@ -1291,6 +1291,14 @@ class PCAer:
             self.encoder = PCAencoder(n_components=Z_DIM, svd_solver="randomized", whiten=True)
         self.shape = None # it gets a value when calling method fit()
         self.folder = folder # where the Autoencoder is saved
+    # To be able to create this class using `with` statement
+    def __enter__(self):
+        # Return the instance of the class
+        return self
+    def __exit__(self, exc_type, exc_value, traceback):
+        # Clean up any resources used by the class
+        pass
+
     def fit(self,*args, **kwargs):
         if os.path.exists(f'{self.folder}/encoder.pkl'):
             logger.info("Fit will not be performed because the file exists")
@@ -1589,69 +1597,46 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
                     #if encoder_use_batch_norm:
                     #    actv = BatchNormalization()(actv)
                     #    # print("actv = BatchNormalization()(actv)")
-                
-                
             
             x.append(actv)
             
 
         #shape_before_flattening = K.int_shape(x[-1])[1:] 
         #print("shape_before_flattening = ", shape_before_flattening)
-        x.append(layers.Flatten()(x[-1]))
-        """
-        # build the convolutional layers
-        for i in range(len(conv_channels)):
-            if conv_l2coef[i] is not None:
-                kernel_regularizer=tf.keras.regularizers.l2(conv_l2coef[i])
-            else:
-                kernel_regularizer=None
-            if i == 0:
-                model.add(layers.Conv2D(conv_channels[i], kernel_sizes[i],
-                        strides=strides[i], input_shape=input_shape, padding=padding[i], kernel_regularizer=kernel_regularizer))
-            else:
-                model.add(layers.Conv2D(conv_channels[i], kernel_sizes[i],
-                        strides=strides[i], padding=padding[i],kernel_regularizer=kernel_regularizer))
-            if batch_normalizations[i]:
-                model.add(layers.BatchNormalization())
-            model.add(layers.Activation(conv_activations[i]))
-            if conv_dropouts[i]:
-                model.add(layers.SpatialDropout2D(conv_dropouts[i]))
-            if max_pool_sizes[i] is not None:
-                if max_pool_sizes[i] > 1:
-                    model.add(layers.MaxPooling2D(max_pool_sizes[i]))
-        # flatten
-        model.add(layers.Flatten())"""
-    else: # if there are no convolutions the flatten is supposed to be input
-        #model.add(layers.Flatten(input_shape=input_shape))
-        x.append(layers.Flatten(input_shape=input_shape)(x[-1]))
+        #x.append(layers.Flatten()(x[-1]))
+
+    #else: # if there are no convolutions the flatten is supposed to be input
+        #x.append(layers.Flatten(input_shape=input_shape)(x[-1]))
 
     # dense layers
     # adjust the shape of the arguments to be of the same length as conv_channels
-    args = [dense_activations, dense_dropouts, dense_l2coef, dense_batch_norm]
-    for j,arg in enumerate(args):
-        if not isinstance(arg, list):
-            args[j] = [arg]*len(dense_units)
-        elif len(arg) != len(dense_units):
-            raise ValueError(f'Invalid length for argument {arg = } when compared with {dense_units = }')
-    logger.info(f'dense args = {args}')
-    dense_activations, dense_dropouts, dense_l2coef, dense_batch_norm = args
-    # build the dense layers
-    for i in range(len(dense_units)):
-        if dense_l2coef[i] is not None:
-            kernel_regularizer=tf.keras.regularizers.l2(dense_l2coef[i])
-        else:
-            kernel_regularizer=None
-            
-        dense = layers.Dense(dense_units[i], kernel_regularizer=kernel_regularizer, name=f"dense_layer_{i}")(x[-1])
-        if dense_batch_norm[i]:
-            dense = layers.BatchNormalization(name=f"dense_batch_{i}")(dense)
-        if dense_activations[i] == 'LeakyRelu':
-            actv = layers.LeakyReLU(name=f"dense_activation_{i}")(dense)
-        else:
-            actv = layers.Activation(dense_activations[i],name=f"dense_activation_{i}")(dense)
-        if dense_dropouts[i]:
-            actv = layers.Dropout(rate=dense_dropouts[i],name=f"dense_dropout_{i}")(actv)
-        x.append(actv)
+    if dense_units is not None:
+        x.append(layers.Flatten()(x[-1]))
+        args = [dense_activations, dense_dropouts, dense_l2coef, dense_batch_norm]
+        for j,arg in enumerate(args):
+            if not isinstance(arg, list):
+                args[j] = [arg]*len(dense_units)
+            elif len(arg) != len(dense_units):
+                raise ValueError(f'Invalid length for argument {arg = } when compared with {dense_units = }')
+        logger.info(f'dense args = {args}')
+        dense_activations, dense_dropouts, dense_l2coef, dense_batch_norm = args
+        # build the dense layers
+        for i in range(len(dense_units)):
+            if dense_l2coef[i] is not None:
+                kernel_regularizer=tf.keras.regularizers.l2(dense_l2coef[i])
+            else:
+                kernel_regularizer=None
+                
+            dense = layers.Dense(dense_units[i], kernel_regularizer=kernel_regularizer, name=f"dense_layer_{i}")(x[-1])
+            if dense_batch_norm[i]:
+                dense = layers.BatchNormalization(name=f"dense_batch_{i}")(dense)
+            if dense_activations[i] == 'LeakyRelu':
+                actv = layers.LeakyReLU(name=f"dense_activation_{i}")(dense)
+            else:
+                actv = layers.Activation(dense_activations[i],name=f"dense_activation_{i}")(dense)
+            if dense_dropouts[i]:
+                actv = layers.Dropout(rate=dense_dropouts[i],name=f"dense_dropout_{i}")(actv)
+            x.append(actv)
         
         #model.add(layers.Dense(dense_units[i], activation=dense_activations[i],kernel_regularizer=kernel_regularizer))
         
@@ -2210,7 +2195,7 @@ def margin_removal_with_sliding_window(X,time_start,leftmargin,rightmargin,time_
 @ut.indent_logger(logger)
 def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=None, optimal_checkpoint_kwargs=None, load_from='last', nfolds=10, val_folds=1, u=1, normalization_mode='pointwise',
                      fullmetrics=True, training_epochs=40, training_epochs_tl=10, loss='sparse_categorical_crossentropy', prune_threshold=None, min_folds_before_pruning=None,
-                     pca={"pca_mode" : None, "Z_DIM" : 20}, T=14, time_start=30, time_end=120, label_period_start=None, label_period_end=None):
+                     Z_DIM=None, T=14, time_start=30, time_end=120, label_period_start=None, label_period_end=None):
     '''
     Performs k fold cross validation on a model architecture.
 
@@ -2268,8 +2253,8 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
     min_folds_before_pruning : int, optional
         minimum number of folds to train before checking whether to prune the run
         By default None, which means that pruning is disabled
-    pca: PCAer class
-        "pca_mode" is not None pca decomposition of the inputs is performed
+    Z_DIM: int, optional
+        if Z_DIM is not None, pca decomposition is performed to Z_DIM components
     T : int, optional
         width of the window for the running average  
     time_start : int, optional 
@@ -2353,8 +2338,8 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
             X_va, _, _ = normalize_X(X_va, fold_folder) # we expect that the previous operation stores X_mean, X_std
             logger.info(f'after normalization: {X_tr.shape = }, {X_va.shape = }, {Y_tr.shape = }, {Y_va.shape = }')
         
-        if pca['pca_mode']:
-            with PCAer(Z_DIM=pca['Z_DIM'], folder=fold_folder) as pcaer:
+        if Z_DIM is not None:
+            with PCAer(Z_DIM=Z_DIM, folder=fold_folder) as pcaer:
                 pcaer.fit(X_tr)
                 X_tr = pcaer.encoder.predict(X_tr)
                 X_va = pcaer.encoder.predict(X_va)
@@ -2469,8 +2454,8 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
                 X_va, _, _ = normalize_X(X_va, fold_folder) # we expect that the previous operation stores X_mean, X_std
                 logger.info(f'after normalization: {X_va.shape = }, {Y_va.shape = }')
 
-            if pca['pca_mode']:
-                with PCAer(Z_DIM=pca['Z_DIM'], folder=fold_folder) as pcaer: # the fit is expected to have already been performed thus we must merely load
+            if Z_DIM is not None:
+                with PCAer(Z_DIM=Z_DIM, folder=fold_folder) as pcaer: # the fit is expected to have already been performed thus we must merely load
                     X_va = pcaer.encoder.predict(X_va)
                     logger.info(f'after PCA: {X_va.shape = }')
             
