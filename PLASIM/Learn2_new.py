@@ -215,6 +215,12 @@ try:
 except ImportError:
     import ERA.utilities as ut
 
+try:
+    from np.lib.stride_tricks import sliding_window_view
+except ImportError: # custom copy for numpy<1.20
+    sliding_window_view = ef.sliding_window_view
+    
+
 # separators to create the run name from the run arguments
 arg_sep = '--' # separator between arguments
 value_sep = '__' # separator between an argument and its value
@@ -2223,7 +2229,7 @@ def margin_removal_with_sliding_window(X,time_start,leftmargin,rightmargin,time_
         logger.info(f'preparing for margin removal: {X.shape = }')
             
     if (leftmargin is not None) and (sliding is True): # adding a dimension to X_tr and X_va with a time moving window
-        X = np.moveaxis(np.lib.stride_tricks.sliding_window_view(X, leftmargin+1, axis=1),-1,2)
+        X = np.moveaxis(sliding_window_view(X, leftmargin+1, axis=1),-1,2)
         logger.info(f'after sliding window: {X.shape = }')
 
     if (leftmargin is not None):
@@ -2390,7 +2396,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
         logger.info(f' {time_start = }, {time_end = }, {leftmargin = }, {rightmargin = }, {T = }')
         #logger.info(f'{Y_va[1*82:2*82]}')
         #logger.info(f'{np.where(Y_va == 1)}')
-        #logger.info(f'{X_va[5*82:6*82,12,12,0]}')
+        #logger.info(f'{X_va[5*82:6*82,35,30,0]}')
         X_tr = margin_removal_with_sliding_window(X_tr,time_start,leftmargin,rightmargin,time_end,T,sliding=True)
         X_va = margin_removal_with_sliding_window(X_va,time_start,leftmargin,rightmargin,time_end,T,sliding=True)
         Y_tr = margin_removal_with_sliding_window(Y_tr,time_start,leftmargin,rightmargin,time_end,T)
@@ -2398,7 +2404,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
         #logger.info(f'{Y_va[1*79:2*79]}')
         #logger.info(f'{np.where(Y_va == 1)}')
         #for i in range(X_va.shape[1]):   
-        #    logger.info(f'{X_va[5*79:6*79,i,12,12,0]}')
+        #    logger.info(f'{X_va[5*79:6*79,i,35,30,0]}')
         logger.info(f'After margin removal: {X_tr.shape = }, {X_va.shape = }, {Y_tr.shape = }, {Y_va.shape = }')
 
         # perform undersampling
@@ -2452,7 +2458,10 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
         scores.append(score)
 
         my_memory.append(psutil.virtual_memory())
-        logger.info(f'RAM memory: {my_memory[i][3]:.3e}') # Getting % usage of virtual_memory ( 3rd field)
+        try:
+            logger.info(f'RAM memory: {my_memory[i][3]:.3e}') # Getting % usage of virtual_memory ( 3rd field)
+        except:
+            logger.info(f'RAM memory: {my_memory[i]:.3e}') # Getting % usage of virtual_memory ( 3rd field)
 
         keras.backend.clear_session()
         gc.collect() # Garbage collector which removes some extra references to the objects. This is an attempt to micromanage the python handling of RAM
