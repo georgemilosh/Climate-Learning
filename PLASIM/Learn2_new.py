@@ -1486,6 +1486,7 @@ def undersample(X, Y, u=1, random_state=42):
 
 def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=1, padding='valid',
                  batch_normalizations=True, conv_activations='relu', conv_dropouts=0.2, max_pool_sizes=[2,2,False], conv_l2coef=None, conv_skip=None,
+                 rnn_units=None, rnn_type='LSTM', rnn_activations=None, rnn_dropouts=False, rnn_l2coef=None, rnn_batch_norm=None, rnn_return_sequences=False,
                  dense_units=[64,2], dense_activations=['relu', None], dense_dropouts=[0.2,False], dense_l2coef=None, dense_batch_norm=None):
     '''
     Creates a model consisting of a series of convolutional layers followed by fully connected ones
@@ -1516,6 +1517,20 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
         creates a skip connection between two layers given by key and value entries in the dictionary. 
         If empty no skip connections are included. The skip connection will not work if 
         the dimensions of layers mismatch. For this convolutional architecture should be implemented in future
+
+    rnn_units : list of int, optional
+        number of cells for each RNN layer
+    rnn_type :  list of string, optional
+        Either 'LSTM' or 'GRU'
+    rnn_activations : str or list of str, optional
+        activation functions after each RNN layer
+    rnn_dropouts : float in [0,1] or list of floats in [0,1], optional 
+    rnn_l2coef :list of floats, optional
+        hich encodes the values of L2 regularizers in RNN layers, optional, defaults to None
+    rnn_batch_norm :  bool or list of bools, optional
+        whether to add a BatchNormalization layer after each dense layer
+    rnn_return_sequences : bool or list of bools, optional
+        whether to return internal states of RNNs
         
 
     dense_units : list of int, optional
@@ -1523,7 +1538,8 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
     dense_activations : str or list of str, optional
         activation functions after each fully connected layer
     dense_dropouts : float in [0,1] or list of floats in [0,1], optional
-    dense_l2coef : list of floats which encodes the values of L2 regularizers in dense layers, optional, defaults to None
+    dense_l2coef :list of floats, optional
+        which encodes the values of L2 regularizers in dense layers, optional, defaults to None
     dense_batch_norm:  bool or list of bools, optional
         whether to add a BatchNormalization layer after each dense layer
 
@@ -1599,17 +1615,48 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
                     #    # print("actv = BatchNormalization()(actv)")
             
             x.append(actv)
+    
+    if rnn_units is not None:
+        feature_shape = tff.K.int_shape(x[-1])[1:] # The idea is to keep the sequence (axis=1) shape assuming it exists
+        logger.info(f'{feature_shape = }')
+        feature_shape = (feature_shape[0],np.prod(np.array(feature_shape[1:]))) # flatten from axis=1 on
+        logger.info(f'{feature_shape = }')
+        x.append(layers.Reshape(feature_shape)(x[-1]))
+        args = [rnn_activations, rnn_dropouts, rnn_l2coef, rnn_batch_norm, rnn_type, rnn_return_sequences]
+        for j,arg in enumerate(args):
+            if not isinstance(arg, list):
+                args[j] = [arg]*len(rnn_units)
+            elif len(arg) != len(rnn_units):
+                raise ValueError(f'Invalid length for argument {arg = } when compared with {rnn_units = }')
+        logger.info(f'rnn args = {args}')
+        rnn_activations, rnn_dropouts, rnn_l2coef, rnn_batch_norm, rnn_type, rnn_return_sequences = args
+        # build the dense layers
+        for i in range(len(rnn_units)):
+            if rnn_l2coef[i] is not None:
+                kernel_regularizer=tf.keras.regularizers.l2(rnn_l2coef[i])
+            else:
+                kernel_regularizer=None
             
-
-        #shape_before_flattening = K.int_shape(x[-1])[1:] 
-        #print("shape_before_flattening = ", shape_before_flattening)
-        #x.append(layers.Flatten()(x[-1]))
-
-    #else: # if there are no convolutions the flatten is supposed to be input
-        #x.append(layers.Flatten(input_shape=input_shape)(x[-1]))
-
+            if rnn_type[i] == 'LSTM':
+                rnn = layers.LSTM(rnn_units[i], kernel_regularizer=kernel_regularizer, return_sequences=rnn_return_sequences[i], name=f"rnn_layer_{i}")(x[-1])
+            elif rnn_type[i] == 'GRU':
+                rnn = layers.GRU(rnn_units[i], kernel_regularizer=kernel_regularizer, return_sequences=rnn_return_sequences[i], name=f"rnn_layer_{i}")(x[-1])
+            else:
+                raise ValueError(f'{rnn_type[i]} not implemented')
+            if rnn_batch_norm[i]:
+                rnn = layers.BatchNormalization(name=f"rnn_batch_{i}")(rnn)
+            if rnn_activations[i] == 'LeakyRelu':
+                actv = layers.LeakyReLU(name=f"rnn_activation_{i}")(rnn)
+            else:
+                actv = layers.Activation(rnn_activations[i],name=f"rnn_activation_{i}")(rnn)
+            if rnn_dropouts[i]:
+                actv = layers.Dropout(rate=rnn_dropouts[i],name=f"rnn_dropout_{i}")(actv)
+            x.append(actv)
+        
     # dense layers
     # adjust the shape of the arguments to be of the same length as conv_channels
+    
+
     if dense_units is not None:
         x.append(layers.Flatten()(x[-1]))
         args = [dense_activations, dense_dropouts, dense_l2coef, dense_batch_norm]
@@ -1626,7 +1673,7 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
                 kernel_regularizer=tf.keras.regularizers.l2(dense_l2coef[i])
             else:
                 kernel_regularizer=None
-                
+            
             dense = layers.Dense(dense_units[i], kernel_regularizer=kernel_regularizer, name=f"dense_layer_{i}")(x[-1])
             if dense_batch_norm[i]:
                 dense = layers.BatchNormalization(name=f"dense_batch_{i}")(dense)
