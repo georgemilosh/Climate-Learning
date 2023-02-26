@@ -1115,6 +1115,7 @@ def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0,
     #if label_period_end is not None:
     #    if label_period_end > time_end:
     #       raise ValueError(f'Bad parameters specified: {label_period_end = } is more than {time_end = }')
+    logger.info(f' {time_start = }, {time_end = }, {label_period_start = }, {label_period_end = }, {T = }')
     X = make_X(fields, time_start=time_start, time_end=time_end, T=T, tau=tau)
     try:
         lf = fields[label_field]
@@ -2372,12 +2373,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
         # split data
         X_tr, Y_tr, X_va, Y_va = k_fold_cross_val_split(i, X, Y, nfolds=nfolds, val_folds=val_folds)
             
-        # perform undersampling
-        X_tr, Y_tr = undersample(X_tr, Y_tr, u=u)
-
-        n_pos_tr = np.sum(Y_tr)
-        n_neg_tr = len(Y_tr) - n_pos_tr
-        logger.info(f'number of training data: {len(Y_tr)} of which {n_neg_tr} negative and {n_pos_tr} positive')
+        
 
         if normalization_mode: # normalize X_tr and X_va
             X_tr, _, _ = normalize_X(X_tr, fold_folder, mode=normalization_mode)
@@ -2403,8 +2399,14 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
         #logger.info(f'{np.where(Y_va == 1)}')
         #for i in range(X_va.shape[1]):   
         #    logger.info(f'{X_va[5*79:6*79,i,12,12,0]}')
-        logger.info(f'final {X_tr.shape = }, {X_va.shape = }, {Y_tr.shape = }, {Y_va.shape = }')
+        logger.info(f'After margin removal: {X_tr.shape = }, {X_va.shape = }, {Y_tr.shape = }, {Y_va.shape = }')
 
+        # perform undersampling
+        X_tr, Y_tr = undersample(X_tr, Y_tr, u=u)
+
+        n_pos_tr = np.sum(Y_tr)
+        n_neg_tr = len(Y_tr) - n_pos_tr
+        logger.info(f'number of training data: {len(Y_tr)} of which {n_neg_tr} negative and {n_pos_tr} positive')
         # at this point data is ready to be fed to the networks
 
 
@@ -2687,6 +2689,8 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
         X = X.reshape((X.shape[0]*X.shape[1],*X.shape[2:]))
         Y = Y.reshape((Y.shape[0]*Y.shape[1]))
         logger.info(f'Flattened time: {X.shape = }, {Y.shape = }')
+    else:
+        logger.info(f'Time not flattened: {X.shape = }, {Y.shape = }')
 
     if return_time_series:
         time_series = []
