@@ -170,6 +170,7 @@ from functools import wraps
 import socket
 from functools import partial # this one we use for the scheduler
 from sklearn.decomposition import PCA
+import signal
 
 
 if __name__ == '__main__':
@@ -1311,12 +1312,40 @@ class PCAer:
             logger.info(f'saving in {self.folder}/encoder.pkl')
             with open(f'{self.folder}/encoder.pkl', 'wb') as file_pi:
                 pickle.dump(self.encoder, file_pi)
-            
         return result_fit 
+
+    def fit_with_timeout(self,counter,*args,timeout=300,maxIter=3, **kwargs):
+        '''
+            This is a wrapper which runs fit() for maxIter times until
+            the fit() produces result (doesn't hang) in `timeout` seconds.
+            Basically this method addresses the problem that the PCA.fit often hangs
+        '''
+        def handler(signum, frame):
+            raise TimeoutError("Computation timed out")
+        logger.info(f'{counter = }')
+        signal.signal(signal.SIGALRM, handler)
+        signal.alarm(timeout)
+        counter=counter+1
+        if counter<maxIter:
+            try:
+                logger.info("calling self.fit(*args, **kwargs)")
+                result = self.fit(*args, **kwargs)
+            except TimeoutError:
+                logger.info("Computation timed out. Restarting...")
+                result = self.fit_with_timeout(counter,*args, timeout=timeout,maxIter=maxIter, **kwargs)
+            finally:
+                signal.alarm(0)
+            return result
+        else:
+            logger.info("reached too many iterations")
+            return None
+    
     def score(self,*args,**kwargs):
         return self.encoder.score(args[0].reshape(args[0].shape[0],-1))
+    
     def decoder(self,X):
         return self.encoder.inverse_transform(X).reshape(self.shape)
+    
     def summary(self):
         logger.info(f'PCA with {self.Z_DIM} components')
 
@@ -2383,7 +2412,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
         
         if Z_DIM is not None:
             with PCAer(Z_DIM=Z_DIM, folder=fold_folder) as pcaer:
-                pcaer.fit(X_tr)
+                pcaer.fit_with_timeout(0,X_tr)
                 X_tr = pcaer.encoder.predict(X_tr)
                 X_va = pcaer.encoder.predict(X_va)
                 logger.info(f'after PCA: {X_tr.shape = }, {X_va.shape = }')
