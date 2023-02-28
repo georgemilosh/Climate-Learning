@@ -1281,8 +1281,8 @@ class PCAencoder(PCA):
     def summary(self):
         print(f'We are computing PCA')
 class PCAer:
-    """_summary_
-        Essentially decorator class that keeps the inputs and outputs maximally similar to autoencoder so that we could using the same routines
+    """
+        Essentially decorator class that keeps the inputs and outputs maximally similar to autoencoder so that we could use the same routines
         Z_DIM: int
             dimensionality of the latent space
         folder: string
@@ -1309,9 +1309,9 @@ class PCAer:
 
     def fit(self,*args, **kwargs):
         if os.path.exists(f'{self.folder}/encoder.pkl'):
-            logger.info("Fit will not be performed because the file exists")
+            logger.warning("Fit will not be performed because the file exists")
         else:
-            logger.info(f'The relevant file absent so performing fit to the shape {args[0].shape = }')
+            logger.info(f'The relevant file is absent so performing fit to the shape {args[0].shape = }')
             result_fit = self.encoder.fit(args[0].reshape(args[0].shape[0],-1)) # PCA expects the input of type fit(X) such that X is 2 dimensional
             self.shape = args[0].shape[0]
             logger.info(f'{np.sum(self.encoder.explained_variance_ratio_) = }')
@@ -1337,13 +1337,13 @@ class PCAer:
                 logger.info("calling self.fit(*args, **kwargs)")
                 result = self.fit(*args, **kwargs)
             except TimeoutError:
-                logger.info("Computation timed out. Restarting...")
+                logger.warning("Computation timed out. Restarting...")
                 result = self.fit_with_timeout(counter,*args, timeout=timeout,maxIter=maxIter, **kwargs)
             finally:
                 signal.alarm(0)
             return result
         else:
-            logger.info("reached too many iterations")
+            logger.error("reached too many iterations")
             return None
     
     def score(self,*args,**kwargs):
