@@ -75,7 +75,7 @@ class ScoreOptimizer():
         # optimizing learning rate, batch size and regularization:
         
         
-        lr = trial.suggest_float('lr', 1e-5, 1e-2, log=True) # learning rate
+        """lr = trial.suggest_float('lr', 1e-5, 1e-2, log=True) # learning rate
         lr = literal_eval(f'{lr:.7f}') # limit the resolution of the learning rate
         lr_min = trial.suggest_float('lr_min', 1e-7, lr, log=True) 
         lr_min = literal_eval(f'{lr_min:.7f}') 
@@ -123,7 +123,47 @@ class ScoreOptimizer():
         hyp['dense_units'].append(2)
         hyp['dense_dropouts'].append(None)
         hyp['dense_l2coef'].append(None)
-        hyp['dense_activations'].append(None)
+        hyp['dense_activations'].append(None)"""
+        
+        
+        #hyp['time_start'] = trial.suggest_int(f'time_start', 31-15, 31-1)
+        
+        #hyp['Z_DIM'] = trial.suggest_int('Z_DIM', 2, 256)
+        
+        n_rnn_layers = 3 #trial.suggest_int('n_rnn_layers', 1, 4)
+        
+        lr = trial.suggest_float('lr', 1e-5, 1e-2, log=True) # learning rate
+        lr = literal_eval(f'{lr:.7f}') # limit the resolution of the learning rate
+        lr_min = trial.suggest_float('lr_min', 1e-7, lr, log=True) 
+        lr_min = literal_eval(f'{lr_min:.7f}') 
+        hyp['lr'] = lr
+        hyp['lr_min'] = lr_min
+        hyp['epoch_tol'] =  trial.suggest_int('epoch_tol', 1, 5)
+        hyp['decay'] = (literal_eval(f"{trial.suggest_float(f'decay', 0.05, 0.5, log=True):.05f}"))
+        hyp['warmup'] = trial.suggest_categorical(f'warmup', [True, False])
+        
+        hyp['batch_size'] = trial.suggest_categorical(f'batch_size', [32, 64, 128, 256, 512])
+        hyp['rnn_units'] = []
+        hyp['rnn_dropouts'] = []
+        hyp['rnn_l2coef'] = []
+        hyp['rnn_activations'] = []
+        hyp['rnn_return_sequences'] = []
+        
+        unique_layers = False # controls whether to reuse the same value for each layer
+        for i in range(n_rnn_layers):
+            if unique_layers or i == 0:
+                rnn_units_trial = trial.suggest_int(f'rnn_units_{i+1}', 8, 256)
+                rnn_dropouts_trial = literal_eval(f"{trial.suggest_float(f'rnn_dropouts_{i+1}', 0, 0.8, step=0.01):.2f}")
+                rnn_l2coef_trial = literal_eval(f"{trial.suggest_float(f'rnn_l2coef_{i+1}', 1e-6, 1e6, log=True):.7f}")
+                rnn_activations_trial = trial.suggest_categorical(f'rnn_activations_{i+1}', ['relu', 'elu','LeakyRelu'])
+            hyp['rnn_units'].append(rnn_units_trial)
+            hyp['rnn_dropouts'].append(rnn_dropouts_trial)
+            hyp['rnn_l2coef'].append(rnn_l2coef_trial)
+            hyp['rnn_activations'].append(rnn_activations_trial)
+            if i < n_rnn_layers - 1:
+                hyp['rnn_return_sequences'].append(True)
+            else:
+                hyp['rnn_return_sequences'].append(False)
         
         
         """# optimizing learning rate and batch size:
