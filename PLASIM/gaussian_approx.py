@@ -23,6 +23,22 @@ logging.getLogger().level = logging.INFO
 logging.getLogger().handlers = [logging.StreamHandler(sys.stdout)]
 
 def compute_weight_matrix(reshape_mask, lat):
+    '''
+    Compute the matrix W such that
+    $$ H_2(p) = p^\top W p $$
+
+    Parameters
+    ----------
+    reshape_mask : np.ndarray[bool]
+        mask to flatten a snapshot `p` into a one dimensional array, eventually removing zero variance features
+    lat : np.ndarray[float]
+        latitude vector, used to compute the grid cell area and the proper longitudinal gradients
+
+    Returns
+    -------
+    np.ndarray[float]
+        W
+    '''
     shape = reshape_mask.shape
     shape_r = (np.sum(reshape_mask),)
     if len(shape) != 3:
@@ -78,6 +94,23 @@ def compute_weight_matrix(reshape_mask, lat):
 
 class GaussianCommittor(object):
     def __init__(self, regularization_matrix=0, threshold=0):
+        '''
+        Object to compute a committor function under the gaussian assumption.
+
+        Given a high dimensional input $x$ the probability (committor) $q$ of a target variable $a$ to be above a threshold $t$ is computed as
+
+        $$ q = \frac{1}{2} \erfc(\alpha + \beta p^{\top} x) $$
+
+        where $p$ is a norm 1 vector and $\alpha$ and $\beta$ are scalars. The three are fitted onto data thanks to the `self.fit` function.
+
+        Parameters
+        ----------
+        regularization_matrix : np.ndarray or float, optional
+            matrix to add to the covariance matrix before taking the inverse, by default 0
+            If float it is multiplied by the identity matrix.
+        threshold : float, optional
+            `t`, by default 0
+        '''
         self.regularization_matrix = regularization_matrix
         self.threshold = threshold
         self.p = None
@@ -85,6 +118,16 @@ class GaussianCommittor(object):
         self.f = None
 
     def fit(self, X, A):
+        '''
+        Fits the object on data
+
+        Parameters
+        ----------
+        X : np.ndarray[float]
+            Input data with shape (n_data_points, n_features)
+        A : np.ndarray[float]
+            Target variable with shape (n_data_points,)
+        '''
         # compute the covariance matrix
         XAs = np.concatenate([X,A.reshape(-1,1)], axis=-1)
         logger.info(f'{XAs.shape = }')
@@ -92,6 +135,11 @@ class GaussianCommittor(object):
         logger.info(f'{XAs_cov.shape = }')
         sigma_XX = XAs_cov[:-1,:-1]
         sigma_XA = XAs_cov[-1,:-1]
+
+        # check that the regularization matrix is indeed a matrix, if not make it a multiple of the identity matrix
+        if not hasattr(self.regularization_matrix, 'shape') or self.regularization_matrix.shape == ():
+            self.regularization_matrix = self.regularization_matrix * np.identity(sigma_XX.shape[0], dtype=float)
+        assert self.regularization_matrix.shape == sigma_XX.shape
 
         # compute the (regularized) projection pattern
         self.p = np.linalg.inv(sigma_XX + self.regularization_matrix) @ sigma_XA
@@ -112,11 +160,25 @@ class GaussianCommittor(object):
         self.b = self.lam_fA/np.sqrt(2*self.lam_AA)
 
     def q(self,x):
+        '''
+        committor function
+
+        Parameters
+        ----------
+        x : np.ndarray[float]
+            observed input with shape (..., n_features)
+
+        Returns
+        -------
+        np.ndarray[float]
+            predicted committor with shape (...,)
+        '''
         self.f = x @ self.p
         # return 0.5*ss.erfc((self.lam_AA*self.threshold + self.lam_fA*self.f)/np.sqrt(2*self.lam_AA))
         return 0.5*ss.erfc(self.a + self.b*self.f)
 
     def __call__(self,x):
+        '''Alias for self.q'''
         return self.q(x)
 
 
