@@ -1517,7 +1517,7 @@ def monotonize_years(da:xr.DataArray):
     for i, _y in enumerate(old_y):
         if y is None:
             y = _y
-        if _y != y:
+        if _y != y: # new year detected
             y = _y
             new_y += 1
         new_ys[i] = new_y
@@ -1725,7 +1725,10 @@ class Plasim_Field:
             logger.error(f'Unable to find key "{name}" among the provided fields {list(self.datas.keys())}')
             raise KeyError
 
-        self.field.data[np.isnan(self.field.data)] = 0 # The issue is that Francesco put a land mask on TAS.nc which has nan values on the sea. For machine learning purposes nan could be a problem
+        self.field.data[np.isnan(self.field.data)] = 0 # The issue is that Francesco put a land mask on TAS.nc which has nan values on the sea.
+                                                       # For machine learning purposes nan could be a problem
+                                                       # This causes the whole field to be loaded into memory though...
+        
         self.field = discard_all_dimensions_but(self.field, dims_to_keep=['time', 'lon', 'lat'])
         
         self.field, yrs = monotonize_years(self.field)
