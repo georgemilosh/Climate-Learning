@@ -1719,15 +1719,12 @@ class Plasim_Field:
         logger.info(f'Opening field {self.name}')
         
         try:
-            self.datas = xr.open_dataset(ut.first_valid_path(self.mylocal,self.filename))
+            self.datas = xr.open_dataset(ut.first_valid_path(self.mylocal,self.filename)) #.fillna(0) # The issue is that Francesco put a land mask on TAS.nc which has nan values on the sea.
+                                # For machine learning purposes nan could be a problem
             self.field = self.datas[name]
         except KeyError:
             logger.error(f'Unable to find key "{name}" among the provided fields {list(self.datas.keys())}')
             raise KeyError
-
-        self.field.data[np.isnan(self.field.data)] = 0 # The issue is that Francesco put a land mask on TAS.nc which has nan values on the sea.
-                                                       # For machine learning purposes nan could be a problem
-                                                       # This causes the whole field to be loaded into memory though...
         
         self.field = discard_all_dimensions_but(self.field, dims_to_keep=['time', 'lon', 'lat'])
         
