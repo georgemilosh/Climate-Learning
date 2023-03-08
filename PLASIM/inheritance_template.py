@@ -45,7 +45,7 @@ ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram])
 # change default values without modifying functions, below an example
 ut.set_values_recursive(ln.CONFIG_DICT, {'return_threshold': True}, inplace=True) 
 
-# override the main function as well
+# override the main function as well (you don't need to edit the following code)
 if __name__ == '__main__':
     ln.main()
 
