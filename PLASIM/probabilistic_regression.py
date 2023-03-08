@@ -104,7 +104,7 @@ ln.get_loss_function = get_loss_function
 ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram])
 
 # change default values without modifying functions, below an example
-ut.set_values_recursive(ln.CONFIG_DICT, {'return_threshold': True, 'loss': 'prob_reg_loss'}, inplace=True) 
+ut.set_values_recursive(ln.CONFIG_DICT, {'return_threshold': True, 'loss': 'prob_reg_loss', 'return_metric': 'val_ParametricCrossEntropyLoss'}, inplace=True) 
 
 # override the main function as well
 if __name__ == '__main__':
