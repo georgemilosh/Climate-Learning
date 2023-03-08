@@ -1,3 +1,7 @@
+#########################################################################
+# In this file we showcase an example of inheritance from Learn2_new.py #
+######################################################################### 
+
 import Learn2_new as ln
 ut = ln.ut
 logger = ln.logger
@@ -13,19 +17,27 @@ logging.getLogger().handlers = [logging.StreamHandler(sys.stdout)]
 #########################
 
 
-####################################################
-# define your custom functions                     #
-# below is an example redefining the Trainer class #
-####################################################
+################################################################################
+# define your custom functions                                                 #
+# below is an example redefining the Trainer class and a module level function #
+################################################################################
 
 class Trainer(ln.Trainer):
     def extra_feature(self):
         pass
 
+def normalize_X(X, fold_folder, mode='mycustommode', recompute=False):
+    if mode == 'mycustommode':
+        # do custom stuff
+        return X
+    # else use the normal function
+    return ln.normalize_X(X, fold_folder, mode=mode, recompute=recompute)
+
 #######################################################
 # set the modified functions to override the old ones #
 #######################################################
 ln.Trainer = Trainer
+ln.normalize_X = normalize_X
 
 # uptade module level config dictionary
 ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram])
