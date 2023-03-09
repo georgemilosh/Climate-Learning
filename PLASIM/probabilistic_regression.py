@@ -12,15 +12,18 @@ tf = ln.tf
 keras = ln.keras
 
 import numpy as np
-from scipy import special as ss
 
 def q(mu, sig, thr):
-    return 0.5*ss.erfc((thr - mu)/sig/np.sqrt(2))
+    return 0.5*tf.math.erfc((thr - mu)/sig/np.sqrt(2))
+
+def entropy(p, q, epsilon):
+    q = tf.clip_by_value(q, epsilon, 1 - epsilon)
+    return -p*tf.math.log(q) - (1-p)*tf.math.log(1 - q)
 
 ### custom losses/metrics
 class ProbRegLoss(keras.losses.Loss):
-    def __init__(self, name='ProbRegLoss'):
-        self.name = name
+    def __init__(self):
+        super().__init__(name=self.__class__.__name__)
         self.epsilon = keras.backend.epsilon()
 
     def call(self, y_true, y_pred):
@@ -30,9 +33,10 @@ class ProbRegLoss(keras.losses.Loss):
         return tf.math.square(y_true - mu)/sig + tf.math.log(sig)
 
 class ParametricCrossEntropyLoss(keras.losses.Loss):
-    def __init__(self, threshold=0, name='ParametricCrossEntropyLoss'):
-        self.name = name
+    def __init__(self, threshold=0):
+        super().__init__(name=self.__class__.__name__)
         self.threshold = threshold
+        self.epsilon = keras.backend.epsilon()
 
     def call(self, y_true, y_pred):
         labels = tf.cast(y_true >= self.threshold, tf.float32)
@@ -40,7 +44,7 @@ class ParametricCrossEntropyLoss(keras.losses.Loss):
         sig = tf.math.square(y_pred[...,1:2])
         prob = q(mu,sig,self.threshold)
 
-        return ut.entropy(labels, prob)
+        return entropy(labels, prob, self.epsilon)
 
 
 # create a module level variable to store the threshold
@@ -86,11 +90,10 @@ def get_loss_function(loss_name: str, u=1):
 def get_default_metrics(fullmetrics=False, u=1):
     if fullmetrics:
         metrics = [
-            'loss',
             ParametricCrossEntropyLoss(ln._current_threshold),
         ]
     else:
-        metrics=['loss']
+        metrics=None
     return metrics
 
 #######################################################
@@ -104,7 +107,15 @@ ln.get_loss_function = get_loss_function
 ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram])
 
 # change default values without modifying functions, below an example
-ut.set_values_recursive(ln.CONFIG_DICT, {'return_threshold': True, 'loss': 'prob_reg_loss', 'return_metric': 'val_ParametricCrossEntropyLoss'}, inplace=True) 
+ut.set_values_recursive(ln.CONFIG_DICT,
+                        {
+                            'return_threshold': True,
+                            'loss': 'prob_reg_loss',
+                            'return_metric': 'val_ParametricCrossEntropyLoss',
+                            'monitor' : 'val_ParametricCrossEntropyLoss',
+                            'metric' : 'val_ParametricCrossEntropyLoss',
+                        },
+                        inplace=True) 
 
 # override the main function as well
 if __name__ == '__main__':
