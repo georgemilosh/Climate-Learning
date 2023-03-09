@@ -1774,7 +1774,8 @@ class Plasim_Field:
             self.mask = self.mask.sel(lat=self.field.lat)
 
     @ut.execution_time
-    def select_lonlat(self, lat_start=None, lat_end=None, lon_start=None, lon_end=None):
+    @ut.indent_logger(logger)
+    def select_lonlat(self, lat_start=None, lat_end=None, lon_start=None, lon_end=None, fillna=None):
         '''
         Select a region in space.
         If `lon_start` >= `lon_end` the selection will start from `lon_start`, go over the end of the array and then continue from the beginning up to `lon_end`.
@@ -1790,6 +1791,8 @@ class Plasim_Field:
             start index for longitude, by default None
         lon_end : int, optional
             end index for longitude, by default None
+        fillna : float, optional
+            value to fill the missing values with, by default None
         '''
         if lat_start or lat_end:
             self.field = self.field.isel(lat=slice(lat_start, lat_end))
@@ -1816,7 +1819,13 @@ class Plasim_Field:
             self.land_area_weights = self.land_area_weights.sel(lon=self.field.lon)
             if self.mask is not None:
                 self.mask = self.mask.sel(lon=self.field.lon)
-    
+
+        if fillna is not None:
+            logger.info(f'Filling missing values with {fillna}')
+            self.field = self.field.fillna(fillna)
+        else:
+            logger.info('No filling of missing values')
+
     @property
     def var(self):
         '''Gives access to the data ov the field. For compatibility with the old version'''

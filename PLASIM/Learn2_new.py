@@ -219,7 +219,14 @@ except ImportError:
 try:
     from np.lib.stride_tricks import sliding_window_view
 except ImportError: # custom copy for numpy<1.20
-    sliding_window_view = ef.sliding_window_view
+    logger.warning('Could not import sliding_window_view from np.lib.stride_tricks. Using custom copy for numpy<1.20')
+    try:
+        sliding_window_view = ef.sliding_window_view
+    except AttributeError:
+        logger.warning('This version of ERA_Fields_New does not have the sliding_window_view function. Using custom copy for numpy<1.20')
+        # define a function which will raise error when called
+        def sliding_window_view(*args, **kwargs):
+            raise NotImplementedError("you need to update ERA_Fields_New.py to have the sliding_window_view function, or update numpy to 1.20 or higher")
     
 
 # separators to create the run name from the run arguments
@@ -862,7 +869,7 @@ except FileNotFoundError:
 @ut.execution_time  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function
 def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', area='France', filter_area='France',
-              lon_start=-64, lon_end=64, lat_start=0, lat_end=22, mylocal='/local/gmiloshe/PLASIM/',
+              lon_start=-64, lon_end=64, lat_start=0, lat_end=22, fillna=None, mylocal='/local/gmiloshe/PLASIM/',
               fields=['t2m','zg500','mrso_filtered'], preprefix='ANO_', datafolder='Data_Plasim'):
     # AL: can't you use the `Model` argument to reconstruct datafolder?
     '''
@@ -889,6 +896,8 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
         longitude and latitude extremes of the data expressed in indices (model specific)
         If `lon_start` >= `lon_end` the selection will start from `lon_start`, go over the end of the array and then continue from the beginning up to `lon_end`.
         Providing `lon_start` = `lon_end` will result in the longitude being rolled by `lon_start` steps
+    fillna : float, optional
+            value to fill the missing values with, by default None
     mylocal : list[str or Path], optional
         paths to the data storage. The program will look for each data file in the first path, if not found it will look in the next one and so on.
         For speed it is better if they are local paths.
@@ -901,6 +910,7 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
     datafolder: str, optional
         The name of the folder which lies inside `mylocal`, it defaults to Data_Plasim
     
+        
     Returns
     -------
     _fields: dict
@@ -970,7 +980,7 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
         field.sort_lat()
 
         # select longitude and latitude
-        field.select_lonlat(lat_start,lat_end,lon_start,lon_end)
+        field.select_lonlat(lat_start,lat_end,lon_start,lon_end,fillna)
 
         # filter
         if do_filter: # set to zero all values outside `filter_area`
