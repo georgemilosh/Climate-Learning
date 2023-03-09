@@ -1628,22 +1628,25 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
                     strides = strides[i], 
                     padding = padding[i],
                     kernel_regularizer=kernel_regularizer,
-                    name = f'conv_layer_{i}')(x[i])
+                    name = f'conv_layer_{i}')(x[-1])
 
             if batch_normalizations[i]:
-                conv = layers.BatchNormalization(name = f'batch_norm_{i}')(conv)
+                conv = layers.BatchNormalization(name=f'batch_norm_{i}')(conv)
                 # print("conv = BatchNormalization()(conv)")
                 
             if conv_activations[i] == 'LeakyRelu':
-                actv = layers.LeakyReLU(name = f'conv_activation_{i}')(conv)
+                actv = layers.LeakyReLU(name=f'conv_activation_{i}')(conv)
                 # print("actv = LeakyReLU()(conv)")
             else:
-                actv = layers.Activation(conv_activations[i],name = f'conv_activation_{i}')(conv)
+                actv = layers.Activation(conv_activations[i], name=f'conv_activation_{i}')(conv)
                 # print("actv = Activation(conv_activation[i])(conv)")
 
             if conv_dropouts[i]:
-                actv = layers.SpatialDropout2D(rate=conv_dropouts[i],name = f'spatial_dropout_{i}')(actv)
+                actv = layers.SpatialDropout2D(rate=conv_dropouts[i], name=f'spatial_dropout_{i}')(actv)
                 # print("actv = Dropout(rate=0.25)(actv)")
+
+            if max_pool_sizes[i] > 1:
+                actv = layers.MaxPooling2D(max_pool_sizes[i], name=f'max_pool_{i}')(actv)
             
             if conv_skip is not None:
                 #logger.info(f'{i = },{conv_skip = }')
