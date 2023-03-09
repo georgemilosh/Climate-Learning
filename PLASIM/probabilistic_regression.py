@@ -40,9 +40,11 @@ class ParametricCrossEntropyLoss(keras.losses.Loss):
 
     def call(self, y_true, y_pred):
         labels = tf.cast(y_true >= self.threshold, tf.float32)
-        mu = y_pred[...,0:1]
-        sig = tf.math.square(y_pred[...,1:2])
+        mu = y_pred[...,0]
+        sig = tf.math.square(y_pred[...,1])
         prob = q(mu,sig,self.threshold)
+
+        assert prob.shape == labels.shape, f'{prob.shape = }, {labels.shape = }'
 
         return entropy(labels, prob, self.epsilon)
 
