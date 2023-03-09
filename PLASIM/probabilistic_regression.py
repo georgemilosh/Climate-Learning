@@ -27,10 +27,11 @@ class ProbRegLoss(keras.losses.Loss):
         self.epsilon = epsilon or keras.backend.epsilon()
 
     def call(self, y_true, y_pred):
-        mu = y_pred[...,0:1]
         sig2 = tf.math.square(y_pred[...,1:2]) + self.epsilon
-        assert mu.shape == sig2.shape == y_true.shape
-        return tf.math.square(y_true - mu)/sig2 + tf.math.log(sig2)
+        # mu = y_pred[...,0:1]
+        y_pred = y_pred[...,0:1] # for memory efficiency
+        assert y_pred.shape == sig2.shape == y_true.shape
+        return tf.math.square(y_true - y_pred)/sig2 + tf.math.log(sig2)
 
 class ParametricCrossEntropyLoss(keras.losses.Loss):
     def __init__(self, threshold=0, epsilon=None):
@@ -39,12 +40,12 @@ class ParametricCrossEntropyLoss(keras.losses.Loss):
         self.epsilon = epsilon or keras.backend.epsilon()
 
     def call(self, y_true, y_pred):
-        labels = tf.cast(y_true >= self.threshold, tf.float32)
-        mu = y_pred[...,0:1]
+        y_true = tf.cast(y_true >= self.threshold, tf.float32)
         sig = tf.math.abs(y_pred[...,1:2])
-        prob = q(mu,sig,self.threshold)
-        assert prob.shape == labels.shape, f'{prob.shape = }, {labels.shape = }'
-        return entropy(labels, prob, self.epsilon)
+        y_pred = y_pred[...,0:1]
+        y_pred = q(y_pred,sig,self.threshold)
+        assert y_pred.shape == y_true.shape, f'{y_pred.shape = }, {y_true.shape = }'
+        return entropy(y_true, y_pred, self.epsilon)
 
 
 # create a module level variable to store the threshold
