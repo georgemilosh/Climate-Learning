@@ -2241,7 +2241,7 @@ def get_default_metrics(fullmetrics=False, u=1):
             tff.CustomLoss(tf_sampling)
         ]# the last two make the code run longer but give precise discrete prediction benchmarks
     else:
-        metrics=['loss']
+        metrics=None
     return metrics
 
 @ut.execution_time
