@@ -42,8 +42,6 @@ Because the events are rare we pursue importance sampling that can be achieved b
 import tensorflow as tf
 ``` -->
 
-## Tutorial
-tbd
 
 ### Customization
 
