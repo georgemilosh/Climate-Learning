@@ -36,6 +36,7 @@ Because the events are rare we pursue importance sampling that can be achieved b
 
 - To install the relevant packages run `setup.sh` that is included
 - To see how to work with our routines (such as working with data and training neural networks) consult `Plasim/tutorial.ipynb`
+- Another similar tutorial can be found in `CESM/CESM_tuto.ipynb`
 - tbd: describe the datasets
 
 <!-- ```
