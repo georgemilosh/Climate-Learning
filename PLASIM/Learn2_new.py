@@ -980,7 +980,7 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
         field.sort_lat()
 
         # select longitude and latitude
-        field.select_lonlat(lat_start,lat_end,lon_start,lon_end,fillna)
+        field.select_lonlat(lat_start,lat_end,lon_start,lon_end,fillna) # this loads the field into memory
 
         # filter
         if do_filter: # set to zero all values outside `filter_area`
