@@ -97,12 +97,16 @@ def get_default_metrics(fullmetrics=False, u=1):
         metrics=None
     return metrics
 
+def postprocess(x):
+    return x
+
 #######################################################
 # set the modified functions to override the old ones #
 #######################################################
 ln.Trainer = Trainer
 ln.get_default_metrics = get_default_metrics
 ln.get_loss_function = get_loss_function
+ln.postprocess = postprocess
 
 # uptade module level config dictionary
 ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram])

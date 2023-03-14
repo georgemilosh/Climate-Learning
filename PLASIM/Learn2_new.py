@@ -1645,9 +1645,8 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
                 actv = layers.SpatialDropout2D(rate=conv_dropouts[i], name=f'spatial_dropout_{i}')(actv)
                 # print("actv = Dropout(rate=0.25)(actv)")
 
-            if max_pool_sizes[i]: # the default is None so should ignore this 
-                if max_pool_sizes[i] > 1:
-                    actv = layers.MaxPooling2D(max_pool_sizes[i], name=f'max_pool_{i}')(actv)
+            if max_pool_sizes[i] > 1:
+                actv = layers.MaxPooling2D(max_pool_sizes[i], name=f'max_pool_{i}')(actv)
             
             if conv_skip is not None:
                 #logger.info(f'{i = },{conv_skip = }')
@@ -1866,6 +1865,9 @@ def make_checkpoint_callback(file_path, checkpoint_every=1):
 
     return ckpt_callback
 
+def postprocess(x):
+    return keras.layers.Softmax()(x)
+
 @ut.execution_time
 @ut.indent_logger(logger)
 def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics, early_stopping_kwargs=None, enable_early_stopping=False, scheduler_kwargs=None,
@@ -1993,7 +1995,7 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     ## compute and save Y_pred_unbiased
     Y_pred = []
     for b in range(Y_va.shape[0]//batch_size + 1):
-        Y_pred.append(keras.layers.Softmax()(model(X_va[b*batch_size:(b+1)*batch_size])).numpy())
+        Y_pred.append(postprocess(model(X_va[b*batch_size:(b+1)*batch_size])).numpy())
     Y_pred = np.concatenate(Y_pred)
     Y_pred_unbiased = ut.unbias_probabilities(Y_pred, u=u)
     np.save(f'{folder}/Y_pred_unbiased.npy', Y_pred_unbiased)
@@ -2568,7 +2570,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
 
             Y_pred = []
             for b in range(Y_va.shape[0]//batch_size + 1):
-                Y_pred.append(keras.layers.Softmax()(model(X_va[b*batch_size:(b+1)*batch_size])).numpy())
+                Y_pred.append(postprocess(model(X_va[b*batch_size:(b+1)*batch_size])).numpy())
             Y_pred = np.concatenate(Y_pred)
             Y_pred_unbiased = ut.unbias_probabilities(Y_pred, u=u)
             np.save(f'{fold_folder}/Y_pred_unbiased.npy', Y_pred_unbiased)
