@@ -1644,9 +1644,9 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
             if conv_dropouts[i]:
                 actv = layers.SpatialDropout2D(rate=conv_dropouts[i], name=f'spatial_dropout_{i}')(actv)
                 # print("actv = Dropout(rate=0.25)(actv)")
-
-            if max_pool_sizes[i] > 1:
-                actv = layers.MaxPooling2D(max_pool_sizes[i], name=f'max_pool_{i}')(actv)
+            if max_pool_sizes[i]: # otherwise I get an error if max_pool_sizes[i] is None  because it cannot compare NoneType and int
+                if max_pool_sizes[i] > 1:
+                    actv = layers.MaxPooling2D(max_pool_sizes[i], name=f'max_pool_{i}')(actv)
             
             if conv_skip is not None:
                 #logger.info(f'{i = },{conv_skip = }')
