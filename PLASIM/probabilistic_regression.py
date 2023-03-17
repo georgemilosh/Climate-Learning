@@ -21,8 +21,19 @@ def entropy(p, q, epsilon):
     return -p*tf.math.log(q) - (1-p)*tf.math.log(1 - q)
 
 ### custom losses/metrics
+class PreTrainingLoss(keras.losses.Loss):
+    def __init__(self):
+        super().__init__(name=self.__class__.__name__)
+
+    def call(self, y_true, y_pred):
+        sig = y_pred[...,1:2]
+        y_pred = y_pred[...,0:1]
+        assert y_pred.shape == sig.shape == y_true.shape
+        return tf.math.square(y_true - y_pred) + tf.math.square(sig - 1)
+
+
 class ProbRegLoss(keras.losses.Loss):
-    def __init__(self, epsilon=None, maxsig=2):
+    def __init__(self, epsilon=None, maxsig=None):
         super().__init__(name=self.__class__.__name__)
         self.epsilon = epsilon or keras.backend.epsilon()
         self.maxsig = maxsig
@@ -31,7 +42,7 @@ class ProbRegLoss(keras.losses.Loss):
         sig2 = tf.math.square(y_pred[...,1:2]) + self.epsilon
         penalty = 0
         if self.maxsig:
-            sig2 = tf.clip_by_value(sig2, 0, self.maxsig)
+            sig2 = tf.clip_by_value(sig2, 0, self.maxsig**2)
             penalty = tf.math.square(y_pred[...,1:2]) - sig2
         # mu = y_pred[...,0:1]
         y_pred = y_pred[...,0:1] # for memory efficiency
@@ -90,6 +101,8 @@ def get_loss_function(loss_name: str, u=1):
     loss_name = loss_name.lower()
     if loss_name.startswith('prob'):
         return ProbRegLoss()
+    elif loss_name.startswith('pretr'):
+        return PreTrainingLoss()
     else:
         return ln.get_loss_function(loss_name, u=u)
     
