@@ -22,16 +22,21 @@ def entropy(p, q, epsilon):
 
 ### custom losses/metrics
 class ProbRegLoss(keras.losses.Loss):
-    def __init__(self, epsilon=None):
+    def __init__(self, epsilon=None, maxsig=2):
         super().__init__(name=self.__class__.__name__)
         self.epsilon = epsilon or keras.backend.epsilon()
+        self.maxsig = maxsig
 
     def call(self, y_true, y_pred):
         sig2 = tf.math.square(y_pred[...,1:2]) + self.epsilon
+        penalty = 0
+        if self.maxsig:
+            sig2 = tf.clip_by_value(sig2, 0, self.maxsig)
+            penalty = tf.math.square(y_pred[...,1:2]) - sig2
         # mu = y_pred[...,0:1]
         y_pred = y_pred[...,0:1] # for memory efficiency
         assert y_pred.shape == sig2.shape == y_true.shape
-        return tf.math.square(y_true - y_pred)/sig2 + tf.math.log(sig2)
+        return tf.math.square(y_true - y_pred)/sig2 + tf.math.log(sig2) + penalty
 
 class ParametricCrossEntropyLoss(keras.losses.Loss):
     def __init__(self, threshold=0, epsilon=None):
