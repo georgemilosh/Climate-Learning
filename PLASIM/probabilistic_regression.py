@@ -96,7 +96,8 @@ class Trainer(ln.Trainer):
             self.Y = A
             ln._current_threshold = threshold # save the threshold in a module level variable
         return self.X, self.Y, self.year_permutation, self.lat, self.lon
-    
+
+old_get_loss_function = ln.get_loss_function
 def get_loss_function(loss_name: str, u=1):
     loss_name = loss_name.lower()
     if loss_name.startswith('prob'):
@@ -104,7 +105,7 @@ def get_loss_function(loss_name: str, u=1):
     elif loss_name.startswith('pretr'):
         return PreTrainingLoss()
     else:
-        return ln.get_loss_function(loss_name, u=u)
+        return old_get_loss_function(loss_name, u=u)
     
 def get_default_metrics(fullmetrics=False, u=1):
     if fullmetrics:
