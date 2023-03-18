@@ -1596,7 +1596,11 @@ def weight_average(*a,**kwargs):
     '''
         Perform weighted average
     '''
-    kwargs['axis'] = kwargs['axis'][0] # Otherwise what is being fed into this function could be something of the sort (dim,), which is in conflict with weights
+    if not isinstance(kwargs['axis'], int): # if it is not an integer, then it is probably a tuple
+        if isinstance(kwargs['axis'], tuple):  
+            kwargs['axis'] = kwargs['axis'][0] # Otherwise what is being fed into this function could be something of the sort (dim,), which is in conflict with weights
+        else:
+            raise ValueError(f"axis must be an integer or a tuple, but it is {kwargs['axis'] = }")
     return np.average(*a,**kwargs)
 
 def rolling_reduce_weighted(my_a:xr.DataArray, T, weights=None):
