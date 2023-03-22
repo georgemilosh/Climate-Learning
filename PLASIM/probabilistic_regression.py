@@ -20,6 +20,14 @@ def entropy(p, q, epsilon):
     q = tf.clip_by_value(q, epsilon, 1 - epsilon)
     return -p*tf.math.log(q) - (1-p)*tf.math.log(1 - q)
 
+def phi(x):
+    '''PDF of a standard Gaussian'''
+    return 1/np.sqrt(2*np.pi)*tf.math.exp(-0.5*tf.math.square(x))
+
+def Phi(x):
+    '''CDF of a standard Gaussian'''
+    return 0.5*(1 + tf.math.erf(x/np.sqrt(2)))
+
 ### custom losses/metrics
 class PreTrainingLoss(keras.losses.Loss):
     def __init__(self):
@@ -30,6 +38,20 @@ class PreTrainingLoss(keras.losses.Loss):
         y_pred = y_pred[...,0:1]
         assert y_pred.shape == sig.shape == y_true.shape
         return tf.math.square(y_true - y_pred) + tf.math.square(sig - 1)
+
+class CRPS(keras.losses.Loss):
+    '''Continuous Ranked Probability Score'''
+    def __init__(self,epsilon=None) -> None:
+        super().__init__(name=self.__class__.__name__)
+        self.epsilon = epsilon or keras.backend.epsilon()
+
+    def call(self, y_true, y_pred):
+        sig = tf.math.abs(y_pred[...,1:2]) + self.epsilon
+        y_pred = y_pred[...,0:1]
+        res = (y_true - y_pred)/sig
+        assert y_pred.shape == sig.shape == y_true.shape == res.shape
+
+        return sig*(res*tf.math.erf(res/np.sqrt(2)) + 2*phi(res) -1/np.sqrt(np.pi))
 
 
 class ProbRegLoss(keras.losses.Loss):
@@ -48,6 +70,20 @@ class ProbRegLoss(keras.losses.Loss):
         y_pred = y_pred[...,0:1] # for memory efficiency
         assert y_pred.shape == sig2.shape == y_true.shape
         return tf.math.square(y_true - y_pred)/sig2 + tf.math.log(sig2) + penalty
+    
+class WeightedProbRegLoss(keras.losses.Loss):
+    def __init__(self, epsilon=None, a=0, b=1) -> None:
+        super().__init__(name=self.__class__.__name__)
+        self.epsilon = epsilon or keras.backend.epsilon()
+        self.a = a
+        self.b = b
+
+    def call(self, y_true, y_pred):
+        sig2 = tf.math.square(y_pred[...,1:2]) + self.epsilon
+        y_pred = y_pred[...,0:1] # for memory efficiency
+        weights = keras.activations.sigmoid((y_true - self.a)/self.b)
+        assert y_pred.shape == sig2.shape == y_true.shape == weights.shape
+        return weights*(tf.math.square(y_true - y_pred)/sig2 + tf.math.log(sig2))
 
 class ParametricCrossEntropyLoss(keras.losses.Loss):
     def __init__(self, threshold=0, epsilon=None):
