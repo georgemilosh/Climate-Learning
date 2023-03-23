@@ -140,6 +140,10 @@ def get_loss_function(loss_name: str, u=1):
         return ProbRegLoss()
     elif loss_name.startswith('pretr'):
         return PreTrainingLoss()
+    elif loss_name.startswith('crps'):
+        return CRPS()
+    elif loss_name.startswith('weighted'):
+        return WeightedProbRegLoss(a=2, b=1)
     else:
         return old_get_loss_function(loss_name, u=u)
     
