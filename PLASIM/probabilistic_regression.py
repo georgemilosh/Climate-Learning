@@ -30,8 +30,8 @@ def Phi(x):
 
 ### custom losses/metrics
 class PreTrainingLoss(keras.losses.Loss):
-    def __init__(self):
-        super().__init__(name=self.__class__.__name__)
+    def __init__(self, name=None):
+        super().__init__(name=name or self.__class__.__name__)
 
     def call(self, y_true, y_pred):
         sig = y_pred[...,1:2]
@@ -41,8 +41,8 @@ class PreTrainingLoss(keras.losses.Loss):
 
 class CRPS(keras.losses.Loss):
     '''Continuous Ranked Probability Score'''
-    def __init__(self,epsilon=None) -> None:
-        super().__init__(name=self.__class__.__name__)
+    def __init__(self,name=None, epsilon=None) -> None:
+        super().__init__(name=name or self.__class__.__name__)
         self.epsilon = epsilon or keras.backend.epsilon()
 
     def call(self, y_true, y_pred):
@@ -53,10 +53,9 @@ class CRPS(keras.losses.Loss):
 
         return sig*(res*tf.math.erf(res/np.sqrt(2)) + 2*phi(res) -1/np.sqrt(np.pi))
 
-
 class ProbRegLoss(keras.losses.Loss):
-    def __init__(self, epsilon=None, maxsig=None):
-        super().__init__(name=self.__class__.__name__)
+    def __init__(self, name=None, epsilon=None, maxsig=None):
+        super().__init__(name=name or self.__class__.__name__)
         self.epsilon = epsilon or keras.backend.epsilon()
         self.maxsig = maxsig
 
@@ -71,19 +70,17 @@ class ProbRegLoss(keras.losses.Loss):
         assert y_pred.shape == sig2.shape == y_true.shape
         return tf.math.square(y_true - y_pred)/sig2 + tf.math.log(sig2) + penalty
     
-class WeightedProbRegLoss(keras.losses.Loss):
-    def __init__(self, epsilon=None, a=0, b=1) -> None:
-        super().__init__(name=self.__class__.__name__)
-        self.epsilon = epsilon or keras.backend.epsilon()
-        self.a = a
-        self.b = b
+# class WeightedProbRegLoss(ProbRegLoss):
+#     def __init__(self, name=None, epsilon=None, a=0, b=1) -> None:
+#         super().__init__(name=name or self.__class__.__name__, epsilon=epsilon)
+#         self.a = a
+#         self.b = b
 
-    def call(self, y_true, y_pred):
-        sig2 = tf.math.square(y_pred[...,1:2]) + self.epsilon
-        y_pred = y_pred[...,0:1] # for memory efficiency
-        weights = keras.activations.sigmoid((y_true - self.a)/self.b)
-        assert y_pred.shape == sig2.shape == y_true.shape == weights.shape
-        return weights*(tf.math.square(y_true - y_pred)/sig2 + tf.math.log(sig2))
+#     def call(self, y_true, y_pred):
+#         weights = keras.activations.sigmoid((y_true - self.a)/self.b)
+#         loss = super().call(y_true, y_pred)
+#         assert weights.shape == loss.shape
+#         return weights*loss
 
 class ParametricCrossEntropyLoss(keras.losses.Loss):
     def __init__(self, threshold=0, epsilon=None):
@@ -98,6 +95,21 @@ class ParametricCrossEntropyLoss(keras.losses.Loss):
         y_pred = q(y_pred,sig,self.threshold)
         assert y_pred.shape == y_true.shape, f'{y_pred.shape = }, {y_true.shape = }'
         return entropy(y_true, y_pred, self.epsilon)
+
+
+def weighted(cls, function):
+    class WeightedLoss(cls):
+        def __init__(self, name=f'Weighted{cls.__name__}'):
+            super().__init__(name=name or self.__class__.__name__)
+            self.function = function
+
+        def call(self, y_true, y_pred):
+            weights = self.function(y_true)
+            loss = super().call(y_true, y_pred)
+            assert weights.shape == loss.shape
+            return weights*loss
+        
+    return WeightedLoss
 
 
 # create a module level variable to store the threshold
@@ -136,16 +148,28 @@ class Trainer(ln.Trainer):
 old_get_loss_function = ln.get_loss_function
 def get_loss_function(loss_name: str, u=1):
     loss_name = loss_name.lower()
+    args = []
+    kwargs = {}
+    func = None
+    wk = 'weighted'
+    if loss_name.startswith(wk):
+        func = lambda x: tf.math.sigmoid(x - 2)
+        loss_name = loss_name[len(wk):].strip('_')
+
     if loss_name.startswith('prob'):
-        return ProbRegLoss()
+        cls = ProbRegLoss
     elif loss_name.startswith('pretr'):
-        return PreTrainingLoss()
+        cls = PreTrainingLoss
     elif loss_name.startswith('crps'):
-        return CRPS()
-    elif loss_name.startswith('weighted'):
-        return WeightedProbRegLoss(a=2, b=1)
+        cls = CRPS
+    # elif loss_name.startswith('weighted'):
+    #     return WeightedProbRegLoss(a=2, b=1)
     else:
         return old_get_loss_function(loss_name, u=u)
+    
+    if func:
+        return weighted(cls, func)(*args, **kwargs)
+    return cls(*args, **kwargs)
     
 def get_default_metrics(fullmetrics=False, u=1):
     if fullmetrics:
