@@ -54,3 +54,22 @@ The second option is to leverage the full potential of the code by changing only
 These modules _inherit_ from `Learn2_new`.
 
 A template for how to properly implement this inheritance is available [here](PLASIM/inheritance_template.py)
+
+### Publications
+
+**Citation**:
+
+    @article{PhysRevFluids.8.040501,
+        title = {Probabilistic forecasts of extreme heatwaves using convolutional neural networks in a regime of lack of data},
+        author = {Miloshevich, George and Cozian, Bastien and Abry, Patrice and Borgnat, Pierre and Bouchet, Freddy},
+        journal = {Phys. Rev. Fluids},
+        volume = {8},
+        issue = {4},
+        pages = {040501},
+        numpages = {40},
+        year = {2023},
+        month = {Apr},
+        publisher = {American Physical Society},
+        doi = {10.1103/PhysRevFluids.8.040501},
+        url = {https://link.aps.org/doi/10.1103/PhysRevFluids.8.040501}
+    }
