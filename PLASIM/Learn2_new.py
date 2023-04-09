@@ -514,7 +514,7 @@ def remove_args_at_default(run_args, config_dict_flat):
         _run_args[k] = new_args
     return _run_args
 
-def group_by_varying(run_args, variable='tau', config_dict_flat=None, sort=False):
+def group_by_varying(run_args, variable='tau', config_dict_flat=None, sort=False, ignore=None):
     '''
     Groups a series of runs into sets where only `variable` varies and other parameters are shared inside the set
 
@@ -528,6 +528,8 @@ def group_by_varying(run_args, variable='tau', config_dict_flat=None, sort=False
         flattened config dictionary with the default values, by default None
     sort: True, False or 'descending', optional
         wether and how to sort the runs according to the variable, default False, i.e. no sorting, which means the runs will be in chronological order
+    ignore : str or list[str], optional
+        kwarg or list of kwargs to ignore when grouping rins together
 
     Returns
     -------
@@ -543,16 +545,27 @@ def group_by_varying(run_args, variable='tau', config_dict_flat=None, sort=False
     [{'args': {'tau': 0}, 'runs': ['1', '2'], 'percent': [5, 1]}, {'args': {'tau': -5}, 'runs': ['3'], 'percent': [1]}]
     >>> group_by_varying(run_args, 'percent', sort=True)
     [{'args': {'tau': 0}, 'runs': ['2', '1'], 'percent': [1, 5]}, {'args': {'tau': -5}, 'runs': ['3'], 'percent': [1]}]
+    >>> group_by_varying(run_args, 'percent', ignore='tau')
+    [{'args': {}, 'runs': ['1', '2', '3'], 'percent': [5, 1, 1]}]
     '''
     _run_args = deepcopy(run_args)
-    # add default values for the varaible of interest
-    if config_dict_flat is not None:
+    
+    # remove arguments to ignore
+    if ignore is not None:
+        if isinstance(ignore, str):
+            ignore = [ignore]
+        if variable in ignore:
+            raise ValueError('Cannot ignore the variable!')
         for args in _run_args.values():
-            if variable not in args:
-                args[variable] = config_dict_flat[variable]
+            for ign in ignore:
+                args.pop(ign, None)
     
     # find the groups
-    variable_dict = {k:v.pop(variable) for k,v in _run_args.items()} # move the variable to a separate dictionary removing it from the arguments in _run_args
+    try:
+        # move the variable to a separate dictionary removing it from the arguments in _run_args
+        variable_dict = {k:v.pop(variable) if variable in v else config_dict_flat[variable] for k,v in _run_args.items()}
+    except TypeError as e:
+        raise TypeError(f'{variable} is at default value in some runs, please provide config_dict_flat') from e
 
     group_args = []
     group_runs = []
@@ -579,7 +592,7 @@ def group_by_varying(run_args, variable='tau', config_dict_flat=None, sort=False
 
     return groups
 
-def make_groups(runs, variable='tau', config_dict_flat=None, sort=False):
+def make_groups(runs, variable='tau', config_dict_flat=None, sort=False, ignore=None):
     '''
     A wrapper of `group by varying` that allows to use directly the runs dictionary rather then needing to extract the run arguments
 
@@ -591,9 +604,11 @@ def make_groups(runs, variable='tau', config_dict_flat=None, sort=False):
         argument that varies inside each group, by default 'tau'
     config_dict_flat : dict, optional
         flattened config dictionary with the default values, by default None
-    sort: True, False or 'descending', optional
+    sort : True, False or 'descending', optional
         wether and how to sort the runs according to the variable, default False, i.e. no sorting, which means the runs will be in chronological order
-
+    ignore : list[str], optional
+        list of kwargs to ignore when grouping rins together
+    
     Returns
     -------
     list
@@ -601,7 +616,7 @@ def make_groups(runs, variable='tau', config_dict_flat=None, sort=False):
         Each group is a dictionary with the same structure as the output of `group_by_varying` but the argument 'runs' contains the full run dictionary instead of just the run numbers
     '''
     run_args = {k:v['args'] for k,v in runs.items()}
-    groups = group_by_varying(run_args, variable=variable, config_dict_flat=config_dict_flat, sort=sort)
+    groups = group_by_varying(run_args, variable=variable, config_dict_flat=config_dict_flat, sort=sort, ignore=ignore)
     for g in groups:
         g['runs'] = [runs[k] for k in g['runs']]
     return groups
