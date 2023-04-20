@@ -2,16 +2,14 @@
 
 ## Data Analysis
 
-This repository includes various routines used to Analyze various climate models which a priori include
-- Plasim (Intermediate complexity)
-- CESM (High complexity)
-- ERA Reanalysis (observational)
+This repository includes various routines used to analyze various climate models and reanalysis.
+
 The functions and classes we define can be used for estimation of heat wave occurances 
 
 ![Heat waves in Scandinavia modelled by CESM](/CESM/Images/Scandinavia_3.5.png)
 
 ## Rare events
-We are interested in predicting rare events such as heat waves or cold spells etc. We use climate models because the data is scarce and we are intersted in large scale long duration events
+We are interested in predicting rare events such as heat waves or cold spells etc. We use climate models because the data is scarce and we are interested in large scale long duration events
 
 ## Machine Learning
 We use neural networks to compute committor functions. Computations are performed on the cluster [Centre Blaise Pascal](https://www.cbp.ens-lyon.fr/doku.php) at ENS de Lyon
@@ -45,13 +43,11 @@ import tensorflow as tf
 
 ### Folder structure:
 
-Where we store *.py, *.ipynb scripts related to the following models:
-- `PLASIM`: Intermediate complexity climate model
-    - That's where most of our scripts including `Learn2_new.py` (responsible for training `CNN`) are located
-- `CESM`: High fidelity climate model
-- `ERA5`: ECMWF reanalysis
-
-We store `SWG` related routines in the folder called `VAE` which stands for `Variational Autoencoder` experiments. Importantly this folder also contains the `SWG` without the use of `VAE`.
+Where we store *.py, *.ipynb scripts related to the following models and methods:
+- [PLASIM](https://georgemilosh.github.io/Climate-Learning/PLASIM/): Intermediate complexity climate model. That's where most of our scripts including `Learn2_new.py` (responsible for training `CNN`) are located
+- [CESM](https://georgemilosh.github.io/Climate-Learning/CESM/): High fidelity climate model
+- [ERA5](https://georgemilosh.github.io/Climate-Learning/ERA/): ECMWF reanalysis
+- [SWG](https://georgemilosh.github.io/Climate-Learning/VAE/) We store `SWG` related routines in the folder called `VAE` which stands for `Variational Autoencoder` experiments. Importantly this folder also contains the `SWG` without the use of `VAE`.
 
 
 ### Customization
