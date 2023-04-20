@@ -35,11 +35,20 @@ Because the events are rare we pursue importance sampling that can be achieved b
 - To install the relevant packages run `setup.sh` that is included
 - To see how to work with our routines (such as working with data and training neural networks) consult `Plasim/tutorial.ipynb`
 - Another similar tutorial can be found in `CESM/CESM_tuto.ipynb`
-- tbd: describe the datasets
 
 <!-- ```
 import tensorflow as tf
 ``` -->
+
+## Data
+
+Generally the data we used in this project is quite large. However we were able to make a portion of data avialable through [Google Drive Link](https://drive.google.com/drive/folders/1Y748L_hgFt3uQJcQRUp5z_oT0D_oAYvL) which contains 500 years for anomalies of 
+- `tas.nc`: 2 meter temperature
+- `zg500.nc`: 500 hPa geopotential height
+- `mrso.nc`: soil moisture
+- `lsmask.nc`: land sea mask
+- `gparea.nc`: cell area
+For understanding our data it helps to look at the tutorial we created for [Critical Earth ESR Workshop](https://github.com/AlessandroLovo/EW2-heatwaves) 2022 in Netherlands.
 
 ### Folder structure:
 
