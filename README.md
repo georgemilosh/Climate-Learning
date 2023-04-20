@@ -43,6 +43,16 @@ Because the events are rare we pursue importance sampling that can be achieved b
 import tensorflow as tf
 ``` -->
 
+### Folder structure:
+
+Where we store *.py, *.ipynb scripts related to the following models:
+- `PLASIM`: Intermediate complexity climate model
+    - That's where most of our scripts including `Learn2_new.py` (responsible for training `CNN`) are located
+- `CESM`: High fidelity climate model
+- `ERA5`: ECMWF reanalysis
+
+We store `SWG` related routines in the folder called `VAE` which stands for `Variational Autoencoder` experiments. Importantly this folder also contains the `SWG` without the use of `VAE`.
+
 
 ### Customization
 
@@ -73,3 +83,7 @@ A template for how to properly implement this inheritance is available [here](PL
         doi = {10.1103/PhysRevFluids.8.040501},
         url = {https://link.aps.org/doi/10.1103/PhysRevFluids.8.040501}
     }
+
+#### Media coverage
+
+[CNRS press](https://www.cnrs.fr/fr/changements-climatiques-une-meilleure-prediction-des-canicules-grace-lia)

@@ -1,0 +1,50 @@
+# Stochastic Weather Generator
+
+This folder was originally conceived to address training Variational Autonencoder (`VAE`). It later evolved in a general folder for Stochastic Weather Genrator (`SWG`).
+
+## Folder structure
+- `vae_learn2.py` is the main script which is responsible for training the `VAE`. It includes a range of different routines for training, testing, and analyzing the `VAE`. It overloads many of the classes and methods defined in `PLASIM/Learn2_new.py`, `ERA/ERA_Fields_New.py` and `ERA/TF_Fields.py`. *Note*, you may use `vae_learn2.py` to also train `PCA` autoencoder and also generate folder structure without any dimensionality reduction necessary to work with the routines we will discuss below. 
+- `history.py` and `history_training.py` are routines which allow plotting the history of the training of the `VAE`. It is used for the outputs of `vae_learn2.py`
+-  `reconstruction.py` and `reconstruction_zg.py` are routines which allow to reconstruct the input data from the latent space of the `VAE`. They are used for the outputs of `vae_learn2.py` and can be used to visualize the method.
+- `analogue_dario.py` routine finds the analogs for SWG. It should be applied to the output of `vae_learn2.py` **without** the use of `VAE` or `PCA` autoencoder. 
+- `analogue_george.py` routine finds the analogs for SWG. It should be applied to the output of `vae_learn2.py` **with** the use of `VAE` or `PCA` autoencoder.
+- `committor_analogue.py` computes committor using the Matrix of analogs created by `analogue_dario.py` or `analogue_george.py`.
+- `trajectory_analogue.ipynb` samples synthetic trajectories using the Matrix of analogs created by `analogue_dario.py` or `analogue_george.py`.
+- `test_committor_dario.ipynb` defines and uses a routine which compares the skill of the `PLASIM/Learn2_new.py` trained `CNN` with of `SWG` based on the output of `committor_analogue.py`.
+
+## Usage:
+
+If you would like to work with `SWG` you must run `vae_learn2.py` even if you are **not** intending to train `VAE` because `vae_learn2.py` generates the necessary folder structure consistent with k-fold cross validation. The first step is to call:
+```
+python vae_learn2.py <folder_name>
+```
+*Don't forget to set up the correct **kwargs*
+
+After the routine has been called you may inspect the quality of reconstruction (if `VAE` was used) via the following script
+```
+python reconstruction.py <folder_name> <checkpoint_number> <random_seed>
+```
+
+To inspect the loss during training use may use
+```
+python history.py <folder_name> <number_of_folds>
+python histroy_training.py <folder_name> <number_of_folds>
+```
+
+To compute the matrix of analogs for the SWG you may use
+```
+python analogue_dario.py <folder> <coefficients> <NN>
+```
+
+or
+```
+analogue_george.py <folder> <coefficients> <NN>
+```
+
+To use the matrix of analogs and compute the committor function you should use
+```
+python committor_analogue.py <committor_file>
+```
+To investigate the resulting skill you should look at the notebook `test_committor_dario.ipynb`
+
+To use the analogs and compute the long trajectories you may inspect the notebook `trajectory_analogue.ipynb`

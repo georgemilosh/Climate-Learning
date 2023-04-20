@@ -1,7 +1,7 @@
 # George Miloshevich 2022
 #   Adapted from earlier version of Dario Lucente
 # This routine is written for one parameter: input folder for VAE weights/ whether VAE is used for dimensionality reduction can vary. It shows us how good the committor of the analog Markov chain works
-# The new usage committor.py <folder> <committor_file>
+# The new usage committor_analogue.py <committor_file>
 import os, sys
 import pickle
 from pathlib import Path
