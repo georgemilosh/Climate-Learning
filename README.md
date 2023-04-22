@@ -42,17 +42,20 @@ import tensorflow as tf
 
 ## Data
 
-Generally the data we used in this project is quite large. However we were able to make a portion of data avialable through [Google Drive Link](https://drive.google.com/drive/folders/1Y748L_hgFt3uQJcQRUp5z_oT0D_oAYvL) which contains 500 years for anomalies of 
+Generally the data we used in this project is quite large. However we were able to make a portion of data avialable through [Google Drive Link](https://drive.google.com/drive/folders/1Y748L_hgFt3uQJcQRUp5z_oT0D_oAYvL) which contains 500 years for anomalies of
+
 - `tas.nc`: 2 meter temperature
 - `zg500.nc`: 500 hPa geopotential height
 - `mrso.nc`: soil moisture
 - `lsmask.nc`: land sea mask
 - `gparea.nc`: cell area
-For understanding our data it helps to look at the tutorial we created for [Critical Earth ESR Workshop](https://github.com/AlessandroLovo/EW2-heatwaves) 2022 in Netherlands.
+
+For understanding our data it helps to look at the tutorial we created for [Critical Earth ESR Workshop 2](https://github.com/AlessandroLovo/EW2-heatwaves) held in April 2022 in Nijmegen, The Netherlands.
 
 ### Folder structure:
 
 Where we store *.py, *.ipynb scripts related to the following models and methods:
+
 - [PLASIM](https://georgemilosh.github.io/Climate-Learning/PLASIM/): Intermediate complexity climate model. That's where most of our scripts including `Learn2_new.py` (responsible for training `CNN`) are located
 - [CESM](https://georgemilosh.github.io/Climate-Learning/CESM/): High fidelity climate model
 - [ERA5](https://georgemilosh.github.io/Climate-Learning/ERA/): ECMWF reanalysis
