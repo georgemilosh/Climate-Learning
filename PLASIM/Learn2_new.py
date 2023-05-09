@@ -3312,6 +3312,11 @@ class Trainer():
                 else:
                     logger.log(45, f"Rerunning {r['name']}")
 
+
+        ############################
+        ## preliminary operations ##
+        ############################
+
         # get run number
         run_id = str(len(runs))
         # TODO #55 it would be convenient to call a function here that tests if the provided architecture would result in a valid neural network, thus avoiding waiting for the data to be loaded for no reason
@@ -3362,6 +3367,13 @@ class Trainer():
 
         logger.log(42, f'{folder = }\n')
 
+        
+        ###################
+        ## start running ##
+        ###################
+
+        folder = f'R{folder}'
+
         start_time = time.time()
         
         runs[run_id] = {
@@ -3400,8 +3412,12 @@ class Trainer():
             runs = ut.json2dict(self.runs_file)
             runs[run_id]['status'] = info['status'] # either COMPLETED or PRUNED
             if info['status'] == 'PRUNED':
-                runs[run_id]['name'] = f'P{folder}'
-                shutil.move(f'{self.root_folder}/{folder}', f'{self.root_folder}/P{folder}')
+                runs[run_id]['name'] = f'P{folder[1:]}'
+                shutil.move(f'{self.root_folder}/{folder}', f'{self.root_folder}/P{folder[1:]}')
+            elif info['status'] == 'COMPLETED': # remove the leading R
+                runs[run_id]['name'] = f'{folder[1:]}'
+                shutil.move(f'{self.root_folder}/{folder}', f'{self.root_folder}/{folder[1:]}')
+            
             runs[run_id]['score'] = ast.literal_eval(str(score)) # ensure json serializability
             runs[run_id]['scores'] = info['scores']
             logger.log(42, 'run completed!!!\n\n')
@@ -3409,8 +3425,8 @@ class Trainer():
         except Exception as e: # run failed
             runs = ut.json2dict(self.runs_file)
             runs[run_id]['status'] = 'FAILED'
-            runs[run_id]['name'] = f'F{folder}'
-            shutil.move(f'{self.root_folder}/{folder}', f'{self.root_folder}/F{folder}')
+            runs[run_id]['name'] = f'F{folder[1:]}'
+            shutil.move(f'{self.root_folder}/{folder}', f'{self.root_folder}/F{folder[1:]}')
 
             if self.upon_failed_run == 'raise' or isinstance(e, KeyboardInterrupt):
                 raise e
@@ -3419,8 +3435,8 @@ class Trainer():
         finally: # in any case we need to save the end time and save runs to json
             if runs[run_id]['status'] == 'RUNNING': # the run has not completed but the above except block has not been executed (e.g. due to KeybordInterruptError)
                 runs[run_id]['status'] = 'FAILED'
-                runs[run_id]['name'] = f'F{folder}'
-                shutil.move(f'{self.root_folder}/{folder}', f'{self.root_folder}/F{folder}')
+                runs[run_id]['name'] = f'F{folder[1:]}'
+                shutil.move(f'{self.root_folder}/{folder}', f'{self.root_folder}/F{folder[1:]}')
             runs[run_id]['end_time'] = ut.now()
             run_time = time.time() - start_time
             run_time_min = int(run_time/0.6)/100 # 2 decimal places of run time in minutes
