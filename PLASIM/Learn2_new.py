@@ -859,25 +859,27 @@ except FileNotFoundError:
             'filename_suffix': f'zg{h}_inter',
             'label': f'3 day {h} mbar Geopotential',
         }
+
+    field_infos_CESM = {
+        "t2m": {
+            "name": "TSA",
+            "filename_suffix": "TSA",
+            "label": "Temperature"
+        },
+        "mrso": {
+            "name": "H2OSOI",
+            "filename_suffix": "H2OSOI",
+            "label": "Soil Moisture"},
+        "zg500": {
+            "name": "Z3",
+            "filename_suffix": "Z3.500hPa",
+            "label": "500 mbar Geopotential"
+        }
+    }
     
     fields_infos = {
         'Plasim' : fields_infos_Plasim,
-        'CESM'   : {
-            "t2m": {
-                "name": "TSA",
-                "filename_suffix": "TSA",
-                "label": "Temperature"
-            },
-            "mrso": {
-                "name": "H2OSOI",
-                "filename_suffix": "H2OSOI",
-                "label": "Soil Moisture"},
-            "zg500": {
-                "name": "Z3",
-                "filename_suffix": "Z3.500hPa",
-                "label": "500 mbar Geopotential"
-            }
-        }
+        'CESM'   : field_infos_CESM
     }
     
 
@@ -937,12 +939,14 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
     if Model.lower() not in datafolder.lower():
         logger.warning(f'{datafolder = } does not contain the name of the model ({Model})')
     
-    if dataset_years == 1000:
-        dataset_suffix = ''
-    elif dataset_years == 8000:
-        dataset_suffix = 'LONG'
-    else:
-        raise ValueError(f'Invalid number of {dataset_years = }')
+    dataset_suffix = ''
+    if Model.lower() == 'plasim':
+        if dataset_years == 1000:
+            dataset_suffix = ''
+        elif dataset_years == 8000:
+            dataset_suffix = 'LONG'
+        else:
+            raise ValueError(f'Invalid number of {dataset_years = }')
 
     if isinstance(year_list, str):
         if '(' not in year_list or ')' not in year_list:
@@ -963,8 +967,8 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
             file_suffix = f'../Climate/{datafolder}_{dataset_suffix}/'
     else:
         if dataset_suffix == '':
-            prefix = f'{preprefix}{dataset_suffix}'
-            file_suffix = f'{datafolder}{dataset_suffix}/'
+            prefix = f'{preprefix}'
+            file_suffix = f'{datafolder}/'
         else:
             prefix = f'{preprefix}{dataset_suffix}_'
             file_suffix = f'{datafolder}_{dataset_suffix}/'

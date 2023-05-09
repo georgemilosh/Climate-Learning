@@ -1170,6 +1170,7 @@ def create_mask(model,area, data, axes='first 2', return_full_mask=False): # car
         else:
             logger.error(f'Unknown area {area}')
             return None
+    
     elif model == "CESM":
         if area == "France":
             if return_full_mask:
@@ -1200,6 +1201,7 @@ def create_mask(model,area, data, axes='first 2', return_full_mask=False): # car
         else:
             logger.error(f'Unknown area {area}')
             return None
+    
     elif model == "Plasim":
         if area == "NW_Europe":
             if return_full_mask:
