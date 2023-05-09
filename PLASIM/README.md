@@ -7,7 +7,7 @@ Intermediate complexity climate model. Ideal for method development: allows very
 - Current setup (all functions relate to `Learn2_new.py`):
 
     - [Learn2_new.py](Learn2_new.py) is responsible for training the `CNN`. It includes a range of different routines for training, testing, and analyzing the `CNN`. Please consult the [tutorial.ipynb](tutorial.ipynb) for use cases and the documentation provided in [Learn2_new.py](Learn2_new.py). It helps to look at [example_config.json](example_config.json) to understand the structure of the routines and the `kwargs` used.
-    - [hyperparameter_optimization.py](hyperparameter_optimization.py) contains the routine which optimizes hyperparameters for the `CNN` using `optuna` package.
+    - [hyperparameter_optimization.py](hyperparameter_optimization.py) contains the routine which optimizes hyperparameters for the `CNN` using [optuna](https://optuna.readthedocs.io/en/stable/index.html) - Bayesian parameter optimization framework. The script [hyperparameter_optimization.py](hyperparameter_optimization.py) also takes `trainer` object from [Learn2_new.py](Learn2_new.py). 
     - [network_inspection_tools.py](network_inspection_tools.py) contains a set of routines which allow to inspect the `CNN` and its performance. 
     - [resampling-sensitivity.py](resampling-sensitivity.py) is a routine which allows to test the sensitivity of the `CNN` to the resampling of the data. 
     - [inheritance-template.py](inheritance-template.py) which shows how to efficiently inherit from the `CNN` class. 

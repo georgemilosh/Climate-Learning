@@ -3,6 +3,12 @@
 
 # @author: Alessandro Lovo
 '''
+description
+-----------
+
+This module is used to optimize the hyperparameters of the neural network. It is based on optuna, which is a
+ hyperparameter optimization framework. It is a wrapper around Learn2_new.py. 
+
 usage
 -----
 First you need to move the code to a desired folder by running
@@ -56,6 +62,13 @@ logging.getLogger().handlers = [logging.StreamHandler(sys.stdout)]
 
 
 class ScoreOptimizer():
+    """
+    This class is used to optimize the hyperparameters of the machine learning model. It uses the Optuna library. 
+    The class takes in a trainer object, a study_name, and a dictionary of common_kwargs as arguments. 
+    The trainer object is used to train the machine learning model and evaluate its performance. 
+    The study_name is used to name the Optuna study, which stores the results of the optimization 
+    process. The common_kwargs are additional arguments that are passed to the trainer object when training the model.
+    """
     def __init__(self, trainer, study_name='', common_kwargs=None):
         self.trainer = trainer
         self.common_kwargs = common_kwargs or {}
@@ -68,7 +81,12 @@ class ScoreOptimizer():
 
     def objective(self, trial):
         #### select hyperparameters ####
-
+        """
+        The ScoreOptimizer class has an objective method that defines the objective function for the Optuna study. 
+        This method takes in a trial object from Optuna and uses it to suggest hyperparameters for the machine learning model. 
+        These hyperparameters are then passed to the trainer object to train the model and evaluate its performance. 
+        The performance score is returned as the result of the objective function.
+        """
         hyp = {}
         # oncomment a portion of the code which you would like to engage for optimization
         
@@ -356,6 +374,11 @@ class ScoreOptimizer():
 
 
     def optimize(self, n_trials=20, count_pruned=True, **kwargs):
+        """
+        This method is used to run the optimization process. It takes in the number of trials to run and a dictionary of
+        additional arguments for the Optuna study. The method runs the optimization process and prints the results to the
+        console. The results are also stored in the Optuna study.
+        """
         # add telegram logger
         th = self.trainer.telegram(**self.trainer.telegram_kwargs)
         logger.log(45, f"Starting {n_trials} runs")
