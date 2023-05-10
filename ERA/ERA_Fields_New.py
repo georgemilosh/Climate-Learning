@@ -1727,7 +1727,7 @@ class Plasim_Field:
         try:
             self.datas = xr.open_dataset(ut.first_valid_path(self.mylocal,self.filename)) #.fillna(0) # The issue is that Francesco put a land mask on TAS.nc which has nan values on the sea.
                                 # For machine learning purposes nan could be a problem
-            self.field = self.datas[name]
+            self.field = standardize_dim_names(self.datas[name])
         except KeyError:
             logger.error(f'Unable to find key "{name}" among the provided fields {list(self.datas.keys())}')
             raise KeyError
@@ -2391,7 +2391,32 @@ def PermuteFullrange(fullrange, randrange1, randrange2):# Create a permuted sequ
     returnfullrange[randrange1], returnfullrange[randrange2] = returnfullrange[randrange2], returnfullrange[randrange1]
     return returnfullrange
 
+def standardize_dim_names(xa:xr.DataArray):
+    standard_names_to_variants = {
+        'lon': ['longitude', 'Longitude'],
+        'lat': ['latitude', 'Latitude'],
+        'time': ['Time', 't', 'T']
+    }
+    renamings = {}
+    for dim in xa.dims:
+        if dim in standard_names_to_variants:
+            continue
+        for standard_dim, variants in standard_names_to_variants.items():
+            if dim in variants:
+                renamings[dim] = standard_dim
+                break
+    if renamings:
+        xa = xa.rename(renamings)
+    return xa
+    
 def discard_all_dimensions_but(xa:xr.DataArray, dims_to_keep:list):
+    missing_dims = set(dims_to_keep) - set(xa.dims)
+    if missing_dims:
+        logger.warning(f'Asking to keep dimensions {missing_dims}, which are not present in DataArray, trying to standardize names')
+        xa = standardize_dim_names(xa)
+        missing_dims = set(dims_to_keep) - set(xa.dims)
+        if missing_dims:
+            logger.error(f'{missing_dims} are still missing from DataArray: expect errors')
     dims_to_drop = [dim for dim in xa.dims if dim not in dims_to_keep]
     xa = xa.isel({dim: 0 for dim in dims_to_drop})
     xa = xa.drop(dims_to_drop)
@@ -2407,6 +2432,7 @@ def get_lsm(mylocal,Model, discretize=True):
         lsm = xr.open_dataset(ut.first_valid_path(mylocal, 'Data_ERA5/land_sea_mask.nc')).lsm
     else:
         raise NotImplementedError()
+    lsm = standardize_dim_names(lsm)
     lsm = discard_all_dimensions_but(lsm, ['lon', 'lat'])
     if discretize:
         return lsm > 0.5
@@ -2421,6 +2447,7 @@ def get_cell_area(mylocal,Model):
         cell_area = xr.open_dataset(ut.first_valid_path(mylocal, 'Data_ERA5/cell_area.nc')).cell_area
     else:
         raise NotImplementedError()
+    cell_area = standardize_dim_names(cell_area)
     cell_area = discard_all_dimensions_but(cell_area, ['lon', 'lat'])
     return cell_area
 
