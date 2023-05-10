@@ -1,18 +1,18 @@
 # [Climate-Learning](https://github.com/georgemilosh/Climate-Learning) repo
 
-## Data Analysis
+## Extreme events in climate
 
-This repository includes various routines used to analyze various climate models and reanalysis.
+This repository includes various routines used to analyze extreme events in climate models and reanalysis.
 
-The functions and classes we define can be used for estimation of heat wave occurances 
+Below we show a composite conditioned on heatwaves in Scandinavia modelled by CESM (1000 years of data):
 
 ![Heat waves in Scandinavia modelled by CESM](/CESM/Images/Scandinavia_3.5.png)
 
-## Rare events
-We are interested in predicting rare events such as heat waves or cold spells etc. We use climate models because the data is scarce and we are interested in large scale long duration events
+## Predicting/estimating rare events: 
+We are interested in predicting rare events such as heatwaves or cold spells etc. 
 
 ## Machine Learning
-We use neural networks to compute committor functions. Computations are performed on the cluster [Centre Blaise Pascal](https://www.cbp.ens-lyon.fr/doku.php) at ENS de Lyon
+We use neural networks to compute *committor functions*, conditional probability of occurence of such events. Computations are performed on the cluster [Centre Blaise Pascal](https://www.cbp.ens-lyon.fr/doku.php) at ENS de Lyon
 
 
 <!-- ## Rare event algorithm
@@ -42,7 +42,7 @@ import tensorflow as tf
 
 ## Data
 
-Generally the data we used in this project is quite large. However we were able to make a portion of data avialable through [Google Drive Link](https://drive.google.com/drive/folders/1Y748L_hgFt3uQJcQRUp5z_oT0D_oAYvL) which contains 500 years for anomalies of
+Generally the data we used in this project is quite large. However, we were able to make a portion of data available through [Google Drive Link](https://drive.google.com/drive/folders/1Y748L_hgFt3uQJcQRUp5z_oT0D_oAYvL) which contains 500 years for anomalies of
 
 - `tas.nc`: 2 meter temperature
 - `zg500.nc`: 500 hPa geopotential height
@@ -54,9 +54,9 @@ For understanding our data it helps to look at the tutorial we created for [Crit
 
 ### Folder structure:
 
-Where we store *.py, *.ipynb scripts related to the following models and methods:
+Where we store `*.py`, `*.ipynb` scripts related to the following models and methods:
 
-- [PLASIM](https://georgemilosh.github.io/Climate-Learning/PLASIM/): Intermediate complexity climate model. That's where most of our scripts including `Learn2_new.py` (responsible for training `CNN`) are located
+- [PLASIM](https://georgemilosh.github.io/Climate-Learning/PLASIM/): Intermediate complexity climate model. That's where most of our scripts including `Learn2_new.py` (responsible for training `CNN`) are located. Also, this folder contains `hyperparameter_optimization.py`, a very useful Bayesian hyperparameter optimizer based on `optuna` library. 
 - [CESM](https://georgemilosh.github.io/Climate-Learning/CESM/): High fidelity climate model
 - [ERA5](https://georgemilosh.github.io/Climate-Learning/ERA/): ECMWF reanalysis
 - [SWG](https://georgemilosh.github.io/Climate-Learning/VAE/) We store `SWG` related routines in the folder called `VAE` which stands for `Variational Autoencoder` experiments. Importantly this folder also contains the `SWG` without the use of `VAE`.
