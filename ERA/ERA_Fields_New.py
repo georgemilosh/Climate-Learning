@@ -1834,7 +1834,7 @@ class Plasim_Field:
 
     @property
     def var(self):
-        '''Gives access to the data ov the field. For compatibility with the old version'''
+        '''Gives access to the data of the field. For compatibility with the old version'''
         return self.to_numpy(self.field)
 
     def to_numpy(self, da:xr.DataArray):
@@ -2398,14 +2398,18 @@ def discard_all_dimensions_but(xa:xr.DataArray, dims_to_keep:list):
     return xa
 
 # AL: These two functions maybe should also sort the latitudes? It doesn't seem necessary at the moment because we do .sel(field.lat) anyways... however it may be a weak point of the code for the future
-def get_lsm(mylocal,Model):
+def get_lsm(mylocal,Model, discretize=True):
     if Model == 'Plasim':
         lsm = xr.open_dataset(ut.first_valid_path(mylocal, 'Data_Plasim_inter/CONTROL_lsmask.nc')).lsm
     elif Model == 'CESM':
         lsm = xr.open_dataset(ut.first_valid_path(mylocal, 'Data_CESM/CAM_landmask.nc')).landmask
+    elif Model.startswith('ERA'):
+        lsm = xr.open_dataset(ut.first_valid_path(mylocal, 'Data_ERA5/land_sea_mask.nc')).lsm
     else:
         raise NotImplementedError()
     lsm = discard_all_dimensions_but(lsm, ['lon', 'lat'])
+    if discretize:
+        return lsm > 0.5
     return lsm
 
 def get_cell_area(mylocal,Model):
@@ -2413,6 +2417,8 @@ def get_cell_area(mylocal,Model):
         cell_area = xr.open_dataset(ut.first_valid_path(mylocal, 'Data_Plasim_inter/CONTROL_gparea.nc')).cell_area
     elif Model == 'CESM':
         cell_area = xr.open_dataset(ut.first_valid_path(mylocal, 'Data_CESM/CAM_cellarea.nc')).cell_area
+    elif Model.startswith('ERA'):
+        cell_area = xr.open_dataset(ut.first_valid_path(mylocal, 'Data_ERA5/cell_area.nc')).cell_area
     else:
         raise NotImplementedError()
     cell_area = discard_all_dimensions_but(cell_area, ['lon', 'lat'])

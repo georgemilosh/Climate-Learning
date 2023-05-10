@@ -876,10 +876,19 @@ except FileNotFoundError:
             "label": "500 mbar Geopotential"
         }
     }
+
+    field_infos_ERA5 = {
+        't2m': {
+            'name': 't2m',
+            'filename_suffix': 't2m',
+            'label': '2 meter temperature',
+        }
+    }
     
     fields_infos = {
         'Plasim' : fields_infos_Plasim,
-        'CESM'   : field_infos_CESM
+        'CESM'   : field_infos_CESM,
+        'ERA5'   : field_infos_ERA5,
     }
     
 
