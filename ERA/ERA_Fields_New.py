@@ -2435,7 +2435,7 @@ def get_lsm(mylocal,Model, discretize=True):
     lsm = standardize_dim_names(lsm)
     lsm = discard_all_dimensions_but(lsm, ['lon', 'lat'])
     if discretize:
-        return lsm > 0.5
+        return (lsm > 0.5).astype(lsm.dtype)
     return lsm
 
 def get_cell_area(mylocal,Model):
