@@ -896,7 +896,7 @@ except FileNotFoundError:
 @ut.indent_logger(logger)   # indents the log messages produced by this function
 def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', area='France', filter_area='France',
               lon_start=-64, lon_end=64, lat_start=0, lat_end=22, fillna=None, mylocal='/local/gmiloshe/PLASIM/',
-              fields=['t2m','zg500','mrso_filtered'], preprefix='ANO_', datafolder='Data_Plasim'):
+              fields=['t2m','zg500','mrso_filtered'], preprefix='ANO_', datafolder=None):
     # AL: can't you use the `Model` argument to reconstruct datafolder?
     '''
     Loads the data into Plasim_Fields objects
@@ -945,7 +945,9 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
     
     if area != filter_area:
         logger.warning(f'Fields will be filtered on a different area ({filter_area}) than the region of interest ({area}). If {area} is not a subset of {filter_area} the area integral will be different with and without filtering.')
-    if Model.lower() not in datafolder.lower():
+    if datafolder is None:
+        datafolder = f'Data_{Model}'
+    elif Model.lower() not in datafolder.lower():
         logger.warning(f'{datafolder = } does not contain the name of the model ({Model})')
     
     dataset_suffix = ''

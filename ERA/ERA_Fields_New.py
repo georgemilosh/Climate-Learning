@@ -1788,10 +1788,10 @@ class Plasim_Field:
             list of the years to keep, by default None
         '''
         # check if the given year list is within the range of the data
-        invalid_years = set(year_list) - set(self.field.time.dt.year.data)
-        if invalid_years:
-            raise IndexError(f'Data year range is {self.year_range} which does not include {pretty_set_of_int(invalid_years)}')
         if year_list is not None:
+            invalid_years = set(year_list) - set(self.field.time.dt.year.data)
+            if invalid_years:
+                raise IndexError(f'Data year range is {self.year_range} which does not include {pretty_set_of_int(invalid_years)}')
             self.field = self.field.sel(time=self.field.time.dt.year.isin(year_list))
             self.years = len(year_list)
     
