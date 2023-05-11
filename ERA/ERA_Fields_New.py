@@ -1716,7 +1716,7 @@ def is_over_threshold(a:np.ndarray, threshold=None, percent=None):
         
     
 class Plasim_Field:
-    def __init__(self, name, filename, label, Model, years=1000, mylocal='/local/gmiloshe/PLASIM/', **kwargs):
+    def __init__(self, name, filename, label, Model, years=None, mylocal='/local/gmiloshe/PLASIM/', **kwargs):
         self.name = name    # Name inside the .nc file
         self.filename = filename # path to the .nc file starting from `mylocal`
         self.label = label  # Label to be displayed on the graph
@@ -1743,8 +1743,9 @@ class Plasim_Field:
         
         self.field, yrs = monotonize_years(self.field)
         if yrs != self.years:
+            if self.years is not None:
+                logger.error(f'The loaded field has {yrs} years, not {years} as provided. Setting self.years = {yrs}')
             self.years = yrs
-            logger.error(f'The loaded field has {yrs} years, not {years} as provided. Setting {self.years = }')
 
         self.land_area_weights = get_lsm(self.mylocal,self.Model).sel(lat=self.field.lat, lon=self.field.lon)
         self.area_weights = get_cell_area(self.mylocal, self.Model).sel(lat=self.field.lat, lon=self.field.lon)
@@ -1783,7 +1784,7 @@ class Plasim_Field:
         # check if the given year list is within the range of the data
         invalid_years = set(year_list) - set(self.field.time.dt.year.data)
         if invalid_years:
-            raise IndexError(f'Data year range is [{self.field.dt.year.data[0]}, {self.field.dt.year.data[-1]}] which does not include {invalid_years}')
+            raise IndexError(f'Data year range is {self.year_range} which does not include {invalid_years}')
         if year_list is not None:
             self.field = self.field.sel(time=self.field.time.dt.year.isin(year_list))
             self.years = len(year_list)
