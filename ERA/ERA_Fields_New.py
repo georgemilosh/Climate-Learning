@@ -1713,7 +1713,23 @@ def is_over_threshold(a:np.ndarray, threshold=None, percent=None):
         else:
             raise ValueError('Please provide threshold or percent')
     return a >= threshold, threshold
-        
+
+def pretty_set_of_int(s:set) -> str:
+    '''
+    Takes a set of int as input a summarizes in a string.
+    For example {1,2,3,5} -> '1-3, 5'
+    '''
+    yr = np.sort(list(s))
+    diffs = np.insert(yr[1:] - yr[:-1], 0, 0)
+    intervals = {}
+    prev_start = None
+    for i,d in enumerate(diffs):
+        if d != 1:
+            if prev_start is not None:
+                intervals[prev_start] = yr[i-1]
+            prev_start = yr[i]
+    intervals[prev_start] = yr[-1]
+    return ', '.join([f'{start}' + (f'-{end}' if end != start else '') for start,end in intervals.items()])
     
 class Plasim_Field:
     def __init__(self, name, filename, label, Model, years=None, mylocal='/local/gmiloshe/PLASIM/', **kwargs):
@@ -1759,17 +1775,7 @@ class Plasim_Field:
 
     @property
     def year_range(self):
-        yr = np.sort(list(set(self.field.time.dt.year.data)))
-        diffs = np.insert(yr[1:] - yr[:-1], 0, 0)
-        intervals = {}
-        prev_start = None
-        for i,d in enumerate(diffs):
-            if d != 1:
-                if prev_start is not None:
-                    intervals[prev_start] = yr[i-1]
-                prev_start = yr[i]
-        intervals[prev_start] = yr[-1]
-        return ', '.join([f'{start}' + (f'-{end}' if end != start else '') for start,end in intervals.items()])
+        return pretty_set_of_int(set(self.field.time.dt.year.data))
 
     @ut.execution_time
     def select_years(self, year_list=None):
@@ -1784,7 +1790,7 @@ class Plasim_Field:
         # check if the given year list is within the range of the data
         invalid_years = set(year_list) - set(self.field.time.dt.year.data)
         if invalid_years:
-            raise IndexError(f'Data year range is {self.year_range} which does not include {invalid_years}')
+            raise IndexError(f'Data year range is {self.year_range} which does not include {pretty_set_of_int(invalid_years)}')
         if year_list is not None:
             self.field = self.field.sel(time=self.field.time.dt.year.isin(year_list))
             self.years = len(year_list)
