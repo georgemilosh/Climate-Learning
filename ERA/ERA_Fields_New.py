@@ -1515,17 +1515,24 @@ def monotonize_years(da:xr.DataArray):
     y = None
     new_y = 0
 
+    old_y_list = [old_y[0]]
     new_ys = np.zeros_like(old_y, dtype=int)
     for i, _y in enumerate(old_y):
         if y is None:
             y = _y
         if _y != y: # new year detected
             y = _y
+            old_y_list.append(y)
             new_y += 1
         new_ys[i] = new_y
 
-    new_ys = change(da.time, new_ys)
-    return da.assign_coords({'time': new_ys}), new_y + 1
+    # check if the years are already sorted
+    old_y_list = np.array(old_y_list)
+    if not (old_y_list[1:] - old_y_list[:-1] > 0).all(): # sort years
+        new_ys = change(da.time, new_ys)
+        da = da.assign_coords({'time': new_ys})
+
+    return da, new_y + 1
 
 @ut.execution_time
 def monotonize_longitude(da:xr.DataArray):
@@ -1749,6 +1756,20 @@ class Plasim_Field:
         self._area_integral = None
         self._time_average = None
 
+    @property
+    def year_range(self):
+        yr = np.sort(list(set(self.field.time.dt.year.data)))
+        diffs = np.insert(yr[1:] - yr[:-1], 0, 0)
+        intervals = {}
+        prev_start = None
+        for i,d in enumerate(diffs):
+            if d != 1:
+                if prev_start is not None:
+                    intervals[prev_start] = yr[i-1]
+                prev_start = yr[i]
+        intervals[prev_start] = yr[-1]
+        return ', '.join([f'{start}' + (f'-{end}' if end != start else '') for start,end in intervals.items()])
+
     @ut.execution_time
     def select_years(self, year_list=None):
         '''
@@ -1759,6 +1780,10 @@ class Plasim_Field:
         year_list : array-like, optional
             list of the years to keep, by default None
         '''
+        # check if the given year list is within the range of the data
+        invalid_years = set(year_list) - set(self.field.time.dt.year.data)
+        if invalid_years:
+            raise IndexError(f'Data year range is [{self.field.dt.year.data[0]}, {self.field.dt.year.data[-1]}] which does not include {invalid_years}')
         if year_list is not None:
             self.field = self.field.sel(time=self.field.time.dt.year.isin(year_list))
             self.years = len(year_list)
