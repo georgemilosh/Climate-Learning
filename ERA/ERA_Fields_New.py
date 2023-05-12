@@ -1732,7 +1732,7 @@ def is_over_threshold(a:np.ndarray, threshold=None, percent=None):
 
 def pretty_set_of_int(s:set) -> str:
     '''
-    Takes a set of int as input a summarizes in a string.
+    Takes a set of int as input and summarizes it in a string.
     For example {1,2,3,5} -> '1-3, 5'
     '''
     yr = np.sort(list(s))
