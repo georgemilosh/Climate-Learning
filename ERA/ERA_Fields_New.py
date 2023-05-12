@@ -1102,10 +1102,25 @@ def draw_map(m, scale=0.2, background='stock_img', **kwargs):
     for line in all_lines:
         line.set(linestyle='-', alpha=0.3, color='w')
 
+def is_above_line(da:xr.DataArray, lon1:float, lat1:float, lon2:float, lat2:float):
+    da = standardize_dim_names(da)
+    return da.lat - (lat1*(lon2 - da.lon) + lat2*(da.lon - lon1))/(lon2 - lon1) > 0
 
+def create_mask_xarray(model:str, area:str, lsm:xr.DataArray):
+    if model == 'ERA5':
+        if area == 'France':
+            mask = standardize_dim_names(lsm > 0.5) # convert to bool keeping only the land masses
+            mask *= (mask.lat < 52)*(mask.lat > 42)*(mask.lon > -5)*(mask.lon < 8.3) # identify the rough region
+            mask *= ~is_above_line(mask, 1.65, 51, -4.5, 49.2)
+            mask *= is_above_line(mask, -1.86, 43.34, 3.4, 42.2)
+            mask *= ~is_above_line(mask, 2.26, 51.2, 8.27, 49)
+            mask *= is_above_line(mask, 8.1, 48.8, 6, 43)
+            return mask
+        
+    raise NotImplementedError(f'{model}:{area}')
 
 # now vectorized :)
-def create_mask(model,area, data, axes='first 2', return_full_mask=False): # careful, this mask works if we load the full Earth. there might be problems if we extract fields from some edge of the map
+def create_mask(model:str, area:str, data:np.ndarray, axes='first 2', return_full_mask=False): # careful, this mask works if we load the full Earth. there might be problems if we extract fields from some edge of the map
     """
     This function allows to extract a subset of data enclosed in the area.
     The output has the dimension of the area on the axes corresponding to latitued and longitude
@@ -1128,7 +1143,8 @@ def create_mask(model,area, data, axes='first 2', return_full_mask=False): # car
     if return_full_mask:
         mask = np.zeros_like(data, dtype=bool)
     
-    if model == "ERA5":
+    if model == 'ERA5':
+        logger.warning('Creating mask on ERA data with old code!')
         if area == "Scandinavia":
             if return_full_mask:
                 mask[...,25:45,7:53] = True
@@ -1889,7 +1905,11 @@ class Plasim_Field:
         self.mask_area = area
         self._area_integral = None
         self.mask = get_lsm(self.mylocal,self.Model)
-        self.mask.data = create_mask(self.Model,area,self.mask.data, axes='last 2', return_full_mask=True)
+        try:
+            self.mask = create_mask_xarray(self.Model,area, self.mask)
+        except:
+            logger.warning('Failed to create mask with xarray features: using old version with numpy')
+            self.mask.data = create_mask(self.Model,area,self.mask.data, axes='last 2', return_full_mask=True)
 
         self.mask = self.mask.sel(lat=self.field.lat, lon=self.field.lon)
         
