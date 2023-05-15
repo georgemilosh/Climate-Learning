@@ -1102,11 +1102,58 @@ def draw_map(m, scale=0.2, background='stock_img', **kwargs):
     for line in all_lines:
         line.set(linestyle='-', alpha=0.3, color='w')
 
-def is_above_line(da:xr.DataArray, lon1:float, lat1:float, lon2:float, lat2:float):
+def is_above_line(da:xr.DataArray, lon1:float, lat1:float, lon2:float, lat2:float) -> xr.DataArray:
+    '''
+    returns a mask of the input object that is true north of a line in lon-lat space defined by two points.
+
+    By multiplying the output of this funcion over several evaluations you can define a polygonal mask
+
+    Parameters
+    ----------
+    da : xr.DataArray
+        input object with longitude and latitude dimensions
+    lon1 : float
+        longitude of the first point
+    lat1 : float
+        latitude of the first point
+    lon2 : float
+        longitude of the second point
+    lat2 : float
+        latitude of the second point
+
+    Returns
+    -------
+    xr.DataArray
+        the mask
+    '''
     da = standardize_dim_names(da)
     return da.lat - (lat1*(lon2 - da.lon) + lat2*(da.lon - lon1))/(lon2 - lon1) > 0
 
-def create_mask_xarray(model:str, area:str, lsm:xr.DataArray):
+def create_mask_xarray(model:str, area:str, lsm:xr.DataArray) -> xr.DataArray:
+    '''
+    Returns a boolean mask that is true over the area of interest, using xarray features.
+    It is similar to `create_mask` with the option return_full_mask = True.
+    However this time the mask is created using explicit latitude and longitude values, allowing also non square masks
+
+    Parameters
+    ----------
+    model : str
+        name of the model, e.g. 'Plasim', 'CESM', 'ERA5'
+    area : str
+        name of the area to mask, e.g. France
+    lsm : xr.DataArray
+        land-sea mask for the model, having only longitude and latitude dimensions
+
+    Returns
+    -------
+    xr.DataArray
+        the mask, same shape as `lsm`
+
+    Raises
+    ------
+    NotImplementedError
+        If the combination model/area is not implemented
+    '''
     if model == 'ERA5':
         if area == 'France':
             mask = standardize_dim_names(lsm > 0.5) # convert to bool keeping only the land masses
@@ -2443,7 +2490,15 @@ def PermuteFullrange(fullrange, randrange1, randrange2):# Create a permuted sequ
     returnfullrange[randrange1], returnfullrange[randrange2] = returnfullrange[randrange2], returnfullrange[randrange1]
     return returnfullrange
 
-def standardize_dim_names(xa:xr.DataArray):
+def standardize_dim_names(xa:xr.DataArray) -> xr.DataArray:
+    '''
+    Renames the coordinates of `xa` to oblige with standard:
+    longitude: 'lon'
+    latitude:  'lat'
+    time:      'time'
+
+    The renamed dataarray is then returned
+    '''
     standard_names_to_variants = {
         'lon': ['longitude', 'Longitude'],
         'lat': ['latitude', 'Latitude'],
