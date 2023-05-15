@@ -1,7 +1,105 @@
-# George Miloshevich 2022
-# for the reference see https://keras.io/examples/generative/vae/
-# merged with (and upgraded to tensorflow 2) https://towardsdatascience.com/generating-new-faces-with-variational-autoencoders-d13cfcb5f0a8
-# Adapted some routines from Learn2_new.py of Alessandro Lovo
+# Created in 2022
+
+# @author: George Miloshevich 
+"""
+This file contains the functions that are used to train the VAE (Variational Autoencoder)
+it is also used to create the file/folder structure prepared for training Stochastic Weather Generator (SWG).
+
+Usage
+-----
+To create the folder structure and the relevant config.json modify the parameters in the function called `kwargator` and run the file:
+
+    python vae_learn2.py <folder>
+
+This will create a folder with the name <folder> copy the vae_learn2.py (along with its dependencies) and rename it into Funs.py
+It will also create config.json with the parameters specified in the function `kwargator`.
+
+How training proceeds will depend on these parameters:
+
+Parameters
+----------
+
+    We recommend the following parameters (by default Plasim dataset will be used):
+        'return_time_series' : True,    #  time series integrated over the area
+        'return_threshold' : True,      #  returns the threshold for heatwaves
+        'myinput':'Y',                  # This should always be `Y` when training the model
+        'validation_data' : True,       # whether to also measure the reconstruction loss on the validation data
+        'k1': 0.9 , 'k2':0.1,           # the weights of the reconstruction and KL loss respectively that we usually set for VAE
+        
+        
+       
+
+        'checkpoint_every': 1,          # how often to save the model. Typically if running VAE for the first time we also set:
+        'N_EPOCHS': 100,                # how many epochs to train. Next if the training did not converge (measured by the validation loss)
+                                        # training can be continued, by `cd`-ing into the folder, increasing `config.json`-s parameter 'N_EPOCHS' 
+                                        # and running:
+                            ```
+                                python Funs.py .
+                            ```
+
+        'field_weights': [20., 1., 20.] # the weights of the fields in the reconstruction loss that we typically set, i.e. we want to 
+                                                    # weight t2m and mrso more than zg500. This parameter exists for historical reasons
+                                                    # when we were training autoencoder on all three fields at once. This approach
+                                                    # was later abandoned due to inefficiency, however the parameter remains the same
+        `use_mask` : False,             # whether to use the mask of the area impacted by the heatwave to only reconstruct that part of the fields,
+                                        # e.g. fields such as `t2m` and `mrso` will be masked with the mask of the area impacted by the heatwave
+                                        # this parameter should only be set to `true` if all three fields are being reconstructed. As we have found
+                                        # that reconstructing geopotential only is more efficient for SWG we never use `use_mask` =  True anymore
+
+        'keep_dims' : [1],              # which dimensions to keep when reconstructing the fields. In this case `1` implies we are selecting 
+                                        # geopotential. If, however, you intend to use <folder> for training vanilla SWG (without dimensionality reduction)
+                                        # you should use default fvalue of `keep_dims`.
+                            
+    # If you only need to create <folder> to train vanilla SWG (without dimensionality reduction) you should set:
+        'normalization_mode' : 'global_logit',   # vanilla SWG does not use the same normalization as VAE
+        'use_autoencoder' : False, # whether to use VAE or not. SWG training will work regardeless but you will not use the resources for the projection
+
+    # If you intend to train VAE  here is the architecture we found suitable for the problem of projecting geopotential:
+        'Z_DIM': 16, 
+            'encoder_conv_filters':             [16, 16, 16, 32, 32,  32,   64, 64],
+            'encoder_conv_kernel_size':[5,  5,  5,  5,   5,   5,   5,  3], #  [5,  5,  5,  5,   5,   5,   5,  3, 64]
+            'encoder_conv_strides'    :[2,  1,  1,  2,   1,   1,   2,  1],
+            'encoder_conv_padding':["same","same","same","same","same","same","same","valid"],
+            'encoder_conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu"], 
+            'encoder_conv_skip': [[0,2],[3,5]], 
+            'encoder_use_batch_norm' : [True,True,True,True,True,True,True,True], 
+            'encoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25],
+    'decoder_conv_filters':[64,32,32,32,16,16,16,1], #3], # Use 3 if working with 3 fields
+            'decoder_conv_kernel_size':[3, 5, 5, 5, 5, 5, 5, 5],
+                'decoder_conv_strides':[1, 2, 1, 1, 2, 1, 1, 2],
+                'decoder_conv_padding':["valid","same","same","same","same","same","same","same"],
+                'decoder_conv_activation':["LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","LeakyRelu","sigmoid"], 
+                'decoder_use_batch_norm' : [True,True,True,True,True,True,True,True],
+                'decoder_use_dropout' : [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25]
+
+
+
+    # If you want to work with 3 day running means you should set:
+        'label_field' : 't2m_inter',       # as opposed to 't2m' which is the default. `t2m_inter` is 
+                                                                    the 3 day running mean of `t2m`
+        'A_weights' : [3,0,0, 3,0,0, 3,0,0, 3,0,0, 3,0,0], 
+        'fields': ['t2m_inter_filtered','zg500_inter','mrso_inter_filtered']    # `inter` implies that we take 3 day running mean fields
+                        # and `filter` implies that we masked the corresponding fields with the mask of the area impacted by the heatwave
+
+    # Concerning the time of interest, the tas.nc, mrso.nc and zg500.nc have been extracted from May to the end of September.
+        yet we are only interested in predicting heatwaves in June, July and August. Meanwhile, we would like to 
+        be able to predict based on the series of the previous 15 days. This is why we set:
+         'time_start' : 15,              # 15 days after May 1 is when our dataset X starts (for the purposes of
+                                                                        training to project climatic states)
+         'label_period_start' : 30,     # 30 days after May 1 is when we start predicting the labels Y (June 1)
+         'time_end' :           134,    # 134 days after May 1 (September 15) is the last date that we use to train VAE and/or SWG
+         'label_period_end' : 120,      # 120 days after May 1 is when we stop predicting  labels Y(August 30)
+
+    # The domain of predictors is typically North Atlantic Europe
+        'lat_start' :   0, 
+        'lat_end' :     24, 
+        'lon_start' :   98, 
+        'lon_end' :     18, 
+
+
+    
+"""
+# 
 
 
 ### IMPORT LIBRARIES #####
