@@ -851,13 +851,13 @@ except FileNotFoundError:
         fields_infos_Plasim[f'zg{h}'] = {
             'name': 'zg',
             'filename_suffix': f'zg{h}',
-            'label': f'{h} mbar Geopotential',
+            'label': f'{h} hPa Geopotential Height',
         }
     for h in [200,300,500,850]: # geopotential heights
         fields_infos_Plasim[f'zg{h}_inter'] = {
             'name': 'zg',
             'filename_suffix': f'zg{h}_inter',
-            'label': f'3 day {h} mbar Geopotential',
+            'label': f'3 day {h} hPa Geopotential Height',
         }
 
     field_infos_CESM = {
@@ -873,7 +873,7 @@ except FileNotFoundError:
         "zg500": {
             "name": "Z3",
             "filename_suffix": "Z3.500hPa",
-            "label": "500 mbar Geopotential"
+            "label": "500 hPa Geopotential Height"
         }
     }
 
@@ -882,6 +882,16 @@ except FileNotFoundError:
             'name': 't2m',
             'filename_suffix': 't2m',
             'label': '2 meter temperature',
+        },
+        'zg500': {
+            'name': 'z',
+            'filename_suffix': 'zg',
+            'label': '500 hPa Geopotential Height'
+        },
+        'mrso': {
+            'name': 'swvl1',
+            'filename_suffix': 'mrso',
+            'label': 'Surface Soil Moisture',
         }
     }
     
@@ -1110,6 +1120,8 @@ def make_X(fields, time_start=30, time_end=120, T=14, tau=0):
     X : np.ndarray
         with shape (years, days, lat, lon, field)
     '''
+    if time_start + tau < 0:
+        raise IndexError(f'Too large delay {tau = }, the maximum delay is {-time_start = }')
     # stack the fields
     X = np.array([field.var[:, time_start+tau:time_end+tau-T+1, ...] for field_name,field in fields.items() if not field_name.endswith('_ghost')])
     # now transpose the array so the field index becomes the last
