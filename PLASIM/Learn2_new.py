@@ -1120,6 +1120,12 @@ def make_X(fields, time_start=30, time_end=120, T=14, tau=0):
     X : np.ndarray
         with shape (years, days, lat, lon, field)
     '''
+    if time_start is None:
+        time_start = max(-tau,0)
+        logger.info(f'Setting {time_start = } (maximum range)')
+    if time_end is None:
+        time_end = list(fields.values())[0].var.shape[1] - max(tau-T+1,0)
+        logger.info(f'Setting {time_end = } (maximum range)')
     if time_start + tau < 0:
         raise IndexError(f'Too large delay {tau = }, the maximum delay is {-time_start = }')
     # stack the fields
@@ -1176,6 +1182,12 @@ def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0,
     #    if label_period_end > time_end:
     #       raise ValueError(f'Bad parameters specified: {label_period_end = } is more than {time_end = }')
     logger.info(f' {time_start = }, {time_end = }, {label_period_start = }, {label_period_end = }, {T = }')
+    if time_start is None:
+        time_start = max(-tau,0)
+        logger.info(f'Setting {time_start = } (maximum range)')
+    if time_end is None:
+        time_end = list(fields.values())[0].var.shape[1] - max(tau-T+1,0)
+        logger.info(f'Setting {time_end = } (maximum range)')
     X = make_X(fields, time_start=time_start, time_end=time_end, T=T, tau=tau)
     try:
         lf = fields[label_field]
