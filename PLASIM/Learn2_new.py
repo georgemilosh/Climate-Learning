@@ -1181,7 +1181,7 @@ def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0,
     #if label_period_end is not None:
     #    if label_period_end > time_end:
     #       raise ValueError(f'Bad parameters specified: {label_period_end = } is more than {time_end = }')
-    logger.info(f' {time_start = }, {time_end = }, {label_period_start = }, {label_period_end = }, {T = }')
+    logger.info(f'{time_start = }, {time_end = }, {label_period_start = }, {label_period_end = }, {T = }')
     if time_start is None:
         time_start = max(-tau,0)
         logger.info(f'Setting {time_start = } (maximum range)')
