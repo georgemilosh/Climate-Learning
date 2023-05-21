@@ -1106,10 +1106,12 @@ def make_X(fields, time_start=30, time_end=120, T=14, tau=0):
     Parameters
     ----------
     fields : dict of Plasim_Field objects
-    time_start : int, optional
-        first day of the period of interest
-    time_end : int, optional
-        first day after the end of the period of interst
+    time_start : int or None, optional
+        first day of the period of interest (counting from the start of the dataset, so 0 means the first day in the dataset).
+        If None, time_start will be max(-tau,0), i.e. the minimum value possible without causing problems with the shift of the data
+    time_end : int or None, optional
+        first day after the end of the period of interst (counting from the start of the dataset)
+        If None time_end will be the maximum value possible without causing problems with the shift of the data
     T : int, optional
         width of the window for the running average
     tau : int, optional
@@ -1145,10 +1147,12 @@ def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0,
     fields : dict of Plasim_Field objects
     label_field : str, optional
         key for the field used for computing labels
-    time_start : int, optional
-        first day of the period of interest
-    time_end : int, optional
-        first day after the end of the period of interst
+    time_start : int or None, optional
+        first day of the period of interest (counting from the start of the dataset)
+        If None defaults to the maximum range available
+    time_end : int or None, optional
+        first day after the end of the period of interst (counting from the start of the dataset)
+        If None defaults to the maximum range available
     T : int, optional
         width of the window for the running average
     tau : int, optional
@@ -1345,6 +1349,7 @@ class PCAencoder(PCA):
         return _X
     def summary(self):
         print(f'We are computing PCA')
+
 class PCAer:
     """
         Essentially decorator class that keeps the inputs and outputs maximally similar to autoencoder so that we could use the same routines
