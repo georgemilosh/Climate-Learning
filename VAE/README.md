@@ -36,7 +36,7 @@ To compute the matrix of analogs for the SWG you may use
 ```
 python analogue_dario.py <folder> <coefficients> <NN>
 ```
-
+where typical usage is to set `<coefficients>=1,5,10,50,100,500` and `<NN>=100`
 or
 ```
 analogue_george.py <folder> <coefficients> <NN>
