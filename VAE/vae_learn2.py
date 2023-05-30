@@ -41,10 +41,10 @@ Parameters
                                                     # weight t2m and mrso more than zg500. This parameter exists for historical reasons
                                                     # when we were training autoencoder on all three fields at once. This approach
                                                     # was later abandoned due to inefficiency, however the parameter remains the same
-        `use_mask` : False,             # whether to use the mask of the area impacted by the heatwave to only reconstruct that part of the fields,
+        `usemask` : False,             # whether to use the mask of the area impacted by the heatwave to only reconstruct that part of the fields,
                                         # e.g. fields such as `t2m` and `mrso` will be masked with the mask of the area impacted by the heatwave
                                         # this parameter should only be set to `true` if all three fields are being reconstructed. As we have found
-                                        # that reconstructing geopotential only is more efficient for SWG we never use `use_mask` =  True anymore
+                                        # that reconstructing geopotential only is more efficient for SWG we never use `usemask` =  True anymore
 
         'keep_dims' : [1],              # which dimensions to keep when reconstructing the fields. In this case `1` implies we are selecting 
                                         # geopotential. If, however, you intend to use <folder> for training vanilla SWG (without dimensionality reduction)
