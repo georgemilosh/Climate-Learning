@@ -393,15 +393,10 @@ def k_fold_cross_val(folder, X, Y, train_model_kwargs=None, optimal_checkpoint_k
         logger.info(f'number of training data: {len(Y_tr)} of which {n_neg_tr} negative and {n_pos_tr} positive')
 
         if normalization_mode: # normalize X_tr and X_va
-            X_tr, X_mean, X_std = ln.normalize_X(X_tr, mode=normalization_mode)
-            X_va = (X_va - X_mean)/X_std 
-
-            # save X_mean and X_std
-            np.save(f'{fold_folder}/X_mean.npy', X_mean) # GM: Why not include all of this in normalize_X? It may simplify the code -> AL: Because normalize_X doesn't know about fold_folder
-            np.save(f'{fold_folder}/X_std.npy', X_std)
-        
-            
-        logger.info(f'{X_tr.shape = }, {X_va.shape = }')
+            X_tr, _, _ = ln.normalize_X(X_tr, fold_folder, mode=normalization_mode)
+            #X_va = (X_va - X_mean)/X_std 
+            X_va, _, _ = ln.normalize_X(X_va, fold_folder) # we expect that the previous operation stores X_mean, X_std
+            logger.info(f'after normalization: {X_tr.shape = }, {X_va.shape = }, {Y_tr.shape = }, {Y_va.shape = }')
 
         # train the model
         score = train_model(model, X_tr, A_tr, Y_tr, X_va, A_va, Y_va, # arguments that are always computed inside this function
