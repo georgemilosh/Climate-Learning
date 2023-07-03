@@ -60,7 +60,7 @@ def compute_weight_matrix(reshape_mask, lat):
                     ind1 = geosep.reshape_index((i,j,f))
                     ind2 = geosep.reshape_index((i+1,j,f))
                 except IndexError:
-                    print(f'IndexError: {(i,j,f)}-{(i+1,j,f)}')
+                    logger.debug(f'IndexError: {(i,j,f)}-{(i+1,j,f)}')
                 else:
                     W[ind1,ind1] += w
                     W[ind2,ind2] += w
@@ -72,7 +72,7 @@ def compute_weight_matrix(reshape_mask, lat):
                     ind1 = geosep.reshape_index((i,j,f))
                     ind2 = geosep.reshape_index((i,j+1,f))
                 except IndexError:
-                    print(f'IndexError: {(i,j,f)}-{(i,j+1,f)}')
+                    logger.debug(f'IndexError: {(i,j,f)}-{(i,j+1,f)}')
                 else:
                     W[ind1,ind1] += wi
                     W[ind2,ind2] += wi
@@ -84,7 +84,7 @@ def compute_weight_matrix(reshape_mask, lat):
                 ind1 = geosep.reshape_index((i,shape[-2] - 1,f))
                 ind2 = geosep.reshape_index((i,0,f))
             except IndexError:
-                print(f'IndexError: {(i,shape[-2] - 1,f)}-{(i,0,f)}')
+                logger.debug(f'IndexError: {(i,shape[-2] - 1,f)}-{(i,0,f)}')
             else:
                 W[ind1,ind1] += wi
                 W[ind2,ind2] += wi
