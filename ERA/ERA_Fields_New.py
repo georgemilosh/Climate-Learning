@@ -2003,6 +2003,27 @@ class Plasim_Field:
 
         self._area_integral = masked_average(self.field, dim=['lat', 'lon'], weights=weights, mask=self.mask)
         return self._area_integral
+    
+    @ut.execution_time
+    def override_area_integral(self, ai:xr.DataArray):
+        '''
+        Overrides the self._area_integral attribute of the field. The time dimension is croppped to adapt it to the field
+
+        Parameters
+        ----------
+        ai : xr.DataArray
+            DataArray with only time axis, that must contain the time indices of the original field
+        '''
+        # check that ai has only the time dimension:
+        if ai.dims != ('time', ):
+            raise ValueError(f"provided DataArray has the wrong dimesions: expecting ('time',), found {ai.dims}")
+        # check that the time indeces in the field are a subset of the ones in ai
+        try:
+            self._area_integral = ai.sel(time=self.field.time)
+            logger.info(f'Successfully overriden area integral of field {self.name}')
+        except KeyError as e:
+            logger.error('Provided DataArray does not contain all timestamps of the current field')
+            raise KeyError() from e
 
     @property
     def area_integral(self):
