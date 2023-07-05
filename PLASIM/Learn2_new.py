@@ -998,10 +998,12 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
             file_suffix = f'{datafolder}_{dataset_suffix}/'
 
     if area_integral_override is None:
-        area_integral_override = {}
-    for k in list(area_integral_override.keys()):
+        _area_integral_override = {}
+    else:
+        _area_integral_override = area_integral_override.copy()
+    for k in area_integral_override:
         if k.endswith('_ghost') or k.endswith('_filtered'):
-            area_integral_override[k.rsplit('_',1)[0]] = area_integral_override.pop(k)
+            _area_integral_override[k.rsplit('_',1)[0]] = _area_integral_override.pop(k)
 
     # load the fields
     _fields = {}
@@ -1041,9 +1043,9 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
         # prepare to compute area integral when needed
         field.set_mask(area)
 
-        if field_name in area_integral_override:
+        if field_name in _area_integral_override:
             logger.info(f'Overriding area integral for field {field_name}')
-            aio = ef.xr.open_dataarray(ut.first_valid_path(mylocal,area_integral_override.pop(field_name)))
+            aio = ef.xr.open_dataarray(ut.first_valid_path(mylocal,_area_integral_override.pop(field_name)))
             field.override_area_integral(aio)
 
         if ghost:
@@ -1051,8 +1053,8 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
 
         _fields[field_name] = field
 
-    if area_integral_override:
-        raise KeyError(f'Ignored elements in area_integral_override: {list(area_integral_override.keys())}. Check for misspelling!')
+    if _area_integral_override:
+        raise KeyError(f'Ignored elements in _area_integral_override: {list(_area_integral_override.keys())}. Check for misspelling!')
     
     return _fields
 
