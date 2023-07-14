@@ -1001,7 +1001,7 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
         _area_integral_override = {}
     else:
         _area_integral_override = area_integral_override.copy()
-    for k in area_integral_override:
+    for k in list(_area_integral_override.keys()):
         if k.endswith('_ghost') or k.endswith('_filtered'):
             _area_integral_override[k.rsplit('_',1)[0]] = _area_integral_override.pop(k)
 
