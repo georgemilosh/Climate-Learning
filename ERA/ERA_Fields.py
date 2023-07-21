@@ -39,8 +39,6 @@ path_to_ERA = str(Path(__file__).resolve().parent)
 if not path_to_ERA in sys.path:
     sys.path.insert(1, path_to_ERA)
 
-from utilities import execution_time
-
 
 global plotter
 plotter = None
@@ -1097,7 +1095,7 @@ def autocorrelation(myseries, maxlag):
 
 class Field:
     def __init__(self, name, filename, label, Model, shape, s_year, prefix,
-                 day_start=0, day_end=365, lat_start=0, lat_end=241, lon_start=0, lon_end=480, myprecision='double'):
+                 day_start=0, day_end=365, lat_start=0, lat_end=241, lon_start=0, lon_end=480, myprecision='double', datafolder=''):
         if myprecision == 'double':
             self.np_precision = np.float64
             self.np_precision_complex = np.complex128
@@ -1108,6 +1106,7 @@ class Field:
         self.name = name    # Name inside the .nc file
         self.filename = filename # Name of the .nc file 
         self.label = label  # Label to be displayed on the graph
+        self.datafolder = datafolder
         self.var = np.zeros(shape, dtype=self.np_precision)        # The actual field data
         self.time = np.zeros((shape[0],shape[1]), dtype=self.np_precision)        # local time in days
         self.abs_mask = np.zeros((shape[0],shape[1]), dtype=self.np_precision)    # integral over the area
@@ -1132,7 +1131,7 @@ class Field:
         
         
     def add_year(self, year):   # Load the year from the database
-        dataset = Dataset('Data_ERA5/'+self.prefix+'ERA5_'+self.filename+'_'+str(year+self.start_year)+'.nc')
+        dataset = Dataset(self.datafolder+'./Data_ERA5/'+self.prefix+'ERA5_'+self.filename+'_'+str(year+self.start_year)+'.nc')
         print("Loading field " + self.name + ", year ", year, ", dataset.variables["+self.name+"].shape = ", dataset.variables[self.name].shape)
         if ((year + self.start_year)%4): # if not divisible by 4 it is not a leap year
             if len(dataset.variables[self.name].shape) < 4: 
@@ -1183,15 +1182,15 @@ class Field:
         
         self.fit_time = ((self.time - self.time[0,0]-(period[0]+period[1])/2)/365)   # Convert day of a year into a fraction of a year, normalized to its middle
         self.detrended = np.zeros(self.var.shape, dtype=self.np_precision)          # Detrended field 
-        if os.path.exists('ERA5/'+FitKind+'/'+self.prefix+'coef_intercept'+self.name+'.nc'):
+        if os.path.exists(self.datafolder+'./ERA5/'+FitKind+'/'+self.prefix+'coef_intercept'+self.name+'.nc'):
             ##### LOAD ####
-            dataset = Dataset('ERA5/'+FitKind+'/'+self.prefix+'coef_intercept'+self.name+'.nc')
+            dataset = Dataset(self.datafolder+'./ERA5/'+FitKind+'/'+self.prefix+'coef_intercept'+self.name+'.nc')
             self.coef = np.asarray(dataset.variables[self.name+'_coef'][:], dtype=self.np_precision)[self.lat_start:self.lat_end,self.lon_start:self.lon_end]
             self.intercept = np.asarray(dataset.variables[self.name][:], dtype=self.np_precision)[self.lat_start:self.lat_end,self.lon_start:self.lon_end]
             dataset.close()
             for y in range(self.var.shape[0]):
                 print("loading year ", y)
-                dataset = Dataset('ERA5/'+FitKind+'/'+self.prefix+self.name+'_detrended_fields_'+str(self.start_year+y)+'.nc')
+                dataset = Dataset(self.datafolder+'./ERA5/'+FitKind+'/'+self.prefix+self.name+'_detrended_fields_'+str(self.start_year+y)+'.nc')
                 self.detrended[y] = np.asarray(dataset.variables[self.name+'_det'][:,self.lat_start:self.lat_end,self.lon_start:self.lon_end], dtype=self.np_precision)
                 dataset.close()
         else: # if the file doesn't exist we must peform detrending
@@ -1216,7 +1215,7 @@ class Field:
                         self.detrended[:,:,lat_loop,lon_loop] = self.var[:,:,lat_loop,lon_loop] - lin2.predict(poly.fit_transform(self.fit_time.reshape((-1, 1)))).reshape(self.time.shape)
    
             ###### SAVE ########
-            ncfile = Dataset('ERA5/'+FitKind+'/'+self.prefix+'coef_intercept'+self.name+'.nc',mode='w',format='NETCDF4_CLASSIC') 
+            ncfile = Dataset(self.datafolder+'./ERA5/'+FitKind+'/'+self.prefix+'coef_intercept'+self.name+'.nc',mode='w',format='NETCDF4_CLASSIC') 
             lat_dim = ncfile.createDimension('lat', len(lat))     # latitude axis
             lon_dim = ncfile.createDimension('lon', len(lon))    # longitude axis
             lat_det = ncfile.createVariable('lat', np.float32, ('lat',))
@@ -1243,7 +1242,7 @@ class Field:
                 print(y)
                 try: ncfile.close()  # just to be safe, make sure dataset is not already open.
                 except: pass
-                ncfile = Dataset('ERA5/'+FitKind+'/'+self.prefix+self.name+'_detrended_fields_'+str(self.start_year+y)+'.nc',mode='w',format='NETCDF4_CLASSIC') 
+                ncfile = Dataset(self.datafolder+'./ERA5/'+FitKind+'/'+self.prefix+self.name+'_detrended_fields_'+str(self.start_year+y)+'.nc',mode='w',format='NETCDF4_CLASSIC') 
                 print(ncfile)
                 lat_dim = ncfile.createDimension('lat', len(lat))     # latitude axis
                 lon_dim = ncfile.createDimension('lon', len(lon))    # longitude axis
