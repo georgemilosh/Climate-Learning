@@ -906,7 +906,7 @@ except FileNotFoundError:
 @ut.indent_logger(logger)   # indents the log messages produced by this function
 def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', area='France', filter_area='France',
               lon_start=-64, lon_end=64, lat_start=0, lat_end=22, fillna=None, mylocal='/local/gmiloshe/PLASIM/',
-              fields=['t2m','zg500','mrso_filtered'], preprefix='ANO_', datafolder=None):
+              fields=['t2m','zg500','mrso_filtered'], preprefix='ANO_', datafolder=None, area_integral_override=None):
     # AL: can't you use the `Model` argument to reconstruct datafolder?
     '''
     Loads the data into Plasim_Fields objects
@@ -945,6 +945,9 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
         The name of the input file starts with preprefix. In practice it is either null or 'ANO' which indicates precomputed anomalies
     datafolder: str, optional
         The name of the folder which lies inside `mylocal`, it defaults to Data_Plasim
+    area_integral_override : dict, optional
+        For each field, name of the file from which to load the xr.DataArray to override the area integral.
+        The path of the files are meant relative to one of the folders in mylocal
     
         
     Returns
@@ -994,6 +997,14 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
             prefix = f'{preprefix}{dataset_suffix}_'
             file_suffix = f'{datafolder}_{dataset_suffix}/'
 
+    if area_integral_override is None:
+        _area_integral_override = {}
+    else:
+        _area_integral_override = area_integral_override.copy()
+    for k in list(_area_integral_override.keys()):
+        if k.endswith('_ghost') or k.endswith('_filtered'):
+            _area_integral_override[k.rsplit('_',1)[0]] = _area_integral_override.pop(k)
+
     # load the fields
     _fields = {}
     for field_name in fields:
@@ -1032,10 +1043,18 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
         # prepare to compute area integral when needed
         field.set_mask(area)
 
+        if field_name in _area_integral_override:
+            logger.info(f'Overriding area integral for field {field_name}')
+            aio = ef.xr.open_dataarray(ut.first_valid_path(mylocal,_area_integral_override.pop(field_name)))
+            field.override_area_integral(aio)
+
         if ghost:
             field_name += '_ghost'
 
         _fields[field_name] = field
+
+    if _area_integral_override:
+        raise KeyError(f'Ignored elements in _area_integral_override: {list(_area_integral_override.keys())}. Check for misspelling!')
     
     return _fields
 

@@ -60,7 +60,7 @@ def compute_weight_matrix(reshape_mask, lat):
                     ind1 = geosep.reshape_index((i,j,f))
                     ind2 = geosep.reshape_index((i+1,j,f))
                 except IndexError:
-                    print(f'IndexError: {(i,j,f)}-{(i+1,j,f)}')
+                    logger.debug(f'IndexError: {(i,j,f)}-{(i+1,j,f)}')
                 else:
                     W[ind1,ind1] += w
                     W[ind2,ind2] += w
@@ -72,7 +72,7 @@ def compute_weight_matrix(reshape_mask, lat):
                     ind1 = geosep.reshape_index((i,j,f))
                     ind2 = geosep.reshape_index((i,j+1,f))
                 except IndexError:
-                    print(f'IndexError: {(i,j,f)}-{(i,j+1,f)}')
+                    logger.debug(f'IndexError: {(i,j,f)}-{(i,j+1,f)}')
                 else:
                     W[ind1,ind1] += wi
                     W[ind2,ind2] += wi
@@ -84,7 +84,7 @@ def compute_weight_matrix(reshape_mask, lat):
                 ind1 = geosep.reshape_index((i,shape[-2] - 1,f))
                 ind2 = geosep.reshape_index((i,0,f))
             except IndexError:
-                print(f'IndexError: {(i,shape[-2] - 1,f)}-{(i,0,f)}')
+                logger.debug(f'IndexError: {(i,shape[-2] - 1,f)}-{(i,0,f)}')
             else:
                 W[ind1,ind1] += wi
                 W[ind2,ind2] += wi
@@ -393,15 +393,10 @@ def k_fold_cross_val(folder, X, Y, train_model_kwargs=None, optimal_checkpoint_k
         logger.info(f'number of training data: {len(Y_tr)} of which {n_neg_tr} negative and {n_pos_tr} positive')
 
         if normalization_mode: # normalize X_tr and X_va
-            X_tr, X_mean, X_std = ln.normalize_X(X_tr, mode=normalization_mode)
-            X_va = (X_va - X_mean)/X_std 
-
-            # save X_mean and X_std
-            np.save(f'{fold_folder}/X_mean.npy', X_mean) # GM: Why not include all of this in normalize_X? It may simplify the code -> AL: Because normalize_X doesn't know about fold_folder
-            np.save(f'{fold_folder}/X_std.npy', X_std)
-        
-            
-        logger.info(f'{X_tr.shape = }, {X_va.shape = }')
+            X_tr, _, _ = ln.normalize_X(X_tr, fold_folder, mode=normalization_mode)
+            #X_va = (X_va - X_mean)/X_std 
+            X_va, _, _ = ln.normalize_X(X_va, fold_folder) # we expect that the previous operation stores X_mean, X_std
+            logger.info(f'after normalization: {X_tr.shape = }, {X_va.shape = }, {Y_tr.shape = }, {Y_va.shape = }')
 
         # train the model
         score = train_model(model, X_tr, A_tr, Y_tr, X_va, A_va, Y_va, # arguments that are always computed inside this function
