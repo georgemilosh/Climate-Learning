@@ -181,7 +181,7 @@ class GaussianCommittor(object):
         '''Alias for self.q'''
         return self.q(x)
 
-
+# Here we redefine the `prepare_XY` function to save the heatwave amplitude A
 class Trainer(ln.Trainer):
     def prepare_XY(self, fields, **prepare_XY_kwargs):
         if self._prepare_XY_kwargs != prepare_XY_kwargs:
