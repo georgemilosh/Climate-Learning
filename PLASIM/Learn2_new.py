@@ -923,7 +923,7 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
     sampling : str, optional
         '' (dayly) or '3hrs'
     Model : str, optional
-        'Plasim', 'CESM', ... For now only Plasim is implemented
+        'Plasim', 'CESM', 'ERA5'
     area : str, optional
         region of interest, e.g. 'France'
     filter_area : str, optional
@@ -1358,11 +1358,6 @@ def normalize_X(X, fold_folder, mode='pointwise', recompute=False):
 ##################################################### 
 
 class PCAencoder(PCA):
-    """_summary_
-
-    Args:
-        PCA (_type_): _description_
-    """
     def predict(self,*args,**kwargs):
         _X = self.transform(args[0].reshape(args[0].shape[0],-1))
         return _X
@@ -2483,6 +2478,8 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
         rightmargin = time_end - label_period_end - T + 1 # that's because when we perform running mean we have to avoid using last T days
         if rightmargin < 0:
             raise ValueError(f'leftmargin = time_end - label_period_end - T + 1 which is not allowed!')
+        
+
     # get the folders from which to load the models
     load_from, info = get_transfer_learning_folders(load_from, folder, nfolds, optimal_checkpoint_kwargs=optimal_checkpoint_kwargs)
     # here load_from is either None (no transfer learning) or a list of strings
@@ -2516,7 +2513,8 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
                 pcaer.fit_with_timeout(0,X_tr)
                 X_tr = pcaer.encoder.predict(X_tr)
                 X_va = pcaer.encoder.predict(X_va)
-                logger.info(f'after PCA: {X_tr.shape = }, {X_va.shape = }')
+            logger.info(f'after PCA: {X_tr.shape = }, {X_va.shape = }')
+
         logger.info(f' {time_start = }, {time_end = }, {leftmargin = }, {rightmargin = }, {T = }')
         #logger.info(f'{Y_va[1*82:2*82]}')
         #logger.info(f'{np.where(Y_va == 1)}')
