@@ -138,6 +138,7 @@ class GaussianCommittor(object):
 
         # check that the regularization matrix is indeed a matrix, if not make it a multiple of the identity matrix
         if not hasattr(self.regularization_matrix, 'shape') or self.regularization_matrix.shape == ():
+            logger.info('multiplying scalar regularization matrix by the identity matrix')
             self.regularization_matrix = self.regularization_matrix * np.identity(sigma_XX.shape[0], dtype=float)
         assert self.regularization_matrix.shape == sigma_XX.shape
 
