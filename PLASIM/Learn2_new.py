@@ -3030,8 +3030,8 @@ class Trainer():
         self._LONLAT = None # meshgrid of self.lat, self.lon
 
         # extract default arguments for each function
-        self.default_run_kwargs = ut.extract_nested(self.config_dict, 'run_kwargs').copy()
-        self.telegram_kwargs = ut.extract_nested(self.config_dict, 'telegram_kwargs').copy()
+        self.default_run_kwargs = ut.extract_nested(self.config_dict, 'run_kwargs')
+        self.telegram_kwargs = ut.extract_nested(self.config_dict, 'telegram_kwargs')
 
         # setup last evaluation arguments
         self._load_data_kwargs = None
@@ -3161,7 +3161,7 @@ class Trainer():
 
             new_scheduled_kwargs = []
             for kw in self.scheduled_kwargs:
-                if kw['load_from'] == 'last':
+                if kw.get('load_from', ut.extract_nested(self.default_run_kwargs, 'load_from')) == 'last':
                     raise KeyError("repeating a run with load_from = 'last' will cause it to load from its previous iteration, please change load_from")
                 new_scheduled_kwargs += [kw]*repetitions
             self.scheduled_kwargs = new_scheduled_kwargs
