@@ -3080,6 +3080,7 @@ class Trainer():
                 Whether the first run should be created from scratch or from transfer learning, by default False (i.e. by default transfer learning)
         '''
         first_from_scratch = kwargs.pop('first_from_scratch', False)  # this argument is removed from the kwargs because it affects only the first run
+        repetitions = kwargs.pop('repetitions',1) # this argument affects only the scheduling, not the runs
         
         # detect variables over which to iterate
         iterate_over = [] # list of names of arguments that are lists and so need to be iterated over
@@ -3149,6 +3150,23 @@ class Trainer():
 
         if len(self.scheduled_kwargs) == 0: # this is fix to avoid empty scheduled_kwargs if it happens there are no iterative kwargs
             self.scheduled_kwargs = [non_iterative_kwargs]
+
+        if first_from_scratch: 
+            self.scheduled_kwargs[0]['load_from'] = None # disable transfer learning for the first run
+            logger.warning('Forcing the first run to be loaded from scratch')
+
+        if repetitions > 1:
+            logger.warning(f'Due to {repetitions = } > 1, disabling run skipping')
+            self.skip_existing_run = False
+
+            new_scheduled_kwargs = []
+            for kw in self.scheduled_kwargs:
+                if kw['load_from'] == 'last':
+                    raise KeyError("repeating a run with load_from = 'last' will cause it to load from its previous iteration, please change load_from")
+                new_scheduled_kwargs += [kw]*repetitions
+            self.scheduled_kwargs = new_scheduled_kwargs
+
+        if len(self.scheduled_kwargs) == 1:
             if len(non_iterative_kwargs) == 0:
                 logger.info('Scheduling 1 run at default values')
             else:
@@ -3158,9 +3176,6 @@ class Trainer():
             for i,kw in enumerate(self.scheduled_kwargs):
                 logger.info(f'{i}: {kw}')
 
-        if first_from_scratch: 
-            self.scheduled_kwargs[0]['load_from'] = None # disable transfer learning for the first run
-            logger.warning('Forcing the first run to be loaded from scratch')
     
     def telegram(self, telegram_bot_token='~/ENSMLbot.txt', chat_ID=None, telegram_logging_level=31, telegram_logging_format=None):
         '''
