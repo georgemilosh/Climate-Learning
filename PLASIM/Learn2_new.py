@@ -3439,6 +3439,7 @@ class Trainer():
             'args': kwargs, 
             'transfer_learning_from': tl_info if tl_info else None,
             'status': 'RUNNING',
+            'host': HOSTNAME,
             'start_time': ut.now()
         }
         ut.dict2json(runs, self.runs_file) # save runs.json
