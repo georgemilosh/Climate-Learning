@@ -3377,13 +3377,19 @@ class Trainer():
         runs = ut.json2dict(self.runs_file) # get runs dictionary
 
         # check if the run has already been performed
+        matching_runs = []
         for r in runs.values():
             if r['status'] == 'COMPLETED' and r['args'] == kwargs:
-                if self.skip_existing_run:
-                    logger.log(45, f"Skipping already performed run {r['name']}")
-                    return None
-                else:
-                    logger.log(45, f"Rerunning {r['name']}")
+                matching_runs.append(r['name'])
+
+        if matching_runs:
+            matching_runs = ', '.join(matching_runs)
+            logger.log(45, f"Run already performed in {matching_runs}")
+            if self.skip_existing_run:
+                logger.log(45, 'Skipping')
+                return None
+            else:
+                logger.log(45, "Rerunning")
 
 
         ############################
