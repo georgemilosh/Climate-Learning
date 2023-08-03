@@ -3110,7 +3110,7 @@ class Trainer():
         # arguments for loading fields
         to_add = []
         for k in iterate_over:
-            if k in self.default_run_kwargs['load_data_kwargs']:
+            if ut.key_exists(self.default_run_kwargs['load_data_kwargs'], k):
                 to_add.append(k)
         new_iterate_over += to_add
         for k in to_add:
@@ -3118,7 +3118,7 @@ class Trainer():
         # arguments for preparing XY
         to_add = []
         for k in iterate_over:
-            if k in self.default_run_kwargs['prepare_XY_kwargs']:
+            if ut.key_exists(self.default_run_kwargs['prepare_XY_kwargs'], k):
                 to_add.append(k)
         new_iterate_over += to_add
         for k in to_add:
