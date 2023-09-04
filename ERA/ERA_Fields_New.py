@@ -1773,7 +1773,8 @@ def is_over_threshold(a:np.ndarray, threshold=None, percent=None):
     if threshold is None:
         if percent:
             a_flat = a.flatten()
-            threshold = np.sort(a_flat)[np.ceil(a_flat.shape[0]*(1-percent/100)).astype('int')]
+            # threshold = np.sort(a_flat)[np.ceil(a_flat.shape[0]*(1-percent/100)).astype('int')]
+            threshold = np.quantile(a_flat, 1 - percent/100, method='higher') # 15 times faster than the line above
         else:
             raise ValueError('Please provide threshold or percent')
     return a >= threshold, threshold
