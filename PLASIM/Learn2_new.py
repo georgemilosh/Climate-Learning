@@ -3486,7 +3486,12 @@ class Trainer():
 
         # run
         score, info = None, {}
-        try:            
+        try:
+            # write on the home directory that there is something running
+            with open(f"{os.environ['HOME']}/.current_run", "w") as f:
+                f.write(f'{Path(self.root_folder).absolute().as_posix()}\n')
+                f.write(f'{folder}\n')
+
             score, info = self.run(f'{self.root_folder}/{folder}', **run_kwargs)
             
             runs = ut.json2dict(self.runs_file)
@@ -3512,7 +3517,7 @@ class Trainer():
                 raise e
             info['status'] = 'FAILED'
 
-        finally: # in any case we need to save the end time and save runs to json
+        finally: # in any case we need to save the end time and save runs to json            
             if runs[run_id]['status'] == 'RUNNING': # the run has not completed but the above except block has not been executed (e.g. due to KeybordInterruptError)
                 runs[run_id]['status'] = 'FAILED'
                 runs[run_id]['name'] = f'F{folder[1:]}'
@@ -3524,6 +3529,9 @@ class Trainer():
             runs[run_id]['run_time_min'] = run_time_min
 
             ut.dict2json(runs,self.runs_file)
+
+            # clear home directory
+            os.remove(f"{os.environ['HOME']}/.current_run")
 
         return score, info
 
