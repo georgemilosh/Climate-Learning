@@ -1773,8 +1773,10 @@ def is_over_threshold(a:np.ndarray, threshold=None, percent=None):
     if threshold is None:
         if percent:
             a_flat = a.flatten()
-            # threshold = np.sort(a_flat)[np.ceil(a_flat.shape[0]*(1-percent/100)).astype('int')]
-            threshold = np.quantile(a_flat, 1 - percent/100, method='higher') # 15 times faster than the line above
+            if np.__version__ < '1.22': # this version is compatible with earlier version of python/numpy
+                threshold = np.sort(a_flat)[np.ceil(a_flat.shape[0]*(1-percent/100)).astype('int')]
+            else:
+                threshold = np.quantile(a_flat, 1 - percent/100, method='higher') # 15 times faster than the line above
         else:
             raise ValueError('Please provide threshold or percent')
     return a >= threshold, threshold
@@ -1816,12 +1818,16 @@ class Plasim_Field:
         logger.info(f'Opening field {self.name}')
         
         try:
+            logger.info(f'The provided path strings are {self.mylocal = }, {self.filename = }')
             self.datas = xr.open_dataset(ut.first_valid_path(self.mylocal,self.filename)) #.fillna(0) # The issue is that Francesco put a land mask on TAS.nc which has nan values on the sea.
                                 # For machine learning purposes nan could be a problem
             self.field = standardize_dim_names(self.datas[name])
         except KeyError:
             logger.error(f'Unable to find key "{name}" among the provided fields {list(self.datas.keys())}')
             raise KeyError
+        except FileNotFoundError:
+            logger.error(f'The provided path strings are {self.mylocal = }, {self.filename = }')
+            raise FileNotFoundError
         
         self.field = discard_all_dimensions_but(self.field, dims_to_keep=['time', 'lon', 'lat'])
         
@@ -2567,17 +2573,19 @@ def get_lsm(mylocal,Model, discretize=True, lsmsource=None):
     if Model == 'Plasim':
         if lsmsource is None:
             lsmsource = 'Data_Plasim_inter/CONTROL_lsmask.nc'
-        lsm = xr.open_dataset(ut.first_valid_path(mylocal, lsmsource)).lsm
     elif Model == 'CESM':
         if lsmsource is None:
             lsmsource = 'Data_CESM/CAM_landmask.nc'
-        lsm = xr.open_dataset(ut.first_valid_path(mylocal, lsmsource)).landmask
     elif Model.startswith('ERA'):
         if lsmsource is None:
             lsmsource = 'Data_ERA5/land_sea_mask.nc'
-        lsm = xr.open_dataset(ut.first_valid_path(mylocal, lsmsource)).lsm
     else:
         raise NotImplementedError()
+    try:
+        lsm = xr.open_dataset(ut.first_valid_path(mylocal, lsmsource))['lsm']
+    except KeyError:
+        lsm = xr.open_dataset(ut.first_valid_path(mylocal, lsmsource))['landmask']
+
     lsm = standardize_dim_names(lsm)
     lsm = discard_all_dimensions_but(lsm, ['lon', 'lat'])
     if discretize:

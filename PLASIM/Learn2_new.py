@@ -949,6 +949,10 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
     area_integral_override : dict, optional
         For each field, name of the file from which to load the xr.DataArray to override the area integral.
         The path of the files are meant relative to one of the folders in mylocal
+    areasource : str, optional
+        name of the file from which to load the cell area, by default None
+    lsmsource : str, optional
+        name of the file from which to load the land sea mask, by default None
     
         
     Returns
@@ -1158,7 +1162,8 @@ def make_X(fields, time_start=30, time_end=120, T=14, tau=0):
 
 @ut.execution_time
 @ut.indent_logger(logger)
-def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0, percent=5, threshold=None, label_period_start=None, label_period_end=None, A_weights=None, return_threshold=False):
+def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0, percent=5, threshold=None, label_period_start=None, 
+            label_period_end=None, A_weights=None, return_threshold=False):
     '''
     Combines `make_X` and `assign_labels`
 
@@ -1221,7 +1226,9 @@ def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0,
         except KeyError:
             raise KeyError(f'Unable to find label field {label_field} among the provided fields {list(fields.keys())}')
 
-    Y = assign_labels(lf, time_start=time_start, time_end=time_end, T=T, percent=percent, threshold=threshold, label_period_start=label_period_start, label_period_end=label_period_end, A_weights=A_weights, return_threshold=return_threshold)
+    Y = assign_labels(lf, time_start=time_start, time_end=time_end, T=T, percent=percent, threshold=threshold, 
+                      label_period_start=label_period_start, label_period_end=label_period_end, A_weights=A_weights, 
+                      return_threshold=return_threshold)
     if return_threshold: # Y is actually a tuple
         Y, threshold_new = Y
         return X,Y,threshold_new
