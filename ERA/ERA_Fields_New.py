@@ -1797,13 +1797,16 @@ def pretty_set_of_int(s:set) -> str:
     return ', '.join([f'{start}' + (f'-{end}' if end != start else '') for start,end in intervals.items()])
     
 class Plasim_Field:
-    def __init__(self, name, filename, label, Model, years=None, mylocal='/local/gmiloshe/PLASIM/', **kwargs):
+    def __init__(self, name, filename, label, Model, years=None, mylocal='/local/gmiloshe/PLASIM/',
+                lsmsource=None, areasource=None, **kwargs):
         self.name = name    # Name inside the .nc file
         self.filename = filename # path to the .nc file starting from `mylocal`
         self.label = label  # Label to be displayed on the graph
         self.Model = Model
         self.years = years
         self.mylocal = mylocal
+        self.lsmsource = lsmsource
+        self.areasource = areasource
 
         self.mask_area = None
         self.mask = None
@@ -1827,9 +1830,16 @@ class Plasim_Field:
             if self.years is not None:
                 logger.error(f'The loaded field has {yrs} years, not {years} as provided. Setting self.years = {yrs}')
             self.years = yrs
-
-        self.land_area_weights = get_lsm(self.mylocal,self.Model).sel(lat=self.field.lat, lon=self.field.lon)
-        self.area_weights = get_cell_area(self.mylocal, self.Model).sel(lat=self.field.lat, lon=self.field.lon)
+        try:
+            self.land_area_weights = get_lsm(self.mylocal,self.Model,lsmsource=self.lsmsource).sel(lat=self.field.lat, lon=self.field.lon)
+        except KeyError:
+            logger.info("Key error occurred")
+            logger.info(f'{self.lsmsource = }')
+            logger.info(f'{get_lsm(self.mylocal,self.Model,lsmsource=self.lsmsource) = }')
+            logger.info(f'{self.field.lat = }')
+            logger.info(f'{self.field.lon = }')
+            raise KeyError
+        self.area_weights = get_cell_area(self.mylocal, self.Model,areasource=self.areasource).sel(lat=self.field.lat, lon=self.field.lon)
         
         self.land_area_weights.data *= self.area_weights.data
         self.area_weights.data /= np.sum(self.area_weights.data)
@@ -1953,7 +1963,7 @@ class Plasim_Field:
         '''
         self.mask_area = area
         self._area_integral = None
-        self.mask = get_lsm(self.mylocal,self.Model)
+        self.mask = get_lsm(self.mylocal,self.Model,lsmsource=self.lsmsource)
         try:
             self.mask = create_mask_xarray(self.Model,area, self.mask)
         except:
@@ -2553,13 +2563,19 @@ def discard_all_dimensions_but(xa:xr.DataArray, dims_to_keep:list):
     return xa
 
 # AL: These two functions maybe should also sort the latitudes? It doesn't seem necessary at the moment because we do .sel(field.lat) anyways... however it may be a weak point of the code for the future
-def get_lsm(mylocal,Model, discretize=True):
+def get_lsm(mylocal,Model, discretize=True, lsmsource=None):
     if Model == 'Plasim':
-        lsm = xr.open_dataset(ut.first_valid_path(mylocal, 'Data_Plasim_inter/CONTROL_lsmask.nc')).lsm
+        if lsmsource is None:
+            lsmsource = 'Data_Plasim_inter/CONTROL_lsmask.nc'
+        lsm = xr.open_dataset(ut.first_valid_path(mylocal, lsmsource)).lsm
     elif Model == 'CESM':
-        lsm = xr.open_dataset(ut.first_valid_path(mylocal, 'Data_CESM/CAM_landmask.nc')).landmask
+        if lsmsource is None:
+            lsmsource = 'Data_CESM/CAM_landmask.nc'
+        lsm = xr.open_dataset(ut.first_valid_path(mylocal, lsmsource)).landmask
     elif Model.startswith('ERA'):
-        lsm = xr.open_dataset(ut.first_valid_path(mylocal, 'Data_ERA5/land_sea_mask.nc')).lsm
+        if lsmsource is None:
+            lsmsource = 'Data_ERA5/land_sea_mask.nc'
+        lsm = xr.open_dataset(ut.first_valid_path(mylocal, lsmsource)).lsm
     else:
         raise NotImplementedError()
     lsm = standardize_dim_names(lsm)
@@ -2568,13 +2584,19 @@ def get_lsm(mylocal,Model, discretize=True):
         return (lsm > 0.5).astype(lsm.dtype)
     return lsm
 
-def get_cell_area(mylocal,Model):
+def get_cell_area(mylocal,Model, areasource=None):
     if Model == 'Plasim':
-        cell_area = xr.open_dataset(ut.first_valid_path(mylocal, 'Data_Plasim_inter/CONTROL_gparea.nc')).cell_area
+        if areasource is None:
+            areasource = 'Data_Plasim_inter/CONTROL_gparea.nc'
+        cell_area = xr.open_dataset(ut.first_valid_path(mylocal,areasource)).cell_area
     elif Model == 'CESM':
-        cell_area = xr.open_dataset(ut.first_valid_path(mylocal, 'Data_CESM/CAM_cellarea.nc')).cell_area
+        if areasource is None:
+            areasource = 'Data_CESM/CAM_cellarea.nc'
+        cell_area = xr.open_dataset(ut.first_valid_path(mylocal, areasource)).cell_area
     elif Model.startswith('ERA'):
-        cell_area = xr.open_dataset(ut.first_valid_path(mylocal, 'Data_ERA5/cell_area.nc')).cell_area
+        if areasource is None:
+            areasource = 'Data_ERA5/cell_area.nc'
+        cell_area = xr.open_dataset(ut.first_valid_path(mylocal, areasource)).cell_area
     else:
         raise NotImplementedError()
     cell_area = standardize_dim_names(cell_area)
