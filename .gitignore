@@ -4,6 +4,7 @@
 *.vscode*
 *.pb
 *.orig
+*.out
 *.png
 *variables.index
 *checkpoint
@@ -23,9 +24,12 @@
 **/Climate/Plasim/**
 **/Climate/Plasim_tas/**
 **/Climate/Images/**
+**/Climate_Data/**
 **/CESM/Images/**
 **/CESM/Postproc/**
+**/CESM/Data_CESM_100yrs/**
 **/CESM/models/**
+**/CESM/regrid_models/**
 **/CESM/Data_CESM/**
 **/Climate/image/**
 **/Climate/Image/**
