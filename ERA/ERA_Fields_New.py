@@ -1178,8 +1178,16 @@ def create_mask(model:str, area:str, data:np.ndarray, axes='first 2', return_ful
     
     If `return_full_mask` == True, the function returns an array with the same shape of `data`, True over the `area` and False elsewhere
     Otherwise the return will be `data` restricted to `area`
+
+    If `area` consists of two strings, i.e. model_area, the model name is extracted from the first part 
+        of the string and the model input is ignored. area is extracted from the second part of the string.
     """
-    
+
+    parts = area.split('_')
+    if len(parts) > 1:
+        model = parts[0]
+        area = parts[1]
+
     if axes == 'first 2' and len(data.shape) > 2:
         # permute the shape so that the first 2 axes end up being the last 2
         _data = data.transpose(*range(2,len(data.shape)),0,1)

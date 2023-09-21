@@ -1948,6 +1948,9 @@ def make_checkpoint_callback(file_path, checkpoint_every=1):
     return ckpt_callback
 
 def postprocess(x):
+    """
+    Applying softmax to the output of the network to get a probability distribution
+    """
     return keras.layers.Softmax()(x)
 
 @ut.execution_time
