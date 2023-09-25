@@ -2310,6 +2310,7 @@ def load_model(checkpoint, compile=False):
     '''
     model_folder = Path(checkpoint).parent
     model = keras.models.load_model(model_folder, compile=compile)
+    logger.info(f'Loaded model from {model_folder}')
     model.load_weights(checkpoint)
     return model
 
