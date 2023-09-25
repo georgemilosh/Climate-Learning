@@ -1808,7 +1808,7 @@ def pretty_set_of_int(s:set) -> str:
     
 class Plasim_Field:
     def __init__(self, name, filename, label, Model, years=None, mylocal='/local/gmiloshe/PLASIM/',
-                lsmsource=None, areasource=None, **kwargs):
+                lsmsource=None, areasource=None, lsm2mask=False, **kwargs):
         self.name = name    # Name inside the .nc file
         self.filename = filename # path to the .nc file starting from `mylocal`
         self.label = label  # Label to be displayed on the graph
@@ -1817,6 +1817,7 @@ class Plasim_Field:
         self.mylocal = mylocal
         self.lsmsource = lsmsource
         self.areasource = areasource
+        self.lsm2mask = lsm2mask # whether or not to apply the land-sea-mask to the area mask 
 
         self.mask_area = None
         self.mask = None
@@ -1977,18 +1978,24 @@ class Plasim_Field:
         '''
         self.mask_area = area
         self._area_integral = None
-        self.mask = get_lsm(self.mylocal,self.Model,lsmsource=self.lsmsource)
+        lsm = get_lsm(self.mylocal,self.Model,lsmsource=self.lsmsource)
+        self.mask = lsm.copy()
         try:
             self.mask = create_mask_xarray(self.Model,area, self.mask)
         except:
             logger.warning('Failed to create mask with xarray features: using old version with numpy')
             self.mask.data = create_mask(self.Model,area,self.mask.data, axes='last 2', return_full_mask=True)
-
+        #logger.info(f'{self.lsm2mask = }')
+        if self.lsm2mask:
+            logger.info('Applying land sea mask to area mask')
+            self.mask = self.mask*lsm
+        
         self.mask = self.mask.sel(lat=self.field.lat, lon=self.field.lon)
         
 
     def filter(self, keep_inside_mask=True):
-        '''If `keep_inside_mask` sets to zero all values of self.field outside the mask. Otherwise the ones inside.'''
+        '''If `keep_inside_mask` sets to zero all values of self.field outside the mask. 
+        Otherwise sets the ones inside.'''
         if self.mask is None:
             raise ValueError('Mask not set: cannot filter. Please use `self.set_mask`')
         if self.field.shape[1:] != self.mask.shape:

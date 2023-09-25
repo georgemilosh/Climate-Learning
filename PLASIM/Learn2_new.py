@@ -906,7 +906,7 @@ except FileNotFoundError:
 @ut.indent_logger(logger)   # indents the log messages produced by this function
 def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', area='France', filter_area='France',
               lon_start=-64, lon_end=64, lat_start=0, lat_end=22, fillna=None, mylocal='/local/gmiloshe/PLASIM/',
-              lsmsource=None, areasource=None,
+              lsmsource=None, areasource=None, lsm2mask=False,
               fields=['t2m','zg500','mrso_filtered'], preprefix='ANO_', datafolder=None, area_integral_override=None):
     # AL: can't you use the `Model` argument to reconstruct datafolder?
     '''
@@ -953,6 +953,8 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
         name of the file from which to load the cell area, by default None
     lsmsource : str, optional
         name of the file from which to load the land sea mask, by default None
+    lsm2mask : bool, optional
+        whether to apply land sea mask to the area mask (See Plasim_Field)
     
         
     Returns
@@ -1028,7 +1030,7 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
         f_infos = fields_infos[Model][field_name]
         # create the field object
         field = ef.Plasim_Field(f_infos['name'], f"{file_suffix}{prefix}{f_infos['filename_suffix']}.nc", f_infos['label'], Model,
-                                years=dataset_years, mylocal=mylocal, lsmsource=lsmsource, areasource=areasource)
+                                years=dataset_years, mylocal=mylocal, lsmsource=lsmsource, areasource=areasource, lsm2mask=lsm2mask)
         # select years
         field.select_years(year_list)
 
