@@ -69,7 +69,7 @@ class ScoreOptimizer():
     The study_name is used to name the Optuna study, which stores the results of the optimization 
     process. The common_kwargs are additional arguments that are passed to the trainer object when training the model.
     """
-    def __init__(self, trainer, study_name='', common_kwargs=None):
+    def __init__(self, trainer, study_name='', common_kwargs=None, repetitions=1):
         self.trainer = trainer
         self.common_kwargs = common_kwargs or {}
         name_kwargs = {k:v for k,v in self.common_kwargs.items() if not k.startswith('prune')} # ignore kwargs related to pruning in the name of the study
@@ -77,6 +77,11 @@ class ScoreOptimizer():
         self.study = optuna.create_study(study_name=name, storage=f'sqlite:///{name}.db', load_if_exists=True)
 
         self._pruned_trials = 0 # number of pruned trials in the last optimize run
+
+        self.repetitions = repetitions
+        if self.repetitions > 1:
+            self.trainer.skip_existing_run = False
+
         
 
     def objective(self, trial):
@@ -353,24 +358,27 @@ class ScoreOptimizer():
         #### run
         run_args = {**self.common_kwargs, **hyp}
         logger.info(f'{run_args = }')
-        try:
-            score, info = self.trainer._run(**run_args)
+        scores = []
+        for rep in range(self.repetitions):
+            try:
+                score, info = self.trainer._run(**run_args)
+                scores.append(score)
 
-            if info['status'] == 'FAILED': # most likely due to invalid network architecture
-                self._pruned_trials += 1
-                raise optuna.TrialPruned(f"Run failed: pruning.") # we prune the trial
+                if info['status'] == 'FAILED': # most likely due to invalid network architecture
+                    self._pruned_trials += 1
+                    raise optuna.TrialPruned(f"Run failed: pruning.") # we prune the trial
 
-            ## we could prune also PRUNED runs, but since we have access to a partial score on the few first folds we can keep them to instruct optuna
+                ## we could prune also PRUNED runs, but since we have access to a partial score on the few first folds we can keep them to instruct optuna
 
-        except KeyboardInterrupt:
-            raise
-        except optuna.TrialPruned:
-            raise
-        except Exception as e:
-            # we get an exception that is not handled by Trainer._run
-            raise RuntimeError("If upon_failed_run was set to 'continue', something very bad happened if we reached this block") from e
+            except KeyboardInterrupt:
+                raise
+            except optuna.TrialPruned:
+                raise
+            except Exception as e:
+                # we get an exception that is not handled by Trainer._run
+                raise RuntimeError("If upon_failed_run was set to 'continue', something very bad happened if we reached this block") from e
 
-        return score
+        return np.mean(scores)
 
 
     def optimize(self, n_trials=20, count_pruned=True, **kwargs):
@@ -434,11 +442,12 @@ def main():
     study_name = arg_dict.pop('study_name', 'study') # optuna stores its experiments in the file `{name}.db`
     n_trials = arg_dict.pop('n_trials', None)
     count_pruned = arg_dict.pop('count_pruned', True)
+    repetitions = arg_dict.pop('repetitions', 1)
     if not n_trials:
         raise ValueError('You must provide a valid number of trials with n_trials=<number of trials>')
 
     # create a ScoreOptimizer
-    so = ScoreOptimizer(trainer=trainer, study_name=study_name, common_kwargs=arg_dict)
+    so = ScoreOptimizer(trainer=trainer, study_name=study_name, common_kwargs=arg_dict, repetitions=repetitions)
 
     # run
     so.optimize(n_trials=n_trials, count_pruned=count_pruned)
