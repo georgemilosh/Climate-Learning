@@ -2259,11 +2259,12 @@ def get_transfer_learning_folders(load_from, current_run_folder, nfolds, optimal
         optimal_checkpoint_kwargs = {}
     info = {}
 
+    # this is the bypass that is used in Trainer._run
     if isinstance(load_from, list):
         return load_from, info
 
-    # get the actual run name from where to load
-    spl = current_run_folder.rsplit('/',1) # it is either [root_folder, run_name] or [run_name]. The latter if there was no '/' in `folder`
+    # identify the folder where the current run is
+    spl = current_run_folder.rsplit('/',1) # it is either [root_folder, run_name] or [run_name]. The latter if there was no '/' in `current_run_folder`
     if len(spl) == 2:
         root_folder, current_run_name = spl
     else:
