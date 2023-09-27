@@ -409,20 +409,6 @@ def parse_run_name(run_name, evaluate=False):
         d[key] = value
     return d
 
-def check_compatibility(run_name, current_run_name=None, relevant_keys=None):
-    '''
-    Check if `run_name` is compatible with `current_run_name` for transfer learning, namely if the values corresponding to `relevant_keys` coincide
-    '''
-    if current_run_name is None or relevant_keys is None:
-        return True
-    # parse run_name for arguments
-    run_dict = parse_run_name(run_name)
-    current_run_dict = parse_run_name(current_run_name)
-    # keep only arguments that are relevant for model architecture
-    run_dict = {k:v for k,v in run_dict.items() if k in relevant_keys}
-    current_run_dict = {k:v for k,v in current_run_dict.items() if k in relevant_keys}
-    return run_dict == current_run_dict
-
 def select_compatible(run_args, conditions, require_unique=True, config=None):
     '''
     Selects which runs are compatible with given conditions
@@ -646,7 +632,7 @@ def get_subset(runs, conditions, config_dict=None):
     subset = {k:runs[k] for k in subset}
     return subset
 
-def get_run(load_from, current_run_name=None, runs_path='./runs.json'):
+def get_run(load_from, current_run_args:dict=None,  ignorable_keys=None, runs_path='./runs.json'):
     '''
     Parameters
     ----------
@@ -667,8 +653,10 @@ def get_run(load_from, current_run_name=None, runs_path='./runs.json'):
             it is the number of the run (>0) or if negative is the n-th last run
         If None: 
             the function returns None
-    current_run_name : str, optional
-        used to check for compatibility issues when loading a model
+    current_run_args : dict, optional
+        Flattened dictionary with all the arguments of the current run, used to check for compatibility issues when loading a model
+    ignorable_keys : list[str], optional
+        list of arguments to ignore when checking for compatibility
     
     Returns
     -------
@@ -686,6 +674,13 @@ def get_run(load_from, current_run_name=None, runs_path='./runs.json'):
         return None
 
     runs = ut.json2dict(runs_path)
+    spl = runs_path.rsplit('/',1)
+    if len(spl) == 2:
+        root_folder = spl[0]
+    else:
+        root_folder = './'
+    config = ut.json2dict(f'{root_folder}/config.json')
+    default_run_args = ut.collapse_dict(config['run_kwargs'])
 
     # select only completed runs
     runs = {k: v for k,v in runs.items() if v['status'] == 'COMPLETED'}
@@ -716,28 +711,46 @@ def get_run(load_from, current_run_name=None, runs_path='./runs.json'):
     if isinstance(load_from, dict):
         for k,v in load_from.items():
             if v == 'same':
-                if current_run_name is None:
+                if current_run_args is None:
                     raise ValueError("Cannot use 'same' special value without providing current_run_name")
                 additional_relevant_keys.append(k)
         for k in additional_relevant_keys:
             load_from.pop(k)
-
+    
     # arguments relevant for model architecture
     relevant_keys = list(get_default_params(create_model).keys()) + list(get_default_params(load_data).keys()) + ['nfolds'] + additional_relevant_keys
+    relevant_keys = list(set(relevant_keys).difference(ignorable_keys))
+
+    relevant_current_run_args = {k:v for k,v in current_run_args.items() if k in relevant_keys}
 
     # select only compatible runs
-    runs = {k: v for k,v in runs.items() if check_compatibility(v['name'], current_run_name, relevant_keys=relevant_keys)}
+    compatible_runs = {}
+    for run_id,run in runs.items():
+        v_args = ut.set_values_recursive(default_run_args, run['args'])
+        relevant_v_args = {k:v for k,v in v_args.items() if k in relevant_keys}
+        diff = ut.compare_nested(relevant_v_args, relevant_current_run_args)
+        if diff:
+            logger.info(f"run {run['name']} is not compatible with the current run: {diff = }")
+        else:
+            run['args'] = v_args # save all the arguments of the run as we need them for select_compatible
+            compatible_runs[run_id] = run
+
+    runs = compatible_runs
+    
 
     if len(runs) == 0:
-        logger.warning('None of the previous runs is compatible with this one for performing transfer learning')
+        logger.warning('None of the previous runs are compatible with this one for performing transfer learning')
         # GM: It would be nice if the warning specifies the function that reports them.
         # AL: This can be achieved in formatting the logger
         return None
+    
+    logger.info(f'Found {len(runs)} compatible runs with the current one.')
 
     if isinstance(load_from, int):
         l = load_from
     elif isinstance(load_from, dict):
         require_unique = if_ambiguous_choose is None
+        logger.info(f'Requiring extra conditions: {load_from}')
         l = select_compatible({k:v['args'] for k,v in runs.items()}, load_from, require_unique=require_unique)
         if require_unique: # l is a string
             l = int(l)
@@ -2234,7 +2247,7 @@ def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='m
     return opt_checkpoint, fold_subfolder
 
 
-def get_transfer_learning_folders(load_from, current_run_folder, nfolds, optimal_checkpoint_kwargs=None):
+def get_transfer_learning_folders(load_from, current_run_folder:str, nfolds:int, optimal_checkpoint_kwargs:dict=None, current_run_args:dict=None, ignorable_keys=None):
     '''
     Creates the names of the checkpoints from which to load for every fold
 
@@ -2248,6 +2261,10 @@ def get_transfer_learning_folders(load_from, current_run_folder, nfolds, optimal
         number of folds
     optimal_checkpoint_kwargs : dict, optional
         arguments for the function `optimal_checkpoint`, by default None
+    current_run_args : dict, optional
+        Flattened arguments of the current run, simplifies the check for compatibility
+    ignorable_keys: list of str, optional
+        keys that are not important when comparing models for transfer learning, by default None
 
     Returns
     -------
@@ -2270,9 +2287,30 @@ def get_transfer_learning_folders(load_from, current_run_folder, nfolds, optimal
     else:
         root_folder = './'
         current_run_name = spl[-1]
+
+    # get all the arguments of the current run
+    if current_run_args is None:
+        default_run_args = ut.json2dict(f'{root_folder}/config.json')['run_kwargs']
+        default_run_args = ut.collapse_dict(default_run_args)
+        runs = ut.json2dict(f'{root_folder}/runs.json')
+        # the current run is the last one in the runs dictionary
+        current_run = list(runs.values())[-1]
+        assert current_run_name == current_run['name'], f"Current run name ({current_run_name}) does not match the name of the last run in the runs.json file ({current_run['name']})"
+        current_run_args = ut.set_values_recursive(default_run_args, current_run['args'])
+
+    # get the name of the run from where to load
+    if isinstance(load_from, str):
+        spl = load_from.rsplit('/',1)
+        if len(spl) == 2:
+            load_from_root_folder, load_from = spl
+        else:
+            load_from_root_folder = './'
+
+    if load_from_root_folder != root_folder:
+        logger.warning(f'Loading from external folder {load_from_root_folder} instead of {root_folder}')
     
     # Find the model which has the weights we can use for transfer learning, if it is possible
-    load_from = get_run(load_from, current_run_name=current_run_name, runs_path=f'{root_folder}/runs.json')
+    load_from = get_run(load_from, current_run_args=current_run_args, ignorable_keys=ignorable_keys,runs_path=f'{load_from_root_folder}/runs.json')
     if load_from is None:
         logger.log(41, 'Models will be trained from scratch')
     else:
@@ -2281,8 +2319,10 @@ def get_transfer_learning_folders(load_from, current_run_folder, nfolds, optimal
     # find the optimal checkpoint
     if load_from is not None:
         load_from = load_from.rstrip('/')
-        opt_checkpoint, fold_subfolder = optimal_checkpoint(f'{root_folder}/{load_from}', nfolds, **optimal_checkpoint_kwargs)
+        opt_checkpoint, fold_subfolder = optimal_checkpoint(f'{load_from_root_folder}/{load_from}', nfolds, **optimal_checkpoint_kwargs)
         info['tl_from'] = {'run': load_from, 'optimal_checkpoint': opt_checkpoint}
+        if load_from_root_folder != root_folder:
+            info['tl_from']['root_folder'] = load_from_root_folder
         if isinstance(opt_checkpoint,int):
             # this happens if the optimal checkpoint is computed with `collective` = True, so we simply broadcast the single optimal checkpoint to all the folds
             opt_checkpoint = [opt_checkpoint]*nfolds
@@ -2290,7 +2330,7 @@ def get_transfer_learning_folders(load_from, current_run_folder, nfolds, optimal
             fold_subfolder = [fold_subfolder]*nfolds
 
         # make the folders name of the checkpoint
-        load_from = [f'{root_folder}/{load_from}/fold_{i}/{fold_subfolder[i]}cp-{opt_checkpoint[i]:04d}.ckpt' for i in range(nfolds)]
+        load_from = [f'{load_from_root_folder}/{load_from}/fold_{i}/{fold_subfolder[i]}cp-{opt_checkpoint[i]:04d}.ckpt' for i in range(nfolds)]
 
     return load_from, info
 
@@ -2381,7 +2421,8 @@ def margin_removal_with_sliding_window(X,time_start,leftmargin,rightmargin,time_
 
 @ut.execution_time
 @ut.indent_logger(logger)
-def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=None, optimal_checkpoint_kwargs=None, load_from='last', nfolds=10, val_folds=1, u=1, normalization_mode='pointwise',
+def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=None, optimal_checkpoint_kwargs=None, 
+                     load_from='last', ignorable_keys=None, nfolds=10, val_folds=1, u=1, normalization_mode='pointwise',
                      fullmetrics=True, training_epochs=40, training_epochs_tl=10, loss='sparse_categorical_crossentropy', prune_threshold=None, min_folds_before_pruning=None,
                      Z_DIM=None, T=14, time_start=30, time_end=120, label_period_start=None, label_period_end=None):
     '''
@@ -2416,6 +2457,8 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
     load_from : None, int, str or 'last', optional
         from where to load weights for transfer learning. See the documentation of function `get_run`
         If not None it overrides `create_model_kwargs` (the model is loaded instead of created)
+    ignorable_keys : list of str, optional
+        keys that are not important when comparing models for transfer learning, by default None
     nfolds : int, optional
         number of folds
     val_folds : int, optional
@@ -2496,7 +2539,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
         
 
     # get the folders from which to load the models
-    load_from, info = get_transfer_learning_folders(load_from, folder, nfolds, optimal_checkpoint_kwargs=optimal_checkpoint_kwargs)
+    load_from, info = get_transfer_learning_folders(load_from, folder, nfolds, optimal_checkpoint_kwargs=optimal_checkpoint_kwargs, ignorable_keys=ignorable_keys)
     # here load_from is either None (no transfer learning) or a list of strings
 
     my_memory = []
@@ -2821,7 +2864,11 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
                 year_permutation = ut.compose_permutations([year_permutation, balance_permutation])
     else:
         year_permutation = np.array(year_permutation)
-        Y = Y[year_permutation]
+        try:
+            Y = Y[year_permutation]
+        except IndexError:
+            logger.warning(f'Inconsistent length: {len(Y) = }, {len(year_permutation) = }')
+            raise IndexError
         logger.warning('Mixing overriden by provided permutation')
 
     # apply permutation to X
@@ -3426,8 +3473,9 @@ class Trainer():
         load_from = ut.extract_nested(run_kwargs, 'load_from')
         nfolds = ut.extract_nested(run_kwargs, 'nfolds')
         optimal_checkpoint_kwargs = ut.extract_nested(run_kwargs, 'optimal_checkpoint_kwargs')
-        load_from, tl_info = get_transfer_learning_folders(load_from, f'{self.root_folder}/{folder}', nfolds,
-                                                           optimal_checkpoint_kwargs=optimal_checkpoint_kwargs)
+        ignorable_keys = ut.extract_nested(run_kwargs, 'ignorable_keys')
+        load_from, tl_info = get_transfer_learning_folders(load_from, f'{self.root_folder}/{folder}', nfolds, optimal_checkpoint_kwargs=optimal_checkpoint_kwargs, 
+                                                           current_run_args=ut.collapse_dict(run_kwargs), ignorable_keys=ignorable_keys)
         if tl_info:
             tl_info = tl_info['tl_from']
 
@@ -3436,8 +3484,12 @@ class Trainer():
             run_kwargs = ut.set_values_recursive(run_kwargs, {'load_from': load_from})
 
             # force the dataset to the same year permutation
-            year_permutation = list(np.load(f"{self.root_folder}/{tl_info['run']}/year_permutation.npy", allow_pickle=True))
-            run_kwargs = ut.set_values_recursive(run_kwargs, {'year_permutation': year_permutation})
+            if "year_permutation" not in ignorable_keys:
+                logger.warning("Forcing the dataset to the same year permutation as the transfer learning run")
+                year_permutation = list(np.load(f"{tl_info.get('root_folder', self.root_folder)}/{tl_info['run']}/year_permutation.npy", allow_pickle=True))
+                run_kwargs = ut.set_values_recursive(run_kwargs, {'year_permutation': year_permutation})
+            else:
+                logger.warning("year_permutation is in `ignorable_keys` thus we ignore the fact that it may be incosistent across the runs ")
 
             # these arguments are ignored due to transfer learning, so warn the user if they had been provided
             overridden_kwargs = ['do_premix', 'premix_seed', 'do_balance_folds']
