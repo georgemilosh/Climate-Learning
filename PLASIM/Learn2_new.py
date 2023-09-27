@@ -632,7 +632,7 @@ def get_subset(runs, conditions, config_dict=None):
     subset = {k:runs[k] for k in subset}
     return subset
 
-def get_run(load_from, current_run_args:dict=None, runs_path='./runs.json'):
+def get_run(load_from, current_run_args:dict=None,  ignorable_keys=None, runs_path='./runs.json'):
     '''
     Parameters
     ----------
@@ -655,6 +655,8 @@ def get_run(load_from, current_run_args:dict=None, runs_path='./runs.json'):
             the function returns None
     current_run_args : dict, optional
         Flattened dictionary with all the arguments of the current run, used to check for compatibility issues when loading a model
+    ignorable_keys : list[str], optional
+        list of arguments to ignore when checking for compatibility
     
     Returns
     -------
@@ -714,9 +716,10 @@ def get_run(load_from, current_run_args:dict=None, runs_path='./runs.json'):
                 additional_relevant_keys.append(k)
         for k in additional_relevant_keys:
             load_from.pop(k)
-
+    
     # arguments relevant for model architecture
     relevant_keys = list(get_default_params(create_model).keys()) + list(get_default_params(load_data).keys()) + ['nfolds'] + additional_relevant_keys
+    relevant_keys = list(set(relevant_keys).difference(ignorable_keys))
 
     relevant_current_run_args = {k:v for k,v in current_run_args.items() if k in relevant_keys}
 
@@ -727,7 +730,7 @@ def get_run(load_from, current_run_args:dict=None, runs_path='./runs.json'):
         relevant_v_args = {k:v for k,v in v_args.items() if k in relevant_keys}
         diff = ut.compare_nested(relevant_v_args, relevant_current_run_args)
         if diff:
-            logger.debug(f"run {run['name']} is not compatible with the current run: {diff = }")
+            logger.info(f"run {run['name']} is not compatible with the current run: {diff = }")
         else:
             run['args'] = v_args # save all the arguments of the run as we need them for select_compatible
             compatible_runs[run_id] = run
@@ -736,7 +739,7 @@ def get_run(load_from, current_run_args:dict=None, runs_path='./runs.json'):
     
 
     if len(runs) == 0:
-        logger.warning('None of the previous runs is compatible with this one for performing transfer learning')
+        logger.warning('None of the previous runs are compatible with this one for performing transfer learning')
         # GM: It would be nice if the warning specifies the function that reports them.
         # AL: This can be achieved in formatting the logger
         return None
@@ -2244,7 +2247,7 @@ def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='m
     return opt_checkpoint, fold_subfolder
 
 
-def get_transfer_learning_folders(load_from, current_run_folder:str, nfolds:int, optimal_checkpoint_kwargs:dict=None, current_run_args:dict=None):
+def get_transfer_learning_folders(load_from, current_run_folder:str, nfolds:int, optimal_checkpoint_kwargs:dict=None, current_run_args:dict=None, ignorable_keys=None):
     '''
     Creates the names of the checkpoints from which to load for every fold
 
@@ -2260,6 +2263,8 @@ def get_transfer_learning_folders(load_from, current_run_folder:str, nfolds:int,
         arguments for the function `optimal_checkpoint`, by default None
     current_run_args : dict, optional
         Flattened arguments of the current run, simplifies the check for compatibility
+    ignorable_keys: list of str, optional
+        keys that are not important when comparing models for transfer learning, by default None
 
     Returns
     -------
@@ -2305,7 +2310,7 @@ def get_transfer_learning_folders(load_from, current_run_folder:str, nfolds:int,
         logger.warning(f'Loading from external folder {load_from_root_folder} instead of {root_folder}')
     
     # Find the model which has the weights we can use for transfer learning, if it is possible
-    load_from = get_run(load_from, current_run_args=current_run_args, runs_path=f'{load_from_root_folder}/runs.json')
+    load_from = get_run(load_from, current_run_args=current_run_args, ignorable_keys=ignorable_keys,runs_path=f'{load_from_root_folder}/runs.json')
     if load_from is None:
         logger.log(41, 'Models will be trained from scratch')
     else:
@@ -2416,7 +2421,8 @@ def margin_removal_with_sliding_window(X,time_start,leftmargin,rightmargin,time_
 
 @ut.execution_time
 @ut.indent_logger(logger)
-def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=None, optimal_checkpoint_kwargs=None, load_from='last', nfolds=10, val_folds=1, u=1, normalization_mode='pointwise',
+def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=None, optimal_checkpoint_kwargs=None, 
+                     load_from='last', ignorable_keys=None, nfolds=10, val_folds=1, u=1, normalization_mode='pointwise',
                      fullmetrics=True, training_epochs=40, training_epochs_tl=10, loss='sparse_categorical_crossentropy', prune_threshold=None, min_folds_before_pruning=None,
                      Z_DIM=None, T=14, time_start=30, time_end=120, label_period_start=None, label_period_end=None):
     '''
@@ -2451,6 +2457,8 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
     load_from : None, int, str or 'last', optional
         from where to load weights for transfer learning. See the documentation of function `get_run`
         If not None it overrides `create_model_kwargs` (the model is loaded instead of created)
+    ignorable_keys : list of str, optional
+        keys that are not important when comparing models for transfer learning, by default None
     nfolds : int, optional
         number of folds
     val_folds : int, optional
@@ -2531,7 +2539,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
         
 
     # get the folders from which to load the models
-    load_from, info = get_transfer_learning_folders(load_from, folder, nfolds, optimal_checkpoint_kwargs=optimal_checkpoint_kwargs)
+    load_from, info = get_transfer_learning_folders(load_from, folder, nfolds, optimal_checkpoint_kwargs=optimal_checkpoint_kwargs, ignorable_keys=ignorable_keys)
     # here load_from is either None (no transfer learning) or a list of strings
 
     my_memory = []
@@ -3461,8 +3469,9 @@ class Trainer():
         load_from = ut.extract_nested(run_kwargs, 'load_from')
         nfolds = ut.extract_nested(run_kwargs, 'nfolds')
         optimal_checkpoint_kwargs = ut.extract_nested(run_kwargs, 'optimal_checkpoint_kwargs')
-        load_from, tl_info = get_transfer_learning_folders(load_from, f'{self.root_folder}/{folder}', nfolds,
-                                                           optimal_checkpoint_kwargs=optimal_checkpoint_kwargs, current_run_args=ut.collapse_dict(run_kwargs))
+        ignorable_keys = ut.extract_nested(run_kwargs, 'ignorable_keys')
+        load_from, tl_info = get_transfer_learning_folders(load_from, f'{self.root_folder}/{folder}', nfolds, optimal_checkpoint_kwargs=optimal_checkpoint_kwargs, 
+                                                           current_run_args=ut.collapse_dict(run_kwargs), ignorable_keys=ignorable_keys)
         if tl_info:
             tl_info = tl_info['tl_from']
 
