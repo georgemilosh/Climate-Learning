@@ -741,12 +741,13 @@ def get_run(load_from, current_run_args:dict=None, runs_path='./runs.json'):
         # AL: This can be achieved in formatting the logger
         return None
     
-    logger.info(f'Found {len(runs)} compatible runs')
+    logger.info(f'Found {len(runs)} compatible runs with the current one.')
 
     if isinstance(load_from, int):
         l = load_from
     elif isinstance(load_from, dict):
         require_unique = if_ambiguous_choose is None
+        logger.info(f'Requiring extra conditions: {load_from}')
         l = select_compatible({k:v['args'] for k,v in runs.items()}, load_from, require_unique=require_unique)
         if require_unique: # l is a string
             l = int(l)
@@ -2315,6 +2316,8 @@ def get_transfer_learning_folders(load_from, current_run_folder:str, nfolds:int,
         load_from = load_from.rstrip('/')
         opt_checkpoint, fold_subfolder = optimal_checkpoint(f'{load_from_root_folder}/{load_from}', nfolds, **optimal_checkpoint_kwargs)
         info['tl_from'] = {'run': load_from, 'optimal_checkpoint': opt_checkpoint}
+        if load_from_root_folder != root_folder:
+            info['tl_from']['root_folder'] = load_from_root_folder
         if isinstance(opt_checkpoint,int):
             # this happens if the optimal checkpoint is computed with `collective` = True, so we simply broadcast the single optimal checkpoint to all the folds
             opt_checkpoint = [opt_checkpoint]*nfolds
@@ -3468,7 +3471,7 @@ class Trainer():
             run_kwargs = ut.set_values_recursive(run_kwargs, {'load_from': load_from})
 
             # force the dataset to the same year permutation
-            year_permutation = list(np.load(f"{self.root_folder}/{tl_info['run']}/year_permutation.npy", allow_pickle=True))
+            year_permutation = list(np.load(f"{tl_info.get('root_folder', self.root_folder)}/{tl_info['run']}/year_permutation.npy", allow_pickle=True))
             run_kwargs = ut.set_values_recursive(run_kwargs, {'year_permutation': year_permutation})
 
             # these arguments are ignored due to transfer learning, so warn the user if they had been provided
