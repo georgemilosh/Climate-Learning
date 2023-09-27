@@ -2864,7 +2864,11 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
                 year_permutation = ut.compose_permutations([year_permutation, balance_permutation])
     else:
         year_permutation = np.array(year_permutation)
-        Y = Y[year_permutation]
+        try:
+            Y = Y[year_permutation]
+        except IndexError:
+            logger.warning(f'Inconsistent length: {len(Y) = }, {len(year_permutation) = }')
+            raise IndexError
         logger.warning('Mixing overriden by provided permutation')
 
     # apply permutation to X
