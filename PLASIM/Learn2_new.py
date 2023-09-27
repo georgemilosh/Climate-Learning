@@ -3484,8 +3484,12 @@ class Trainer():
             run_kwargs = ut.set_values_recursive(run_kwargs, {'load_from': load_from})
 
             # force the dataset to the same year permutation
-            year_permutation = list(np.load(f"{tl_info.get('root_folder', self.root_folder)}/{tl_info['run']}/year_permutation.npy", allow_pickle=True))
-            run_kwargs = ut.set_values_recursive(run_kwargs, {'year_permutation': year_permutation})
+            if "year_permutation" not in ignorable_keys:
+                logger.warning("Forcing the dataset to the same year permutation as the transfer learning run")
+                year_permutation = list(np.load(f"{tl_info.get('root_folder', self.root_folder)}/{tl_info['run']}/year_permutation.npy", allow_pickle=True))
+                run_kwargs = ut.set_values_recursive(run_kwargs, {'year_permutation': year_permutation})
+            else:
+                logger.warning("year_permutation is in `ignorable_keys` thus we ignore the fact that it may be incosistent across the runs ")
 
             # these arguments are ignored due to transfer learning, so warn the user if they had been provided
             overridden_kwargs = ['do_premix', 'premix_seed', 'do_balance_folds']
