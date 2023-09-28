@@ -672,6 +672,9 @@ def get_run(load_from, current_run_args:dict=None,  ignorable_keys=None, runs_pa
     '''
     if load_from is None:
         return None
+    
+    if ignorable_keys is None:
+        ignorable_keys = []
 
     runs = ut.json2dict(runs_path)
     spl = runs_path.rsplit('/',1)
@@ -3484,7 +3487,7 @@ class Trainer():
             run_kwargs = ut.set_values_recursive(run_kwargs, {'load_from': load_from})
 
             # force the dataset to the same year permutation
-            if "year_permutation" not in ignorable_keys:
+            if ignorable_keys is None or "year_permutation" not in ignorable_keys:
                 logger.warning("Forcing the dataset to the same year permutation as the transfer learning run")
                 year_permutation = list(np.load(f"{tl_info.get('root_folder', self.root_folder)}/{tl_info['run']}/year_permutation.npy", allow_pickle=True))
                 run_kwargs = ut.set_values_recursive(run_kwargs, {'year_permutation': year_permutation})
