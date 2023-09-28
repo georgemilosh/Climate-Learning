@@ -2288,7 +2288,7 @@ def get_transfer_learning_folders(load_from, current_run_folder:str, nfolds:int,
     if len(spl) == 2:
         root_folder, current_run_name = spl
     else:
-        root_folder = './'
+        root_folder = '.'
         current_run_name = spl[-1]
 
     # get all the arguments of the current run
@@ -2307,7 +2307,9 @@ def get_transfer_learning_folders(load_from, current_run_folder:str, nfolds:int,
         if len(spl) == 2:
             load_from_root_folder, load_from = spl
         else:
-            load_from_root_folder = './'
+            load_from_root_folder = '.'
+    else:
+        load_from_root_folder = '.'
 
     if load_from_root_folder != root_folder:
         logger.warning(f'Loading from external folder {load_from_root_folder} instead of {root_folder}')
