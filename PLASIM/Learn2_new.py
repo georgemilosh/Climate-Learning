@@ -3478,7 +3478,7 @@ class Trainer():
         load_from = ut.extract_nested(run_kwargs, 'load_from')
         nfolds = ut.extract_nested(run_kwargs, 'nfolds')
         optimal_checkpoint_kwargs = ut.extract_nested(run_kwargs, 'optimal_checkpoint_kwargs')
-        ignorable_keys = ut.extract_nested(run_kwargs, 'ignorable_keys')
+        ignorable_keys = ut.extract_nested(run_kwargs, 'ignorable_keys', None) #return None if ignorable_keys is not found. This is needed for codes that re-implement k_fold_cross_val before issue #74
         load_from, tl_info = get_transfer_learning_folders(load_from, f'{self.root_folder}/{folder}', nfolds, optimal_checkpoint_kwargs=optimal_checkpoint_kwargs, 
                                                            current_run_args=ut.collapse_dict(run_kwargs), ignorable_keys=ignorable_keys)
         if tl_info:
