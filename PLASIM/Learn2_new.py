@@ -3581,7 +3581,7 @@ class Trainer():
         score, info = None, {}
         try:
             # write on the home directory that there is something running
-            with open(f"{os.environ['HOME']}/.current_run", "w") as f: # probably best not to write to HOME directory, even tiny files
+            with open(f"{os.environ['HOME']}/.current_run_on_{HOSTNAME}", "w") as f: # probably best not to write to HOME directory, even tiny files
                 f.write(f'{Path(self.root_folder).absolute().as_posix()}\n')
                 f.write(f'{folder}\n')
 
@@ -3626,8 +3626,8 @@ class Trainer():
             # clear home directory
             
             try:
-                os.remove(f"{os.environ['HOME']}/.current_run")
-            except FileNotFoundError:
+                os.remove(f"{os.environ['HOME']}/.current_run_on_{HOSTNAME}")
+            except (FileNotFoundError, PermissionError) as e:
                 logger.warning("FileNotFoundError warning: .current_run file not found (probably deleted by some other parallel run)")
 
         return score, info
