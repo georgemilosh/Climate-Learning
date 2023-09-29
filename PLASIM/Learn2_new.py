@@ -1974,7 +1974,7 @@ def postprocess(x):
 @ut.execution_time
 @ut.indent_logger(logger)
 def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics, early_stopping_kwargs=None, enable_early_stopping=False, scheduler_kwargs=None,
-                u=1, batch_size=1024, checkpoint_every=1, additional_callbacks=['csv_logger'], return_metric='val_CustomLoss'):
+                u=1, batch_size=1024, checkpoint_every=1, additional_callbacks=['csv_logger'], return_metric='val_CustomLoss', trainable_layers=None):
     '''
     Trains a given model checkpointing its weights
 
@@ -2016,6 +2016,8 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
         string items are interpreted, for example 'csv_logger' creates a CSVLogger callback that saves the history to a csv file
     return_metric : str, optional
         name of the metric of which the minimum value will be returned at the end of training
+    trainable_layers : list of bool, optional
+        A list of conditions which determines if the corresponding layers are trained. If None all layers are trained
 
     Returns
     -------
@@ -2032,7 +2034,33 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     ## deal with callbacks
     callbacks = []
     
-    
+    ## deal with trainable weights
+    if trainable_layers is None:
+        trainable_layers = [True] * len(model.layers)
+    else:
+        if isinstance(trainable_layers,int):
+            if trainable_layers > 0: # how many trainable layers are there (starting from then end)
+                logger.info('provided trainable_layers>0: model layers trainable after this layer')
+                trainable_layers = [False] * (len(model.layers) - trainable_layers) + [True] * trainable_layers
+            elif trainable_layers < 0: # how many trainable layers are there (starting from beginning)
+                logger.info('provided trainable_layers<0: model layers trainable before this layer')
+                trainable_layers = [True] * (-trainable_layers) + [False] * (len(model.layers) + trainable_layers)
+            else: 
+                raise ValueError(f'trainable_layers = 0 provided')
+            logger.info(f'resulting {trainable_layers = }')
+        
+        if len(trainable_layers) != len(model.layers):
+            raise ValueError(f'{len(trainable_layers) = } is not equal to {len(model.layers) = }')
+        else:
+            #logger.info('Trainable layers include:')
+            
+            for li, layer in enumerate(model.layers):
+                layer.trainable = trainable_layers[li]
+            trainable_layer_names = []
+            for layer in model.layers:
+                if layer.trainable:
+                    trainable_layer_names.append(layer.name)
+            logger.info(f'{trainable_layer_names = }')
 
     # additional callbacks
     if additional_callbacks is not None:
@@ -2579,17 +2607,10 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
             logger.info(f'after PCA: {X_tr.shape = }, {X_va.shape = }')
 
         logger.info(f' {time_start = }, {time_end = }, {leftmargin = }, {rightmargin = }, {T = }')
-        #logger.info(f'{Y_va[1*82:2*82]}')
-        #logger.info(f'{np.where(Y_va == 1)}')
-        #logger.info(f'{X_va[5*82:6*82,35,30,0]}')
         X_tr = margin_removal_with_sliding_window(X_tr,time_start,leftmargin,rightmargin,time_end,T,sliding=True)
         X_va = margin_removal_with_sliding_window(X_va,time_start,leftmargin,rightmargin,time_end,T,sliding=True)
         Y_tr = margin_removal_with_sliding_window(Y_tr,time_start,leftmargin,rightmargin,time_end,T)
         Y_va = margin_removal_with_sliding_window(Y_va,time_start,leftmargin,rightmargin,time_end,T)
-        #logger.info(f'{Y_va[1*79:2*79]}')
-        #logger.info(f'{np.where(Y_va == 1)}')
-        #for i in range(X_va.shape[1]):   
-        #    logger.info(f'{X_va[5*79:6*79,i,35,30,0]}')
         logger.info(f'After margin removal: {X_tr.shape = }, {X_va.shape = }, {Y_tr.shape = }, {Y_va.shape = }')
 
         # perform undersampling
