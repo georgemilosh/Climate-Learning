@@ -3072,9 +3072,10 @@ class Trainer():
         skip_existing_run : bool, optional
             Whether to skip runs that have already been performed in the same folder, by default True
             If False the existing run is not overwritten but a new one is performed
-        upon_filed_run : 'raise' or 'continue', optional
+        upon_filed_run : 'raise', 'continue' or 'delete', optional
             What to do if a run fails. If 'raise' an exception will be raised and all the program stops.
             Otherwise the run will be treated as a pruned run, namely, the Trainer proceeds with the following runs.
+            If 'delete', the failed run folder will be deleted together with its trace in the runs.json file
             By default 'raise'
         '''
         self.skip_existing_run = skip_existing_run
@@ -3615,11 +3616,16 @@ class Trainer():
                 runs[run_id]['status'] = 'FAILED'
                 runs[run_id]['name'] = f'F{folder[1:]}'
                 shutil.move(f'{self.root_folder}/{folder}', f'{self.root_folder}/F{folder[1:]}')
-            runs[run_id]['end_time'] = ut.now()
-            run_time = time.time() - start_time
-            run_time_min = int(run_time/0.6)/100 # 2 decimal places of run time in minutes
-            runs[run_id]['run_time'] = ut.pretty_time(run_time)
-            runs[run_id]['run_time_min'] = run_time_min
+
+            if runs['status'] == 'FAILED' and self.upon_failed_run == 'delete':
+                shutil.rmtree(f'{self.root_folder}/F{folder[1:]}')
+                runs.pop(run_id)
+            else:
+                runs[run_id]['end_time'] = ut.now()
+                run_time = time.time() - start_time
+                run_time_min = int(run_time/0.6)/100 # 2 decimal places of run time in minutes
+                runs[run_id]['run_time'] = ut.pretty_time(run_time)
+                runs[run_id]['run_time_min'] = run_time_min
 
             ut.dict2json(runs,self.runs_file)
 
