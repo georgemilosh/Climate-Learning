@@ -593,7 +593,7 @@ def make_groups(runs, variable='tau', config_dict_flat=None, sort=False, ignore=
     sort : True, False or 'descending', optional
         wether and how to sort the runs according to the variable, default False, i.e. no sorting, which means the runs will be in chronological order
     ignore : list[str], optional
-        list of kwargs to ignore when grouping rins together
+        list of kwargs to ignore when grouping runs together
     
     Returns
     -------
