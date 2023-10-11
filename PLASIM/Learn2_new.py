@@ -3617,7 +3617,7 @@ class Trainer():
                 runs[run_id]['name'] = f'F{folder[1:]}'
                 shutil.move(f'{self.root_folder}/{folder}', f'{self.root_folder}/F{folder[1:]}')
 
-            if runs['status'] == 'FAILED' and self.upon_failed_run == 'delete':
+            if runs[run_id]['status'] == 'FAILED' and self.upon_failed_run == 'delete':
                 shutil.rmtree(f'{self.root_folder}/F{folder[1:]}')
                 runs.pop(run_id)
             else:
