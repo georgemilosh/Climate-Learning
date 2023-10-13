@@ -1467,8 +1467,8 @@ class Field:
             dataset.close()
             for y in range(self.var.shape[0]):
                 logger.debug(f"loading year {y}")
-                dataset = Dataset(self.datafolder+'./ERA5/'+FitKind+'/'+self.prefix+self.name+'_detrended_fields_'+str(self.start_year+y)+'.nc')
-                self.detrended[y] = np.asarray(dataset.variables[self.name+'_det'][:,self.lat_start:self.lat_end,self.lon_start:self.lon_end], dtype=self.np_precision)
+                dataset = Dataset(self.datafolder+'./ERA5/'+FitKind+'/'+self.prefix+self.filename+'_'+str(self.start_year+y)+'.nc')
+                self.detrended[y] = np.asarray(dataset.variables[self.name][:,self.lat_start:self.lat_end,self.lon_start:self.lon_end], dtype=self.np_precision)
                 dataset.close()
         else: # if the file doesn't exist we must peform detrending
             summer_mean = np.mean(self.var[:,period[0]:period[1],:,:],1) # yearly mean over each summer defined by the period[0] - period[1]
@@ -1492,7 +1492,7 @@ class Field:
                         self.detrended[:,:,lat_loop,lon_loop] = self.var[:,:,lat_loop,lon_loop] - lin2.predict(poly.fit_transform(self.fit_time.reshape((-1, 1)))).reshape(self.time.shape)
    
             ###### SAVE ########
-            ncfile = Dataset(self.datafolder+'./ERA5/'+FitKind+'/'+self.prefix+'coef_intercept'+self.name+'.nc',mode='w',format='NETCDF4_CLASSIC') 
+            ncfile = Dataset(self.datafolder+'./ERA5/'+FitKind+'/'+self.prefix+'coef_intercept'+self.filename+'.nc',mode='w',format='NETCDF4_CLASSIC') 
             lat_dim = ncfile.createDimension('lat', len(lat))     # latitude axis
             lon_dim = ncfile.createDimension('lon', len(lon))    # longitude axis
             lat_det = ncfile.createVariable('lat', np.float32, ('lat',))
@@ -1520,7 +1520,7 @@ class Field:
                 logger.debug(f'{y = }')
                 try: ncfile.close()  # just to be safe, make sure dataset is not already open.
                 except: pass
-                ncfile = Dataset(self.datafolder+'./ERA5/'+FitKind+'/'+self.prefix+self.name+'_detrended_fields_'+str(self.start_year+y)+'.nc',mode='w',format='NETCDF4_CLASSIC') 
+                ncfile = Dataset(self.datafolder+'./ERA5/'+FitKind+'/'+self.prefix+self.filename+'_'+str(self.start_year+y)+'.nc',mode='w',format='NETCDF4_CLASSIC') 
                 logger.debug(ncfile)
                 lat_dim = ncfile.createDimension('lat', len(lat))     # latitude axis
                 lon_dim = ncfile.createDimension('lon', len(lon))    # longitude axis
@@ -1535,8 +1535,8 @@ class Field:
                 time_det.units = 'days since 1900-01-01'
                 time_det.long_name = 'time'
                 # Define a 3D variable to hold the data
-                NC_det = ncfile.createVariable(self.name+'_det',self.np_precision,('time','lat','lon')) # note: unlimited dimension is leftmost
-                NC_det.standard_name = 'detrended '+self.label # this is a CF standard name
+                NC_det = ncfile.createVariable(self.name,self.np_precision,('time','lat','lon')) # note: unlimited dimension is leftmost
+                NC_det.standard_name = self.label # this is a CF standard name
 
                 lat_det[:] = lat
                 lon_det[:] = lon

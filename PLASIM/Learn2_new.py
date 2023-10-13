@@ -901,12 +901,12 @@ except FileNotFoundError:
         },
         'zg500': {
             'name': 'z',
-            'filename_suffix': 'zg',
+            'filename_suffix': 'zg500',
             'label': '500 hPa Geopotential Height'
         },
         'mrso': {
-            'name': 'swvl1',
-            'filename_suffix': 'mrso',
+            'name': 'swvl',
+            'filename_suffix': 'water_weighted',
             'label': 'Surface Soil Moisture',
         }
     }
