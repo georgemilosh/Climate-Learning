@@ -36,6 +36,8 @@
 **/Climate/movies/**
 **/ERA/Images/**
 **/ERA/Data_ERA5/**
+**/ERA/ERA5/**
+**/ERA/regrid_models/**
 **/Gyro/**
 **/PINNS/Utilities/IRK_weights/**
 **/PLASIM/Images/**
