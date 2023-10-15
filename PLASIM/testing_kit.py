@@ -45,7 +45,7 @@ def import_module(full_path_to_module):
         raise ImportError(e)
     return module_obj
 
-def get_run_parameters(global_folder, group_label = 'fields'):
+def get_run_parameters(global_folder, group_label = 'fields', ignore=None):
     ln = import_module(f'{global_folder}/Learn2_new.py')
     ut = import_module(f'{global_folder}/ERA/utilities.py')
     ef = import_module(f'{global_folder}/ERA/ERA_Fields_New.py')
@@ -57,7 +57,7 @@ def get_run_parameters(global_folder, group_label = 'fields'):
     config_dict = ut.json2dict(f'{global_folder}/config.json')
     percent =  ut.extract_nested(config_dict, 'percent')
     maxskill = -(percent/100.)*np.log(percent/100.)-(1-percent/100.)*np.log(1-percent/100.)
-    g0 = ln.make_groups(runs_global, variable = 'fields', config_dict_flat={'fields': ut.extract_nested(config_dict,'fields')})
+    g0 = ln.make_groups(runs_global, variable = group_label, config_dict_flat={group_label: ut.extract_nested(config_dict,group_label)}, ignore=ignore)
     print(f'{len(runs_global)} runs in groups: {g0[0][group_label]}')
     return ln, ut, ef, tf, keras, runs_global, config_dict, percent, maxskill, g0
 
