@@ -16,6 +16,8 @@ of conditions corresponding to this run
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
+import csv
+import os.path
 matplotlib.rc('font', size=18)
 default_colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
 def import_module(full_path_to_module):
@@ -110,7 +112,7 @@ def load_XY(load_data_kwargs,prepare_XY_kwargs,k_fold_cross_val_kwargs, ln, ut):
     #X_va, _, _ = ln.normalize_X(X_va, fold_folder) 
     return X, Y, yp, lat, lon, nfolds, val_folds #, i, fold_folder, X_va, Y_va
 
-def compute_score(X, Y, run, folder,nfolds,val_folds, maxskill, load_from, k_fold_cross_val_kwargs,run_kwargs, ln, ut, CV_when_testing=True, filename='scores.npz'):
+def compute_score(X, Y, run, folder,nfolds,val_folds, maxskill, load_from, k_fold_cross_val_kwargs,run_kwargs, ln, ut, CV_when_testing=True, filename='scores.csv', years=0):
     score = []
     for i in range(nfolds):
         fold_folder = f'{folder}/fold_{i}'
@@ -145,5 +147,22 @@ def compute_score(X, Y, run, folder,nfolds,val_folds, maxskill, load_from, k_fol
     std_skill = np.std((maxskill-[s[-1] for s in score])/maxskill)
     print(f'score = {mean_score} +- {std_score}, skill = {mean_skill} +- {std_skill}, saving the files to {filename}')
     print(f"valid = {run['scores']['mean']} +- {run['scores']['std']}")
-    np.savez(f'{filename}', mean_score=mean_score, std_score=std_score, mean_skill=mean_skill, std_skill=std_skill)
+
+    if os.path.isfile(filename):
+        with open(filename, mode='r') as file:
+            reader = csv.reader(file)
+            rows = list(reader)
+            if len(rows) > 1 and rows[1][0] == str(years):
+                rows[1] = [str(years), str(mean_score), str(std_score), str(mean_skill), str(std_skill)]
+            else:
+                rows.append([str(years), str(mean_score), str(std_score), str(mean_skill), str(std_skill)])
+        with open(filename, mode='w') as file:
+            writer = csv.writer(file)
+            writer.writerows(rows)
+    else:
+        with open(filename, mode='w') as file:
+            writer = csv.writer(file)
+            writer.writerow(['years', 'mean_score', 'std_score', 'mean_skill', 'std_skill'])
+            writer.writerow([years, mean_score, std_score, mean_skill, std_skill])
+    #np.savez(f'{filename}', mean_score=mean_score, std_score=std_score, mean_skill=mean_skill, std_skill=std_skill)
     return model, mean_score, std_score, mean_skill, std_skill
