@@ -147,7 +147,7 @@ def compute_score(X, Y, run, folder,nfolds,val_folds, maxskill, load_from, k_fol
     std_skill = np.std((maxskill-[s[-1] for s in score])/maxskill)
     print(f'score = {mean_score} +- {std_score}, skill = {mean_skill} +- {std_skill}, saving the files to {filename}')
     print(f"valid = {run['scores']['mean']} +- {run['scores']['std']}")
-
+    # this code has a problem, when the row exhists the same row is appended rather than overwritten
     if os.path.isfile(filename):
         with open(filename, mode='r') as file:
             reader = csv.reader(file)
@@ -164,5 +164,5 @@ def compute_score(X, Y, run, folder,nfolds,val_folds, maxskill, load_from, k_fol
             writer = csv.writer(file)
             writer.writerow(['years', 'mean_score', 'std_score', 'mean_skill', 'std_skill'])
             writer.writerow([years, mean_score, std_score, mean_skill, std_skill])
-    #np.savez(f'{filename}', mean_score=mean_score, std_score=std_score, mean_skill=mean_skill, std_skill=std_skill)
+    
     return model, mean_score, std_score, mean_skill, std_skill
