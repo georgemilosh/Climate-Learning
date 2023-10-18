@@ -7,7 +7,7 @@ Usage:
 Options:
     --renumber, -r            renumber the runs in the runs.json file, basically filling the gaps in the runs.json file. This also renames the run subfolders.
     --ask-confirmation, -a    ask for confirmation before removing a run. If the run is not FAILED, you will be prompted for confirmation anyways.
-    --all                     remove all FAILED runs
+    --all, -A                 remove all FAILED runs
 
 If you didn't use the --all option, you can provide a list of run names to remove. Each run name can either be the number of the run or its full name
 '''
@@ -16,6 +16,16 @@ import shutil
 import sys
 import Learn2_new as ln
 ut = ln.ut
+
+def change_run_id(name, new_run_id):
+    if ln.arg_sep in name:
+        run_id, name = name.split(ln.arg_sep, 1)
+    else:
+        run_id, name = name, ''
+    flag = run_id[0]
+    if flag.isdigit():
+        flag = ''
+    return f"{flag}{new_run_id}{f'{ln.arg_sep}{name}' if name else ''}"
 
 def remove_run(runs, k, ask_confirmation=False):
     v = runs[str(k)]
@@ -43,21 +53,16 @@ def remove_runs(run_names, renumber=False, ask_confirmation=False):
     ut.dict2json(runs, './runs.json')
 
     if renumber:
-        renumber()
+        renumber_runs()
 
-def renumber():
+def renumber_runs():
     runs = ut.json2dict('./runs.json')
     runs_new = {}
     for i,(k,v) in enumerate(runs.items()):
         if i == int(k):
             runs_new[k] = v
             continue
-        name = v['name']
-        run_id, name = name.split(ln.arg_sep, 1)
-        flag = run_id[0]
-        if flag.isdigit():
-            flag = ''
-        name = f'{flag}{i}{ln.arg_sep}{name}'
+        name = change_run_id(v['name'], i)
         shutil.move(f"./{v['name']}", f"./{name}")
         v['name'] = name
         runs_new[str(i)] = v
@@ -72,12 +77,7 @@ def clean_all(renumber=False):
             shutil.rmtree(f"./{v['name']}")
             print(f'Removing {v["name"]}')
         elif renumber and i != int(k):
-            name = v['name']
-            run_id, name = name.split(ln.arg_sep, 1)
-            flag = run_id[0]
-            if flag.isdigit():
-                flag = ''
-            name = f'{flag}{i}{ln.arg_sep}{name}'
+            name = change_run_id(v['name'], i)
             shutil.move(f"./{v['name']}", f"./{name}")
             v['name'] = name
             runs_new[str(i)] = v
@@ -93,6 +93,8 @@ if __name__ == '__main__':
     ask_confirmation=False
     do_clean_all=False
     runs_to_remove = []
+
+    print('\n\n\n')
 
     if len(args) == 0:
         print(__doc__)
@@ -112,11 +114,10 @@ if __name__ == '__main__':
         elif a.startswith('-'):
             if 'r' in a:
                 do_renumber = True
-            elif 'a' in a:
+            if 'a' in a:
                 ask_confirmation = True
-            else:
-                print(f'Unknown argument {a}')
-                sys.exit(1)
+            if 'A' in a:
+                do_clean_all = True
         else:
             runs_to_remove.append(a)
 
@@ -126,7 +127,7 @@ if __name__ == '__main__':
     elif len(runs_to_remove):
         remove_runs(runs_to_remove, renumber=do_renumber, ask_confirmation=ask_confirmation)
     elif do_renumber:
-        renumber()
+        renumber_runs()
     else:
         print('Doing nothing: see documentation.')
         print(__doc__)
