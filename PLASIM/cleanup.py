@@ -72,15 +72,18 @@ def renumber_runs():
 def clean_all(renumber=False):
     runs = ut.json2dict('./runs.json')
     runs_new = {}
+    removed_runs = 0
     for i,(k,v) in enumerate(runs.items()):
+        new_i = i - removed_runs
         if v['status'] == 'FAILED':
             shutil.rmtree(f"./{v['name']}")
             print(f'Removing {v["name"]}')
-        elif renumber and i != int(k):
-            name = change_run_id(v['name'], i)
+            removed_runs += 1
+        elif renumber and new_i != int(k):
+            name = change_run_id(v['name'], new_i)
             shutil.move(f"./{v['name']}", f"./{name}")
             v['name'] = name
-            runs_new[str(i)] = v
+            runs_new[str(new_i)] = v
         else:
             runs_new[k] = v
     ut.dict2json(runs_new, './runs.json')
