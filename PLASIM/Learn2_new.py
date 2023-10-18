@@ -813,6 +813,7 @@ def move_to_folder(folder, additional_files=None):
     # copy other files in the same directory as this one
     path_to_here = path_to_here.parent
     shutil.copy(path_to_here / 'import_config.py', folder)
+    shutil.copy(path_to_here / 'cleanup.py', folder)
 
     # copy additional files
     if additional_files:
