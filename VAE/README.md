@@ -1,6 +1,6 @@
 # Stochastic Weather Generator
 
-This folder was originally conceived to address training Variational Autonencoder (`VAE`). It later evolved in a general folder for Stochastic Weather Genrator (`SWG`).
+This folder was originally conceived to address training Variational Autoencoder (`VAE`). It later evolved in a general folder for Stochastic Weather Generator (`SWG`).
 
 ## Folder structure
 
@@ -15,7 +15,7 @@ This folder was originally conceived to address training Variational Autonencode
 
 ## Usage:
 
-If you would like to work with `SWG` you must run [vae_learn2.py](vae_learn2.py) even if you are **note** intending to train `VAE` because [vae_learn2.py](vae_learn2.py) generates the necessary folder structure consistent with k-fold cross validation. The first step is to call:
+If you would like to work with `SWG` you must run [vae_learn2.py](vae_learn2.py) even if you do **not** intend to train `VAE` because [vae_learn2.py](vae_learn2.py) generates the necessary folder structure consistent with k-fold cross validation. The first step is to call:
 ```
 python vae_learn2.py <folder_name>
 ```

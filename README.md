@@ -12,7 +12,7 @@ Below we show a composite conditioned on heatwaves in Scandinavia modelled by CE
 We are interested in predicting rare events such as heatwaves or cold spells etc. 
 
 ## Machine Learning
-We use neural networks to compute *committor functions*, conditional probability of occurence of such events. Computations are performed on the cluster [Centre Blaise Pascal](https://www.cbp.ens-lyon.fr/doku.php) at ENS de Lyon
+We use neural networks to compute *committor functions*, conditional probability of occurrence of such events. Computations are performed on the cluster [Centre Blaise Pascal](https://www.cbp.ens-lyon.fr/doku.php) at ENS de Lyon
 
 
 <!-- ## Rare event algorithm
