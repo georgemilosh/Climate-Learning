@@ -62,6 +62,7 @@ from sklearn.metrics import log_loss
 tff = foo.tff # tensorflow routines 
 ut = foo.ut # utilities
 ln = foo.ln #Learn2_new.py
+print(f"{ut = }")
 print("==Checking GPU==")
 import tensorflow as tf
 tf.test.is_gpu_available(
@@ -142,12 +143,18 @@ def classify(fold_folder, evaluate_epoch, vae, X_tr, z_tr, Y_tr, X_va, z_va, Y_v
         logger.info("computing KDTree...")
         tree = cKDTree(Zminus3.reshape(-1,dim))
         #dist[checkpoint], ind[checkpoint] = tree.query(z, k=NN,n_jobs = 3)
-        dist_tr[checkpoint], ind_tr[checkpoint] = tree.query(zz_tr, k=NN,n_jobs = cpucount//2)
+        try:
+            dist_tr[checkpoint], ind_tr[checkpoint] = tree.query(zz_tr, k=NN,n_jobs = cpucount//2)
+        except TypeError:
+            dist_tr[checkpoint], ind_tr[checkpoint] = tree.query(zz_tr, k=NN, workers = cpucount//2)
+             
         logger.info(f"{ind_tr[checkpoint] = }")
         ind_new_tr[checkpoint] = ind_tr[checkpoint] // (time_end-time_start-T+1 - extra_day)*(extra_day) + ind_tr[checkpoint]
         logger.info(f"{ind_new_tr[checkpoint] = }")
-
-        dist_va[checkpoint], ind_va[checkpoint] = tree.query(zz_va, k=NN,n_jobs = cpucount//2)
+        try:
+            dist_va[checkpoint], ind_va[checkpoint] = tree.query(zz_va, k=NN,n_jobs = cpucount//2)
+        except TypeError:
+            dist_va[checkpoint], ind_va[checkpoint] = tree.query(zz_va, k=NN, workers = cpucount//2)
         logger.info(f"{ind_va[checkpoint] = }")
         ind_new_va[checkpoint] = ind_va[checkpoint] // (time_end-time_start-T+1 - extra_day)*(extra_day) + ind_va[checkpoint]
         logger.info(f"{ind_new_va[checkpoint] = }")

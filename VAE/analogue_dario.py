@@ -140,13 +140,17 @@ def classify(fold_folder, evaluate_epoch, vae, X_tr, z_tr, Y_tr, X_va, z_va, Y_v
         logger.info(f"{Zminus3.shape = }")
         logger.info("computing KDTree...")
         tree = cKDTree(Zminus3.reshape(-1,dim))
-        #dist[checkpoint], ind[checkpoint] = tree.query(z, k=NN,n_jobs = 3)
-        dist_tr[checkpoint], ind_tr[checkpoint] = tree.query(z_tr, k=NN,workers = cpucount//2)
+        try:
+            dist_tr[checkpoint], ind_tr[checkpoint] = tree.query(z_tr, k=NN,n_jobs = cpucount//2)
+        except TypeError:
+            dist_tr[checkpoint], ind_tr[checkpoint] = tree.query(z_tr, k=NN,workers = cpucount//2)
         logger.info(f"{ind_tr[checkpoint] = }")
         ind_new_tr[checkpoint] = ind_tr[checkpoint] // (time_end-time_start-T+1 - extra_day)*(extra_day) + ind_tr[checkpoint]  # because we cannot transition from the last summer day (days if interpolated time series are used) we have to add that amount of days each year
         logger.info(f"{ind_new_tr[checkpoint] = }")
-
-        dist_va[checkpoint], ind_va[checkpoint] = tree.query(z_va, k=NN,workers = cpucount//2)
+        try:
+            dist_va[checkpoint], ind_va[checkpoint] = tree.query(z_va, k=NN,n_jobs = cpucount//2)
+        except TypeError:
+            dist_va[checkpoint], ind_va[checkpoint] = tree.query(z_va, k=NN,workers = cpucount//2)
         logger.info(f"{ind_va[checkpoint] = }")
         ind_new_va[checkpoint] = ind_va[checkpoint] // (time_end-time_start-T+1 - extra_day)*(extra_day) + ind_va[checkpoint]
         logger.info(f"{ind_new_va[checkpoint] = }")
