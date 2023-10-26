@@ -59,7 +59,7 @@ Where we store `*.py`, `*.ipynb` scripts related to the following models and met
 - [PLASIM](https://georgemilosh.github.io/Climate-Learning/PLASIM/): Intermediate complexity climate model. That's where most of our scripts including `Learn2_new.py` (responsible for training `CNN`) are located. Also, this folder contains `hyperparameter_optimization.py`, a very useful Bayesian hyperparameter optimizer based on `optuna` library. 
 - [CESM](https://georgemilosh.github.io/Climate-Learning/CESM/): High fidelity climate model
 - [ERA5](https://georgemilosh.github.io/Climate-Learning/ERA/): ECMWF reanalysis
-- [SWG](https://georgemilosh.github.io/Climate-Learning/VAE/) We store `SWG` related routines in the folder called `VAE` which stands for `Variational Autoencoder` experiments. Importantly this folder also contains the `SWG` without the use of `VAE`.
+- [SWG](https://georgemilosh.github.io/Climate-Learning/VAE/) We store Stochastic Weather Generator `SWG` related routines in the folder called `VAE` which stands for `Variational Autoencoder` experiments. Importantly this folder also contains the `SWG` without the use of `VAE`.
 
 
 ### Customization
