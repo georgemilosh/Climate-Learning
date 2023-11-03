@@ -31,18 +31,20 @@ To inspect the loss during training use may use
 python history.py <folder_name> <number_of_folds>
 python histroy_training.py <folder_name> <number_of_folds>
 ```
-
-To compute the matrix of analogs for the SWG you may use
+### Direct input
+If you are don't want to use dimensinoality reduction, to compute the matrix of analogs for the SWG you may use
 ```
 python analogue_dario.py <folder> <coefficients> <NN>
 ```
 where typical usage is to set `<coefficients>=1,5,10,50,100,500` and `<NN>=100`
-or
+
+### Dimansionality reduction
+In this case you run the following
 ```
 analogue_george.py <folder> <coefficients> <NN>
 ```
 
-To use the matrix of analogs and compute the committor function you should use
+To use the matrix of analogs and compute the committor function (independent of whether or not you use dimesnionality reduction) you should use
 ```
 python committor_analogue.py <committor_file>
 ```
