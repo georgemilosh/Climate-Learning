@@ -42,7 +42,7 @@ import tensorflow as tf
 
 ## Data
 
-Generally the data we used in this project is quite large. However, we were able to make a portion of data available through [Google Drive Link](https://drive.google.com/drive/folders/1Y748L_hgFt3uQJcQRUp5z_oT0D_oAYvL) which contains 500 years for anomalies of
+Generally the data we used in this project is quite large. However, we were able to make a portion of data available through [Zenodo](https://zenodo.org/records/10102506) which contains 500 years for anomalies of
 
 - `tas.nc`: 2 meter temperature
 - `zg500.nc`: 500 hPa geopotential height
