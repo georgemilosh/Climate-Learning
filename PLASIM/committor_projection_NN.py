@@ -34,7 +34,7 @@ class SeparateMRSOLinearModel(keras.Model):
         return x
 
 class Dense2D(layers.Layer):
-    def __init__(self, filters_per_field=[1,2,1], merge_to_one=False, regularizer=None, **kwargs):
+    def __init__(self, filters_per_field=[1,1,1], merge_to_one=True, regularizer=None, **kwargs):
         '''
         Layer for performing a linear projection of a color image treating the colors (fields) independently
 
@@ -114,7 +114,7 @@ class GradientRegularizer(keras.regularizers.Regularizer):
         weights : np.ndarray or str, optional
             weights to apply to the different pixels of the filter, special options are:
                 - None : uniform weighting
-                - 'sphere' : assumes a spherical topology
+                - 'sphere' : assumes a spherical topology (needs a latitude vector: `lat`)
                 - 'auto' or 'compromise' : deprecated: it is a wrong version of the sphere mode
             By default None
         periodic_lon : bool, optional
@@ -125,7 +125,7 @@ class GradientRegularizer(keras.regularizers.Regularizer):
         if mode in ['L1', 'l1', 'sparse']:
             self.mode = 'l1'
         else:
-            if mode not in ['L2', 'l2']:
+            if mode not in ['L2', 'l2', 'ridge']:
                 logger.warning(f"Unrecognized regularization {mode = }: using 'l2'")
             self.mode = 'l2'
         self.c = c
@@ -171,13 +171,14 @@ class GradientRegularizer(keras.regularizers.Regularizer):
                     self.broadcasted_coslat = (np.ones(x.shape[:2]).T*self.coslat).T # these double transposition helps using numpy native operators
             elif self.weights.shape[:-1] != x.shape[:-1]:
                 raise ValueError(f'weight shape {self.weights.shape} does not match received input shape {x.shape[:-1]}')
+        
+        if self.mode == 'l1':
+            op = tf.math.abs
+        else:
+            op = tf.math.square
+
         s = 0
         for i in range(nfilters):
-            if self.mode == 'l1':
-                op = tf.math.abs
-            else:
-                op = tf.math.square
-            
             if self.weights is not None:
                 if isinstance(self.weights, str):
                     if self.weights == 'sphere':
@@ -208,7 +209,13 @@ class GradientRegularizer(keras.regularizers.Regularizer):
                     _s = _s + tf.math.reduce_sum(op(x[:,0,i] - x[:,-1,i]))
 
             if self.normalize:
-                _s = _s/tf.math.reduce_sum(op(x))
+                if isinstance(self.weights, str):
+                    if self.weights == 'sphere':
+                        _s = _s/tf.math.reduce_sum(self.broadcasted_coslat * op(x[...,i]))
+                    else:
+                        raise ValueError(f'Unrecognized string option for weights: {self.weights}')
+                else:
+                    _s = _s/tf.math.reduce_sum(op(x[...,i]))
 
             s = s + _s
 
