@@ -232,7 +232,7 @@ class Trainer(ln.Trainer):
         return res
 
 
-def create_model(input_shape, filters_per_field=[1,1,1], merge_to_one=False, batch_normalization=False, reg_mode='l2', reg_c=1, reg_weights=None, reg_periodicity=True, reg_norm=True, dense_units=[8,2], dense_activations=['relu', None], dense_dropouts=False):
+def create_model(input_shape, filters_per_field=[1,1,1], merge_to_one=False, batch_normalization=False, reg_mode='l2', reg_c=1, reg_weights=None, reg_periodicity=True, reg_norm=True, dense_units=[8,2], dense_activations=['relu', None], dense_dropouts=False, dense_l2coef=None):
     '''
     Creates a neural network
 
@@ -283,7 +283,7 @@ def create_model(input_shape, filters_per_field=[1,1,1], merge_to_one=False, bat
 
     # dense layers
     # adjust the shape of the arguments to be of the same length as `dense_units`
-    args = [dense_activations, dense_dropouts]
+    args = [dense_activations, dense_dropouts, dense_l2coef]
     for j,arg in enumerate(args):
         if not isinstance(arg, list):
             args[j] = [arg]*len(dense_units)
@@ -294,10 +294,10 @@ def create_model(input_shape, filters_per_field=[1,1,1], merge_to_one=False, bat
         elif len(arg) != len(dense_units):
             raise ValueError(f'Invalid length for argument {arg}')
     logger.info(f'dense args = {args}')
-    dense_activations, dense_dropouts = args
+    dense_activations, dense_dropouts, dense_l2coef = args
     # build the dense layers
     for i in range(len(dense_units)):
-        model.add(layers.Dense(dense_units[i], activation=dense_activations[i]))
+        model.add(layers.Dense(dense_units[i], activation=dense_activations[i], kernel_regularizer=keras.regularizers.l2(dense_l2coef[i]) if dense_l2coef[i] else None))
         if dense_dropouts[i]:
             model.add(layers.Dropout(dense_dropouts[i]))
 
