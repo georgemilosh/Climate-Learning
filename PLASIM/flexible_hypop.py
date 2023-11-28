@@ -27,6 +27,7 @@ import optuna
 
 
 # >> EDITABLE
+
 # import the module you want to optimize with alias `core`
 # e.g. import Learn2_new as core
 
@@ -111,6 +112,7 @@ class ScoreOptimizer():
         hyp = {}
 
         # >> EDITABLE
+
         # Here you can add the hyperparameters to optimize using optuna suggestions. For example the following code optimizes learning rate, batch size and regularization
         
 
@@ -221,6 +223,7 @@ class ScoreOptimizer():
 
 if __name__ == '__main__':
     # >> EDITABLE
+    
     # specify the name of the study
     study_name = ''
     # specify wheter to load an existing compatible study
