@@ -72,7 +72,7 @@ class ScoreOptimizer():
     The study_name is used to name the Optuna study, which stores the results of the optimization 
     process. The common_kwargs are additional arguments that are passed to the trainer object when training the model.
     """
-    def __init__(self, trainer, study_name='', common_kwargs=None, repetitions=1, load_if_exists=True):
+    def __init__(self, trainer, study_name='study', common_kwargs=None, repetitions=1, load_if_exists=True):
         self.trainer = trainer
         self.common_kwargs = common_kwargs or {}
         name_kwargs = {k:v for k,v in self.common_kwargs.items() if 'prun' not in k} # ignore kwargs related to pruning in the name of the study
@@ -225,7 +225,7 @@ if __name__ == '__main__':
     # >> EDITABLE
     
     # specify the name of the study
-    study_name = ''
+    study_name = 'study'
     # specify wheter to load an existing compatible study
     load_if_exists = True
     # specify the number of trials
