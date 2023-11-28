@@ -75,7 +75,7 @@ class ScoreOptimizer():
     def __init__(self, trainer, study_name='', common_kwargs=None, repetitions=1, load_if_exists=True):
         self.trainer = trainer
         self.common_kwargs = common_kwargs or {}
-        name_kwargs = {k:v for k,v in self.common_kwargs.items() if not k.startswith('prune')} # ignore kwargs related to pruning in the name of the study
+        name_kwargs = {k:v for k,v in self.common_kwargs.items() if 'prun' not in k} # ignore kwargs related to pruning in the name of the study
         self.name = ln.make_run_name(study_name, **name_kwargs)
         if not load_if_exists:
             self.name = new_study_name(self.name)
