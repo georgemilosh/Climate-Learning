@@ -3492,6 +3492,10 @@ class Trainer():
         # create run name from kwargs
         folder = make_run_name(run_id, **kwargs)
 
+        # check that all kwargs actually appear in the default_run_kwargs
+        extra_kwargs = set(kwargs.keys()) - set(ut.collapse_dict(self.default_run_kwargs.keys()))
+        if extra_kwargs:
+            raise ValueError(f'Unknown arguments: {extra_kwargs}')
         # correct the default kwargs with the ones provided
         run_kwargs = ut.set_values_recursive(self.default_run_kwargs, kwargs)
 
