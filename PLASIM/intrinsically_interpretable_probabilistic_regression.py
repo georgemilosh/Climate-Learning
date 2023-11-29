@@ -423,7 +423,7 @@ def create_model(input_shape, filters_per_field=[1,1,1], merge_to_one=False, bat
 
 orig_train_model = ln.train_model
 
-def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics, early_stopping_kwargs=None, enable_early_stopping=False,
+def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics, early_stopping_kwargs=None, enable_early_stopping=False, scheduler_kwargs=None,
                 u=1, batch_size=1024, checkpoint_every=1, additional_callbacks=['csv_logger'], return_metric='val_CustomLoss', load_kernels_from=None, learn_kernels=True):
     '''
     Extra arguments:
@@ -486,7 +486,7 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
         logger.info('New data shapes:')
         logger.info(f'{X_tr.shape = }, {X_va.shape = }, {Y_tr.shape = }, {Y_va.shape = }')
     
-    return orig_train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics, early_stopping_kwargs=early_stopping_kwargs, enable_early_stopping=enable_early_stopping,
+    return orig_train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics, early_stopping_kwargs=early_stopping_kwargs, enable_early_stopping=enable_early_stopping, scheduler_kwargs=scheduler_kwargs,
                             u=u, batch_size=batch_size, checkpoint_every=checkpoint_every, additional_callbacks=additional_callbacks, return_metric=return_metric)
 
 
