@@ -117,11 +117,12 @@ class GaussianCommittor(object):
         self.f_tr = None
         self.f = None
 
-        self.GPU = GPU
+        self.set_engine('GPU' if GPU else 'CPU')
 
-    def fit(self,X,A):
-        if self.GPU:
+    def set_engine(self, engine='GPU'):
+        if engine == 'GPU':
             try:
+                logger.info('Setting engine as GPU')
                 import cupy as cp
                 from gpuutils import GpuUtils
                 df = GpuUtils.analyzeSystem().set_index('gpu_index')
@@ -130,18 +131,24 @@ class GaussianCommittor(object):
                 gpu_memory = df['available_memories_in_mb'].max()
                 cp.cuda.runtime.setDevice(gpu_id)
                 print(f'Using GPU Device {gpu_id}, with {gpu_memory/1024:.2f} GB free memory')
+                self.engine = cp
+                self.GPU = True
+                return
             except ModuleNotFoundError:
                 logger.error('Please install cupy and gpuutils to use GPU')
-                self.GPU = False
             except:
                 logger.error('Failed to use GPU, using CPU instead')
-                self.GPU = False
         
+        logger.info('Setting engine as CPU')
+        self.GPU = False
+        self.engine = np
+
+    def fit(self,X,A):
         try:
             self._fit(X,A)
-        except cp.cuda.memory.OutOfMemoryError:
-            logger.error('Failed to allocate momory in GPU, trying to use CPU instead')
-            self.GPU = False
+        except self.engine.cuda.memory.OutOfMemoryError:
+            logger.error('Failed to allocate momory in GPU, retrying with CPU instead')
+            self.set_engine('CPU')
             self._fit(X,A)
 
     def _fit(self, X, A):
@@ -160,37 +167,36 @@ class GaussianCommittor(object):
             logger.info('multiplying scalar regularization matrix by the identity matrix')
             self.regularization_matrix = self.regularization_matrix * np.identity(X.shape[-1], dtype=float)
 
-        if self.GPU:
-            X = cp.asarray(X)
-            A = cp.asarray(A)
-        else:
-            cp = np
-
         # compute the covariance matrix
-        XAs = cp.concatenate([X,A.reshape(-1,1)], axis=-1)
+        XAs = np.concatenate([X,A.reshape(-1,1)], axis=-1)
         logger.info(f'{XAs.shape = }')
-        XAs_cov = cp.cov(XAs.T)
+
+        if self.GPU:
+            XAs = self.engine.asarray(XAs) # convert to GPU array
+
+        XAs_cov = self.engine.cov(XAs.T)
         logger.info(f'{XAs_cov.shape = }')
         sigma_XX = XAs_cov[:-1,:-1]
         sigma_XA = XAs_cov[-1,:-1]
 
         assert self.regularization_matrix.shape == sigma_XX.shape
         # compute the (regularized) projection pattern
-        self.p = cp.linalg.inv(sigma_XX + cp.asarray(self.regularization_matrix)) @ sigma_XA
-        self.p /= cp.sqrt(cp.sum(self.p**2))
+        self.p = self.engine.linalg.inv(sigma_XX + self.engine.asarray(self.regularization_matrix)) @ sigma_XA
+        self.p /= self.engine.sqrt(self.engine.sum(self.p**2))
         logger.info(f'{self.p.shape = }')
 
         # compute the projected coordinate and the rescaling
         self.f_tr = X @ self.p
-        fA = cp.stack([self.f_tr, A])
-        fA_cov = cp.cov(fA)
+        fA = self.engine.stack([self.f_tr, A])
+        fA_cov = self.engine.cov(fA)
         logger.info(f'{fA_cov.shape = }')
-        lam = cp.linalg.inv(fA_cov)
+        lam = self.engine.linalg.inv(fA_cov)
 
         if self.GPU:
-            lam = cp.asnumpy(lam)
-            self.p = cp.asnumpy(self.p)
-            self.f_tr = cp.asnumpy(self.f_tr)
+            # convert back to CPU
+            lam = self.engine.asnumpy(lam)
+            self.p = self.engine.asnumpy(self.p)
+            self.f_tr = self.engine.asnumpy(self.f_tr)
 
         self.lam_AA = lam[-1,-1]
         self.lam_fA = lam[0,-1]
