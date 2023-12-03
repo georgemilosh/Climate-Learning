@@ -119,22 +119,7 @@ class GaussianCommittor(object):
 
         self.GPU = GPU
 
-    def fit(self, X, A):
-        '''
-        Fits the object on data
-
-        Parameters
-        ----------
-        X : np.ndarray[float]
-            Input data with shape (n_data_points, n_features)
-        A : np.ndarray[float]
-            Target variable with shape (n_data_points,)
-        '''
-        # check that the regularization matrix is indeed a matrix, if not make it a multiple of the identity matrix
-        if not hasattr(self.regularization_matrix, 'shape') or self.regularization_matrix.shape == ():
-            logger.info('multiplying scalar regularization matrix by the identity matrix')
-            self.regularization_matrix = self.regularization_matrix * np.identity(X.shape[-1], dtype=float)
-        
+    def fit(self,X,A):
         if self.GPU:
             try:
                 import cupy as cp
@@ -151,6 +136,29 @@ class GaussianCommittor(object):
             except:
                 logger.error('Failed to use GPU, using CPU instead')
                 self.GPU = False
+        
+        try:
+            self._fit(X,A)
+        except cp.cuda.memory.OutOfMemoryError:
+            logger.error('Failed to allocate momory in GPU, trying to use CPU instead')
+            self.GPU = False
+            self._fit(X,A)
+
+    def _fit(self, X, A):
+        '''
+        Fits the object on data
+
+        Parameters
+        ----------
+        X : np.ndarray[float]
+            Input data with shape (n_data_points, n_features)
+        A : np.ndarray[float]
+            Target variable with shape (n_data_points,)
+        '''
+        # check that the regularization matrix is indeed a matrix, if not make it a multiple of the identity matrix
+        if not hasattr(self.regularization_matrix, 'shape') or self.regularization_matrix.shape == ():
+            logger.info('multiplying scalar regularization matrix by the identity matrix')
+            self.regularization_matrix = self.regularization_matrix * np.identity(X.shape[-1], dtype=float)
 
         if self.GPU:
             X = cp.asarray(X)
