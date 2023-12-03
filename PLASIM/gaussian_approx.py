@@ -252,7 +252,7 @@ class Trainer(ln.Trainer):
 
 @ut.execution_time
 @ut.indent_logger(logger)
-def train_model(model, X_tr, A_tr, Y_tr, X_va, A_va, Y_va, folder, return_metric='val_CrossEntropyLoss'):
+def train_model(model, X_tr, A_tr, Y_tr, X_va, A_va, Y_va, folder, use_GPU=True, return_metric='val_CrossEntropyLoss'):
     '''
     Trains a given model
 
@@ -283,6 +283,7 @@ def train_model(model, X_tr, A_tr, Y_tr, X_va, A_va, Y_va, folder, return_metric
     logger.info(f'Training the network on {len(Y_tr)} datapoint and validating on {len(Y_va)}')
 
     # fit the model
+    model.GPU = use_GPU
     model.fit(X_tr, A_tr)
 
     # compute metrics
