@@ -2880,7 +2880,7 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
             if (label_period_start and time_start and label_period_end and time_start and T) is None: # i.e. if any of the variables between parentheses is None
                 weights = np.sum(Y, axis=1) # get the number of heatwave events per year
             else:
-                logger.info(f" {label_period_start = } ;{time_start = } ;{time_end = } ;{label_period_end = } ")
+                logger.info(f" {label_period_start = }; {time_start = }; {time_end = }; {label_period_end = } ")
                 logger.info(f"{Y.shape = }, from {label_period_start-time_start} to {label_period_end-time_start-T+1} ")
                 weights = np.sum(Y[:,(label_period_start-time_start):(label_period_end-time_start-T+1)], axis=1) # get the number of heatwave events per year
             balance_permutation = balance_folds(weights,nfolds=nfolds, verbose=True)
