@@ -1154,7 +1154,7 @@ def create_mask_xarray(model:str, area:str, lsm:xr.DataArray) -> xr.DataArray:
     NotImplementedError
         If the combination model/area is not implemented
     '''
-    if model == 'ERA5':
+    if model in ['ERA5', 'CESM']:
         if area == 'France':
             mask = standardize_dim_names(lsm > 0.5) # convert to bool keeping only the land masses
             mask *= (mask.lat < 52)*(mask.lat > 42)*(mask.lon > -5)*(mask.lon < 8.3) # identify the rough region
