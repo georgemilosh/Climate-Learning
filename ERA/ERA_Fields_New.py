@@ -1156,12 +1156,21 @@ def create_mask_xarray(model:str, area:str, lsm:xr.DataArray) -> xr.DataArray:
     '''
     if model in ['ERA5', 'CESM']:
         if area == 'France':
-            mask = standardize_dim_names(lsm > 0.5) # convert to bool keeping only the land masses
-            mask *= (mask.lat < 52)*(mask.lat > 42)*(mask.lon % 360 > -5 % 360)*(mask.lon % 360 < 8.3 % 360) # identify the rough region
+            _mask = standardize_dim_names(lsm > 0.5) # convert to bool keeping only the land masses
+
+            # make sure longitude is in [-180,180]
+            newlon = _mask.lon.data % 360 # first make sure longitude is in [0,360]
+            newlon = newlon - 360*(newlon >= 180) # then put it in [-180,180]
+            mask = xr.DataArray(_mask.data, coords={'lat':_mask.lat, 'lon':newlon})
+
+            mask *= (mask.lat < 52)*(mask.lat > 42)*(mask.lon > -5)*(mask.lon < 8.3) # identify the rough region
             mask *= ~is_above_line(mask, 1.65, 51, -4.5, 49.2)
             mask *= is_above_line(mask, -1.86, 43.34, 3.4, 42.2)
             mask *= ~is_above_line(mask, 2.26, 51.2, 8.27, 49)
             mask *= is_above_line(mask, 8.1, 48.8, 6, 43)
+
+            # restore the original longitude
+            mask = xr.DataArray(mask.data, coords={'lat':mask.lat, 'lon':_mask.lon})
             return mask
         
     raise NotImplementedError(f'{model}:{area}')
