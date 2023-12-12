@@ -1157,7 +1157,7 @@ def create_mask_xarray(model:str, area:str, lsm:xr.DataArray) -> xr.DataArray:
     if model in ['ERA5', 'CESM']:
         if area == 'France':
             mask = standardize_dim_names(lsm > 0.5) # convert to bool keeping only the land masses
-            mask *= (mask.lat < 52)*(mask.lat > 42)*(mask.lon > -5)*(mask.lon < 8.3) # identify the rough region
+            mask *= (mask.lat < 52)*(mask.lat > 42)*(mask.lon % 360 > -5 % 360)*(mask.lon % 360 < 8.3 % 360) # identify the rough region
             mask *= ~is_above_line(mask, 1.65, 51, -4.5, 49.2)
             mask *= is_above_line(mask, -1.86, 43.34, 3.4, 42.2)
             mask *= ~is_above_line(mask, 2.26, 51.2, 8.27, 49)
