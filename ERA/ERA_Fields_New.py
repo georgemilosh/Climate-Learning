@@ -1173,11 +1173,13 @@ def create_mask_xarray(model:str, area:str, lsm:xr.DataArray) -> xr.DataArray:
             mask = xr.DataArray(mask.data, coords={'lat':mask.lat, 'lon':_mask.lon})
             return mask
         
-    raise NotImplementedError(f'{model}:{area}')
+    raise NotImplementedError(f'xarray mask not implemented for {model}:{area}')
 
 # now vectorized :)
 def create_mask(model:str, area:str, data:np.ndarray, axes='first 2', return_full_mask=False): # careful, this mask works if we load the full Earth. there might be problems if we extract fields from some edge of the map
     """
+    The masks created with this function are squares in latitude and longitude. To deal with more complex shapes use create_mask_xarray.
+
     This function allows to extract a subset of data enclosed in the area.
     The output has the dimension of the area on the axes corresponding to latitued and longitude
     If the area includes the Greenwich meridian, a concatenation is required.
@@ -1980,6 +1982,9 @@ class Plasim_Field:
         '''
         Sets a mask for the object. The mask is adapted to past and future coordinate transformations of the data.
 
+        Add '-xr' or '-xarray' at the end of the name to have a more realistic mask.
+        Otherwise the mask will just be the land mass beneath a rectangle in latitude and longitude
+
         Parameters
         ----------
         area : str
@@ -1989,11 +1994,17 @@ class Plasim_Field:
         self._area_integral = None
         lsm = get_lsm(self.mylocal,self.Model,lsmsource=self.lsmsource)
         self.mask = lsm.copy()
-        try:
+
+        # see if we want to use xarray from the name of the area
+        if area.endswith('-xarray') or area.endswith('-xr'):
+            area = area.rsplit('-',1)[0] # remove -xr or -xarray
+            logger.info('Creating mask with xarray')
             self.mask = create_mask_xarray(self.Model,area, self.mask)
-        except:
-            logger.warning('Failed to create mask with xarray features: using old version with numpy')
+        else:
+            logger.info('Creating mask with create_mask: mask will be the land mass beneath a rectangle in latitude and longitude')
             self.mask.data = create_mask(self.Model,area,self.mask.data, axes='last 2', return_full_mask=True)
+
+        # AL: There is no point in this following block, since the mask is already only over land masses.
         #logger.info(f'{self.lsm2mask = }')
         if self.lsm2mask:
             logger.info('Applying land sea mask to area mask')
