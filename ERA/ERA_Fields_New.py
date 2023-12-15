@@ -2004,7 +2004,7 @@ class Plasim_Field:
             logger.info('Creating mask with create_mask: mask will be the land mass beneath a rectangle in latitude and longitude')
             self.mask.data = create_mask(self.Model,area,self.mask.data, axes='last 2', return_full_mask=True)
 
-        # AL: There is no point in this following block, since the mask is already only over land masses.
+        # AL: There is no point in this following block if we used xarray, since the mask is already only over land masses.
         #logger.info(f'{self.lsm2mask = }')
         if self.lsm2mask:
             logger.info('Applying land sea mask to area mask')

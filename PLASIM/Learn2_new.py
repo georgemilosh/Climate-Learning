@@ -346,12 +346,39 @@ def check_config_dict(config_dict, correct_mistakes=True):
                 ut.set_values_recursive(config_dict, {'fields': config_dict_flat['fields']}, inplace=True)
             else:
                 raise ValueError(f"{label_field = } is not one of the loaded fields: please add a ghost field as {label_field+'_ghost'}")
+            
 
-        if 'enable_early_stopping' in config_dict_flat and config_dict_flat['enable_early_stopping']:
-            if config_dict_flat['patience'] == 0:
-                logger.warning('Setting `patience` to 0 disables early stopping')
-            elif config_dict_flat['collective']:
-                raise ValueError('Using collective checkpoint together with early stopping is highly deprecated')
+        unusual_settings = 0
+        logger.warning('Checking config dictionary for unusual settings\n\n')
+
+        # early stopping related checks
+        if 'enable_early_stopping' in config_dict_flat:
+            if config_dict_flat['enable_early_stopping']:
+                if config_dict_flat['patience'] == 0:
+                    logger.warning('Setting `patience` to 0 disables early stopping')
+                    unusual_settings += 1
+                elif config_dict_flat['collective']:
+                    raise ValueError('Using collective checkpoint together with early stopping is highly deprecated')
+            else:
+                logger.warning('Early stopping is disabled: training might take unnecessarily long time')
+                unusual_settings += 1
+
+        # mask area related checks
+        if config_dict_flat['area'] != config_dict_flat['filter_area']:
+            logger.warning('`area` and `filter_area` are not the same!')
+            unusual_settings += 1
+        if config_dict_flat['Model'] in ['ERA5', 'CESM']:
+            if not (config_dict_flat['area'].endswith('-xarray') or config_dict_flat['area'].endswith('-xarray')):
+                logger.warning(f"For high resolution models like {config_dict_flat['Model']} you may want to use a better mask by exploiting xarray features. To do so,`area` should end with `-xarray`")
+                unusual_settings += 1
+
+        if unusual_settings > 0:
+            t = 5*unusual_settings + 10
+            logger.warning(f'SCRIPT PAUSED: Found {unusual_settings} unusual settings in the config dictionary.\nYou may want to interrupt and check manually your config file.\n\nThe script will continue in {t} seconds')
+            time.sleep(t) # pause
+        else:
+            logger.warning('Found no unusual settings in the config dictionary.\n\n')
+        
     except Exception as e:
         raise KeyError('Invalid config dictionary') from e
     return config_dict_flat
