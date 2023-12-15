@@ -1154,21 +1154,32 @@ def create_mask_xarray(model:str, area:str, lsm:xr.DataArray) -> xr.DataArray:
     NotImplementedError
         If the combination model/area is not implemented
     '''
-    if model == 'ERA5':
+    if model in ['ERA5', 'CESM']:
         if area == 'France':
-            mask = standardize_dim_names(lsm > 0.5) # convert to bool keeping only the land masses
+            _mask = standardize_dim_names(lsm > 0.5) # convert to bool keeping only the land masses
+
+            # make sure longitude is in [-180,180]
+            newlon = _mask.lon.data % 360 # first make sure longitude is in [0,360]
+            newlon = newlon - 360*(newlon >= 180) # then put it in [-180,180]
+            mask = xr.DataArray(_mask.data, coords={'lat':_mask.lat, 'lon':newlon})
+
             mask *= (mask.lat < 52)*(mask.lat > 42)*(mask.lon > -5)*(mask.lon < 8.3) # identify the rough region
             mask *= ~is_above_line(mask, 1.65, 51, -4.5, 49.2)
             mask *= is_above_line(mask, -1.86, 43.34, 3.4, 42.2)
             mask *= ~is_above_line(mask, 2.26, 51.2, 8.27, 49)
             mask *= is_above_line(mask, 8.1, 48.8, 6, 43)
+
+            # restore the original longitude
+            mask = xr.DataArray(mask.data, coords={'lat':mask.lat, 'lon':_mask.lon})
             return mask
         
-    raise NotImplementedError(f'{model}:{area}')
+    raise NotImplementedError(f'xarray mask not implemented for {model}:{area}')
 
 # now vectorized :)
 def create_mask(model:str, area:str, data:np.ndarray, axes='first 2', return_full_mask=False): # careful, this mask works if we load the full Earth. there might be problems if we extract fields from some edge of the map
     """
+    The masks created with this function are squares in latitude and longitude. To deal with more complex shapes use create_mask_xarray.
+
     This function allows to extract a subset of data enclosed in the area.
     The output has the dimension of the area on the axes corresponding to latitued and longitude
     If the area includes the Greenwich meridian, a concatenation is required.
@@ -1971,6 +1982,9 @@ class Plasim_Field:
         '''
         Sets a mask for the object. The mask is adapted to past and future coordinate transformations of the data.
 
+        Add '-xr' or '-xarray' at the end of the name to have a more realistic mask.
+        Otherwise the mask will just be the land mass beneath a rectangle in latitude and longitude
+
         Parameters
         ----------
         area : str
@@ -1980,11 +1994,17 @@ class Plasim_Field:
         self._area_integral = None
         lsm = get_lsm(self.mylocal,self.Model,lsmsource=self.lsmsource)
         self.mask = lsm.copy()
-        try:
+
+        # see if we want to use xarray from the name of the area
+        if area.endswith('-xarray') or area.endswith('-xr'):
+            area = area.rsplit('-',1)[0] # remove -xr or -xarray
+            logger.info('Creating mask with xarray')
             self.mask = create_mask_xarray(self.Model,area, self.mask)
-        except:
-            logger.warning('Failed to create mask with xarray features: using old version with numpy')
+        else:
+            logger.info('Creating mask with create_mask: mask will be the land mass beneath a rectangle in latitude and longitude')
             self.mask.data = create_mask(self.Model,area,self.mask.data, axes='last 2', return_full_mask=True)
+
+        # AL: There is no point in this following block, since the mask is already only over land masses.
         #logger.info(f'{self.lsm2mask = }')
         if self.lsm2mask:
             logger.info('Applying land sea mask to area mask')
