@@ -133,6 +133,7 @@ class GaussianCommittor(object):
                 print(f'Using GPU Device {gpu_id}, with {gpu_memory/1024:.2f} GB free memory')
                 self.engine = cp
                 self.GPU = True
+                self.precision = np.float32
                 return
             except ModuleNotFoundError:
                 logger.error('Please install cupy and gpuutils to use GPU')
@@ -142,6 +143,7 @@ class GaussianCommittor(object):
         logger.info('Setting engine as CPU')
         self.GPU = False
         self.engine = np
+        self.precision = np.float64
 
     def fit(self,X,A):
         try:
@@ -172,7 +174,7 @@ class GaussianCommittor(object):
         logger.info(f'{XAs.shape = }')
 
         if self.GPU:
-            XAs = self.engine.asarray(XAs) # convert to GPU array
+            XAs = self.engine.asarray(XAs, dtype=self.precision) # convert to GPU array
 
         XAs_cov = self.engine.cov(XAs.T)
         logger.info(f'{XAs_cov.shape = }')
@@ -181,22 +183,20 @@ class GaussianCommittor(object):
 
         assert self.regularization_matrix.shape == sigma_XX.shape
         # compute the (regularized) projection pattern
-        self.p = self.engine.linalg.inv(sigma_XX + self.engine.asarray(self.regularization_matrix)) @ sigma_XA
+        self.p = self.engine.linalg.inv(sigma_XX + self.engine.asarray(self.regularization_matrix, dtype=self.precision)) @ sigma_XA
         self.p /= self.engine.sqrt(self.engine.sum(self.p**2))
         logger.info(f'{self.p.shape = }')
 
-        # compute the projected coordinate and the rescaling
-        self.f_tr = X @ self.p
-        fA = self.engine.stack([self.f_tr, A])
-        fA_cov = self.engine.cov(fA)
-        logger.info(f'{fA_cov.shape = }')
-        lam = self.engine.linalg.inv(fA_cov)
-
         if self.GPU:
             # convert back to CPU
-            lam = self.engine.asnumpy(lam)
             self.p = self.engine.asnumpy(self.p)
-            self.f_tr = self.engine.asnumpy(self.f_tr)
+
+        # compute the projected coordinate and the rescaling
+        self.f_tr = X @ self.p
+        fA = np.stack([self.f_tr, A]) # this is a 2 by 2 matrix: we don't need to use the GPU
+        fA_cov = np.cov(fA)
+        logger.info(f'{fA_cov.shape = }')
+        lam = np.linalg.inv(fA_cov)
 
         self.lam_AA = lam[-1,-1]
         self.lam_fA = lam[0,-1]
