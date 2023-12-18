@@ -177,13 +177,22 @@ class GaussianCommittor(object):
             XAs = self.engine.asarray(XAs, dtype=self.precision) # convert to GPU array
 
         XAs_cov = self.engine.cov(XAs.T)
+        # once we have the covariance matrix we don't need XAs anymore
+        del XAs # this frees GPU memory
+
         logger.info(f'{XAs_cov.shape = }')
         sigma_XX = XAs_cov[:-1,:-1]
         sigma_XA = XAs_cov[-1,:-1]
+        # now we don't need XAs_cov anymore
+        del XAs_cov # this frees GPU memory
 
         assert self.regularization_matrix.shape == sigma_XX.shape
+        
         # compute the (regularized) projection pattern
         self.p = self.engine.linalg.inv(sigma_XX + self.engine.asarray(self.regularization_matrix, dtype=self.precision)) @ sigma_XA
+        # now that we have the projection pattern we don't need sigma_XX and sigma_XA anymore
+        del sigma_XX, sigma_XA # this frees GPU memory
+
         self.p /= self.engine.sqrt(self.engine.sum(self.p**2))
         logger.info(f'{self.p.shape = }')
 
