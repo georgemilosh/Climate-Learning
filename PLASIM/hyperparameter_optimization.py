@@ -57,8 +57,10 @@ import optuna
 import logging
 import sys
 import os
-logging.getLogger().level = logging.INFO
-logging.getLogger().handlers = [logging.StreamHandler(sys.stdout)]
+
+if __name__ == '__main__':
+    logging.getLogger().level = logging.INFO
+    logging.getLogger().handlers = [logging.StreamHandler(sys.stdout)]
 
 
 class ScoreOptimizer():

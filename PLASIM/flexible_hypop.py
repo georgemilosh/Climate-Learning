@@ -25,6 +25,13 @@ from ast import literal_eval
 import numpy as np
 import optuna
 
+import logging
+import sys
+
+if __name__ == '__main__':
+    logging.getLogger().level = logging.INFO
+    logging.getLogger().handlers = [logging.StreamHandler(sys.stdout)]
+
 
 # >> EDITABLE
 

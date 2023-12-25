@@ -5,8 +5,10 @@ logger = ln.logger
 import logging
 import sys
 import os
-logging.getLogger().level = logging.INFO
-logging.getLogger().handlers = [logging.StreamHandler(sys.stdout)]
+
+if __name__ == '__main__':
+    logging.getLogger().level = logging.INFO
+    logging.getLogger().handlers = [logging.StreamHandler(sys.stdout)]
 
 tf = ln.tf
 keras = ln.keras

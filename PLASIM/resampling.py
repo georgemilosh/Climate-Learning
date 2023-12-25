@@ -15,8 +15,10 @@ pd = ln.pd
 import logging
 import sys
 import os
-logging.getLogger().level = logging.INFO
-logging.getLogger().handlers = [logging.StreamHandler(sys.stdout)]
+
+if __name__ == '__main__':
+    logging.getLogger().level = logging.INFO
+    logging.getLogger().handlers = [logging.StreamHandler(sys.stdout)]
 
 def select(*arrays, amount=0.1, p=None, if_not_enough_data='raise'):
     '''
@@ -268,7 +270,7 @@ def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='m
 
 
 # we redefine the train model function
-@ut.execution_time
+@ut.exec_time(logger)
 @ut.indent_logger(logger)
 def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics, early_stopping_kwargs=None, compute_p_func_kwargs=None, # We always use early stopping
                 u=1, batch_size=1024, checkpoint_every=1, additional_callbacks=['csv_logger'], return_metric='val_CustomLoss',

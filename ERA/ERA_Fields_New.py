@@ -1573,7 +1573,7 @@ class Field:
         anomaly_series = self.ano_mask.copy()
         return series, anomaly_series
 
-@ut.execution_time
+@ut.exec_time(logger)
 def monotonize_years(da:xr.DataArray):
     '''
     Transforms the time coordinate such that the years are consecutive and increasing monotonically and starting from 0.
@@ -1617,7 +1617,7 @@ def monotonize_years(da:xr.DataArray):
 
     return da, new_y + 1
 
-@ut.execution_time
+@ut.exec_time(logger)
 def monotonize_longitude(da:xr.DataArray):
     '''
     Makes the leongitude of an array monotonic. This is useful when working with rolled data.
@@ -1878,7 +1878,7 @@ class Plasim_Field:
     def year_range(self):
         return pretty_set_of_int(set(self.field.time.dt.year.data))
 
-    @ut.execution_time
+    @ut.exec_time(logger)
     def select_years(self, year_list=None):
         '''
         Select a subset of years
@@ -1896,7 +1896,7 @@ class Plasim_Field:
             self.field = self.field.sel(time=self.field.time.dt.year.isin(year_list))
             self.years = len(year_list)
     
-    @ut.execution_time
+    @ut.exec_time(logger)
     def sort_lat(self):
         '''
         Sorts the latitudes so that they always increase from the North Pole to the South Pole
@@ -1912,7 +1912,7 @@ class Plasim_Field:
         if self.mask is not None:
             self.mask = self.mask.sel(lat=self.field.lat)
 
-    @ut.execution_time
+    @ut.exec_time(logger)
     @ut.indent_logger(logger)
     def select_lonlat(self, lat_start=None, lat_end=None, lon_start=None, lon_end=None, fillna=None):
         '''
@@ -2026,7 +2026,7 @@ class Plasim_Field:
         else:
             self.field.data *= np.logical_not(self.mask.data)
     
-    @ut.execution_time
+    @ut.exec_time(logger)
     def compute_area_integral(self, weights='land_area'):
         '''
         Computes the area integral over the region set by the mask and stores it in self._are_integral
@@ -2057,7 +2057,7 @@ class Plasim_Field:
         self._area_integral = masked_average(self.field, dim=['lat', 'lon'], weights=weights, mask=self.mask)
         return self._area_integral
     
-    @ut.execution_time
+    @ut.exec_time(logger)
     def override_area_integral(self, ai:xr.DataArray):
         '''
         Overrides the self._area_integral attribute of the field. The time dimension is croppped to adapt it to the field
@@ -2085,7 +2085,7 @@ class Plasim_Field:
             self.compute_area_integral()
         return self._area_integral
 
-    @ut.execution_time
+    @ut.exec_time(logger)
     @ut.indent_logger(logger)
     def compute_time_average(self, day_start, day_end, T, weights=None):
         '''
@@ -2133,7 +2133,7 @@ class Plasim_Field_Old:
             self.np_precision = np.float32
             self.np_precision_complex = np.complex64
         
-    @ut.execution_time
+    @ut.exec_time(logger)
     @ut.indent_logger(logger)
     def load_field(self, folder, year_list=None):
         '''
@@ -2231,7 +2231,7 @@ class Plasim_Field_Old:
             raise NotImplementedError('if you specify a day, you must also specify a year')
         return Greenwich(self.var[year,day])
     
-    @ut.execution_time
+    @ut.exec_time(logger)
     def Set_area_integral(self, input_area, input_mask, containing_folder='Postproc', delta=1, force_computation=False):
         '''
         Evaluate area integral and (possibly if delta is not 1) coarse grain it in time

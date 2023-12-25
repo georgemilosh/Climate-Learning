@@ -8,8 +8,10 @@ ef = ln.ef # ERA_Fields_New
 import logging
 import sys
 import os
-logging.getLogger().level = logging.INFO
-logging.getLogger().handlers = [logging.StreamHandler(sys.stdout)]
+
+if __name__ == '__main__':
+    logging.getLogger().level = logging.INFO
+    logging.getLogger().handlers = [logging.StreamHandler(sys.stdout)]
 
 # set spacing of the indentation
 ut.indentation_sep = '  '

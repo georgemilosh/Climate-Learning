@@ -18,8 +18,10 @@ import logging
 import sys
 import os
 from pathlib import Path
-logging.getLogger().level = logging.INFO
-logging.getLogger().handlers = [logging.StreamHandler(sys.stdout)]
+
+if __name__ == '__main__':
+    logging.getLogger().level = logging.INFO
+    logging.getLogger().handlers = [logging.StreamHandler(sys.stdout)]
 
 class SeparateMRSOLinearModel(keras.Model):
     def __init__(self, m=1):

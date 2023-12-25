@@ -18,8 +18,10 @@ import logging
 import sys
 import os
 from pathlib import Path
-logging.getLogger().level = logging.INFO
-logging.getLogger().handlers = [logging.StreamHandler(sys.stdout)]
+
+if __name__ == '__main__':
+    logging.getLogger().level = logging.INFO
+    logging.getLogger().handlers = [logging.StreamHandler(sys.stdout)]
 
 def q(mu, sig, thr):
     return 0.5*tf.math.erfc((thr - mu)/sig/np.sqrt(2))

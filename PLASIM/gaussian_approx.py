@@ -19,8 +19,10 @@ import logging
 import sys
 import os
 from pathlib import Path
-logging.getLogger().level = logging.INFO
-logging.getLogger().handlers = [logging.StreamHandler(sys.stdout)]
+
+if __name__ == '__main__':
+    logging.getLogger().level = logging.INFO
+    logging.getLogger().handlers = [logging.StreamHandler(sys.stdout)]
 
 def compute_weight_matrix(reshape_mask, lat):
     '''
@@ -265,7 +267,7 @@ class Trainer(ln.Trainer):
         return self.X, self.Y, self.year_permutation, self.lat, self.lon
 
 
-@ut.execution_time
+@ut.exec_time(logger)
 @ut.indent_logger(logger)
 def train_model(model, X_tr, A_tr, Y_tr, X_va, A_va, Y_va, folder, return_metric='val_CrossEntropyLoss'):
     '''
@@ -333,7 +335,7 @@ def train_model(model, X_tr, A_tr, Y_tr, X_va, A_va, Y_va, folder, return_metric
     logger.log(42, f'{score = }')
     return score
 
-@ut.execution_time
+@ut.exec_time(logger)
 @ut.indent_logger(logger)
 def k_fold_cross_val(folder, X, Y, train_model_kwargs=None, optimal_checkpoint_kwargs=None, load_from=None, nfolds=10, val_folds=1, u=1, normalization_mode='pointwise',
                     regularization='gradient', reg_c=0, use_GPU=True):

@@ -951,7 +951,7 @@ except FileNotFoundError:
     }
     
 
-@ut.execution_time  # prints the time it takes for the function to run
+@ut.exec_time(logger)  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function
 def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', area='France', filter_area='France',
               lon_start=-64, lon_end=64, lat_start=0, lat_end=22, fillna=None, mylocal='/local/gmiloshe/PLASIM/',
@@ -1114,7 +1114,7 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
     
     return _fields
 
-@ut.execution_time
+@ut.exec_time(logger)
 @ut.indent_logger(logger)
 def assign_labels(field, time_start=30, time_end=120, T=14, percent=5, threshold=None, label_period_start=None, label_period_end=None, A_weights=None, return_threshold=False):
     '''
@@ -1172,7 +1172,7 @@ def assign_labels(field, time_start=30, time_end=120, T=14, percent=5, threshold
         return np.array(labels, dtype=int), threshold
     return np.array(labels, dtype=int)
 
-@ut.execution_time
+@ut.exec_time(logger)
 @ut.indent_logger(logger)
 def make_X(fields, time_start=30, time_end=120, T=14, tau=0):
     '''
@@ -1211,7 +1211,7 @@ def make_X(fields, time_start=30, time_end=120, T=14, tau=0):
     X = X.transpose(*range(1,len(X.shape)), 0)
     return X
 
-@ut.execution_time
+@ut.exec_time(logger)
 @ut.indent_logger(logger)
 def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0, percent=5, threshold=None, label_period_start=None, 
             label_period_end=None, A_weights=None, return_threshold=False):
@@ -1285,7 +1285,7 @@ def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0,
         return X,Y,threshold_new
     return X,Y
 
-@ut.execution_time
+@ut.exec_time(logger)
 @ut.indent_logger(logger)
 def roll_X(X, roll_axis='lon', roll_steps=0):
     '''
@@ -1334,7 +1334,7 @@ def roll_X(X, roll_axis='lon', roll_steps=0):
     # at this point roll_axis is an int
     return np.roll(X,roll_steps,axis=roll_axis)
 
-@ut.execution_time
+@ut.exec_time(logger)
 @ut.indent_logger(logger)
 def normalize_X(X, fold_folder, mode='pointwise', recompute=False):
     '''
@@ -1532,7 +1532,7 @@ def shuffle_years(X, permutation=None, seed=0, apply=False):
         return X[permutation,...]
     return permutation
 
-@ut.execution_time
+@ut.exec_time(logger)
 @ut.indent_logger(logger)
 def balance_folds(weights, nfolds=10, verbose=False):
     '''
@@ -2004,7 +2004,7 @@ def postprocess(x):
     """
     return keras.layers.Softmax()(x)
 
-@ut.execution_time
+@ut.exec_time(logger)
 @ut.indent_logger(logger)
 def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics, early_stopping_kwargs=None, enable_early_stopping=False, scheduler_kwargs=None,
                 u=1, batch_size=1024, checkpoint_every=1, additional_callbacks=['csv_logger'], return_metric='val_CustomLoss', trainable_layers=None):
@@ -2182,7 +2182,7 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     logger.log(42, f'{score = }')
     return score
 
-@ut.execution_time
+@ut.exec_time(logger)
 @ut.indent_logger(logger)
 def k_fold_cross_val_split(i, *arr, nfolds=10, val_folds=1):
     '''
@@ -2445,7 +2445,7 @@ def get_default_metrics(fullmetrics=False, u=1):
         metrics=None
     return metrics
 
-@ut.execution_time
+@ut.exec_time(logger)
 @ut.indent_logger(logger)
 def margin_removal_with_sliding_window(X,time_start,leftmargin,rightmargin,time_end,T,sliding=False):
     '''
@@ -2485,7 +2485,7 @@ def margin_removal_with_sliding_window(X,time_start,leftmargin,rightmargin,time_
     return X
 
 
-@ut.execution_time
+@ut.exec_time(logger)
 @ut.indent_logger(logger)
 def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=None, optimal_checkpoint_kwargs=None, 
                      load_from='last', ignorable_keys=None, nfolds=10, val_folds=1, u=1, normalization_mode='pointwise',
@@ -2795,7 +2795,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
 ########## PUTTING THE PIECES TOGETHER ###########
 ##################################################
 
-@ut.execution_time
+@ut.exec_time(logger)
 @ut.indent_logger(logger)
 def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
                do_premix=False, premix_seed=0, do_balance_folds=True, nfolds=10, year_permutation=None, flatten_time_axis=True, return_time_series=False):
@@ -2976,7 +2976,7 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
         return X, Y, year_permutation, lat, lon
 
 
-@ut.execution_time
+@ut.exec_time(logger)
 @ut.indent_logger(logger)
 def prepare_data_and_mask(load_data_kwargs=None, prepare_XY_kwargs=None):
     '''
@@ -3014,7 +3014,7 @@ def prepare_data_and_mask(load_data_kwargs=None, prepare_XY_kwargs=None):
 
     return prepare_XY(fields, **prepare_XY_kwargs), fields[next(iter(fields))].mask
 
-@ut.execution_time
+@ut.exec_time(logger)
 @ut.indent_logger(logger)
 def prepare_data(load_data_kwargs=None, prepare_XY_kwargs=None):
     '''
@@ -3047,7 +3047,7 @@ def prepare_data(load_data_kwargs=None, prepare_XY_kwargs=None):
 
     return prepare_XY(fields, **prepare_XY_kwargs)  
 
-@ut.execution_time
+@ut.exec_time(logger)
 def run(folder, load_data_kwargs=None, prepare_XY_kwargs=None, k_fold_cross_val_kwargs=None, log_level=logging.INFO):
     '''
     Perfroms a single full run
