@@ -3413,57 +3413,51 @@ class Trainer():
         elif os.path.exists(f'{folder}/fold_0'):
             raise FileExistsError(f'A run has already been performed in {folder = }')
 
-        # setup logger to file
-        fh = logging.FileHandler(f'{folder}/log.log')
-        fh.setLevel(log_level)
-        logger.handlers.append(fh)
-
-        try:
-            self.load_data(**load_data_kwargs) # compute self.fields
-
-            self.prepare_XY(self.fields, **prepare_XY_kwargs) # compute self.X, self.Y, self.year_permutation, self.lat, self.lon
-            if self.year_permutation is not None:
-                np.save(f'{folder}/year_permutation.npy',self.year_permutation)
-
-            # save area integral and A
-            label_field = ut.extract_nested(prepare_XY_kwargs, 'label_field')
+        # add file logger
+        with ut.FileLogger(logger, f'{folder}/log.log', level=log_level):
             try:
-                lf = self.fields[label_field]
-            except KeyError:
+                self.load_data(**load_data_kwargs) # compute self.fields
+
+                self.prepare_XY(self.fields, **prepare_XY_kwargs) # compute self.X, self.Y, self.year_permutation, self.lat, self.lon
+                if self.year_permutation is not None:
+                    np.save(f'{folder}/year_permutation.npy',self.year_permutation)
+
+                # save area integral and A
+                label_field = ut.extract_nested(prepare_XY_kwargs, 'label_field')
                 try:
-                    lf = self.fields[f'{label_field}_ghost']
+                    lf = self.fields[label_field]
                 except KeyError:
-                    logger.error(f'Unable to find label field {label_field} among the provided fields {list(self.fields.keys())}')
-                    raise KeyError
+                    try:
+                        lf = self.fields[f'{label_field}_ghost']
+                    except KeyError:
+                        logger.error(f'Unable to find label field {label_field} among the provided fields {list(self.fields.keys())}')
+                        raise KeyError
+                
+                np.save(f'{folder}/area_integral.npy', lf.to_numpy(lf.area_integral))
+                ta = lf.to_numpy(lf._time_average)
+                np.save(f'{folder}/time_average.npy', ta)
+                np.save(f'{folder}/time_average_permuted.npy', ta[self.year_permutation])
+
+                # save labels
+                np.save(f'{folder}/labels_permuted.npy', self.Y)
+                
+
+                # do kfold
+                score, info = k_fold_cross_val(folder, self.X, self.Y, **k_fold_cross_val_kwargs)
+
+                # make the config file and fields_infos file read-only after the first successful run
+                if os.access(self.config_file, os.W_OK): # the file is writeable
+                    os.chmod(self.config_file, S_IREAD|S_IRGRP|S_IROTH) # we make it readable for all users
+                if os.access(self.fields_infos_file, os.W_OK): # the file is writeable
+                    os.chmod(self.fields_infos_file, S_IREAD|S_IRGRP|S_IROTH) # we make it readable for all users
             
-            np.save(f'{folder}/area_integral.npy', lf.to_numpy(lf.area_integral))
-            ta = lf.to_numpy(lf._time_average)
-            np.save(f'{folder}/time_average.npy', ta)
-            np.save(f'{folder}/time_average_permuted.npy', ta[self.year_permutation])
-
-            # save labels
-            np.save(f'{folder}/labels_permuted.npy', self.Y)
-            
-
-            # do kfold
-            score, info = k_fold_cross_val(folder, self.X, self.Y, **k_fold_cross_val_kwargs)
-
-            # make the config file and fields_infos file read-only after the first successful run
-            if os.access(self.config_file, os.W_OK): # the file is writeable
-                os.chmod(self.config_file, S_IREAD|S_IRGRP|S_IROTH) # we make it readable for all users
-            if os.access(self.fields_infos_file, os.W_OK): # the file is writeable
-                os.chmod(self.fields_infos_file, S_IREAD|S_IRGRP|S_IROTH) # we make it readable for all users
-        
-        except Exception as e:
-            logger.critical(f'Run on {folder = } failed due to {repr(e)}')
-            tb = traceback.format_exc() # log the traceback to the log file
-            logger.error(tb)
-            if isinstance(e, KeyboardInterrupt):
-                raise e
-            raise RuntimeError('Run failed') from e
-
-        finally:
-            logger.handlers.remove(fh) # stop writing to the log file
+            except Exception as e:
+                logger.critical(f'Run on {folder = } failed due to {repr(e)}')
+                tb = traceback.format_exc() # log the traceback to the log file
+                logger.error(tb)
+                if isinstance(e, KeyboardInterrupt):
+                    raise e
+                raise RuntimeError('Run failed') from e
 
         return score, info
 
