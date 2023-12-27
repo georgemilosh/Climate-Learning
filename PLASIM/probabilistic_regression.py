@@ -48,12 +48,50 @@ class CRPS(keras.losses.Loss):
         self.epsilon = epsilon or keras.backend.epsilon()
 
     def call(self, y_true, y_pred):
-        sig = tf.math.abs(y_pred[...,1:2]) + self.epsilon
+        sig = y_pred[...,1:2]
+        assert (sig >= 0).all(), 'Model predicts negative variance, please fix it!'
+        sig = sig + self.epsilon
         y_pred = y_pred[...,0:1]
         res = (y_true - y_pred)/sig
         assert y_pred.shape == sig.shape == y_true.shape == res.shape
 
         return sig*(res*tf.math.erf(res/np.sqrt(2)) + 2*phi(res) -1/np.sqrt(np.pi))
+
+class CRPS_relu(CRPS):
+    '''Continuous Ranked Probability Score. Sigma is processed through a ReLU function'''
+    def __init__(self,name=None, epsilon=None) -> None:
+        super().__init__(name=name or self.__class__.__name__, epsilon=epsilon)
+        
+    def call(self, y_true, y_pred):
+        y_pred[...,1:2] = tf.math.maximum(y_pred[...,1:2], 0)
+        return super().call(y_true, y_pred)
+    
+class CRPS_softplus(CRPS):
+    '''Continuous Ranked Probability Score. Sigma is processed through a softplus function'''
+    def __init__(self,name=None, epsilon=None) -> None:
+        super().__init__(name=name or self.__class__.__name__, epsilon=epsilon)
+
+    def call(self, y_true, y_pred):
+        y_pred[...,1:2] = tf.math.softplus(y_pred[...,1:2])
+        return super().call(y_true, y_pred)
+    
+class CRPS_exp(CRPS):
+    '''Continuous Ranked Probability Score. Sigma is processed through an exponential function'''
+    def __init__(self,name=None, epsilon=None) -> None:
+        super().__init__(name=name or self.__class__.__name__, epsilon=epsilon)
+
+    def call(self, y_true, y_pred):
+        y_pred[...,1:2] = tf.math.exp(y_pred[...,1:2])
+        return super().call(y_true, y_pred)
+    
+class CRPS_abs(CRPS):
+    '''Continuous Ranked Probability Score. Sigma is processed through an absolute value function'''
+    def __init__(self,name=None, epsilon=None) -> None:
+        super().__init__(name=name or self.__class__.__name__, epsilon=epsilon)
+
+    def call(self, y_true, y_pred):
+        y_pred[...,1:2] = tf.math.abs(y_pred[...,1:2])
+        return super().call(y_true, y_pred)
 
 class ProbRegLoss(keras.losses.Loss):
     def __init__(self, name=None, epsilon=None, maxsig=None):
@@ -163,7 +201,16 @@ def get_loss_function(loss_name: str, u=1):
     elif loss_name.startswith('pretr'):
         cls = PreTrainingLoss
     elif loss_name.startswith('crps'):
-        cls = CRPS
+        if loss_name.endswith('relu'):
+            cls = CRPS_relu
+        elif loss_name.endswith('exp'):
+            cls = CRPS_exp
+        elif loss_name.endswith('softplus'):
+            cls = CRPS_softplus
+        elif loss_name.endswith('abs'):
+            cls = CRPS_abs
+        else:
+            cls = CRPS
     # elif loss_name.startswith('weighted'):
     #     return WeightedProbRegLoss(a=2, b=1)
     else:
