@@ -42,14 +42,14 @@ class PreTrainingLoss(keras.losses.Loss):
         return tf.math.square(y_true - y_pred) + tf.math.square(sig - 1)
 
 class CRPS(keras.losses.Loss):
-    '''Continuous Ranked Probability Score'''
+    '''Continuous Ranked Probability Score. Assumes predicted sigma is positive'''
     def __init__(self,name=None, epsilon=None) -> None:
         super().__init__(name=name or self.__class__.__name__)
         self.epsilon = epsilon or keras.backend.epsilon()
 
     def call(self, y_true, y_pred):
         sig = y_pred[...,1:2]
-        assert (sig >= 0).all(), 'Model predicts negative variance, please fix it!'
+        assert tf.debugging.assert_non_negative(sig, 'Model predicted negative variance, please fix it!')
         sig = sig + self.epsilon
         y_pred = y_pred[...,0:1]
         res = (y_true - y_pred)/sig
@@ -63,7 +63,7 @@ class CRPS_relu(CRPS):
         super().__init__(name=name or self.__class__.__name__, epsilon=epsilon)
         
     def call(self, y_true, y_pred):
-        y_pred[...,1:2] = tf.math.maximum(y_pred[...,1:2], 0)
+        y_pred = tf.stack([y_pred[...,0],tf.math.maximum(y_pred[...,1], 0)], axis=-1)
         return super().call(y_true, y_pred)
     
 class CRPS_softplus(CRPS):
@@ -72,7 +72,7 @@ class CRPS_softplus(CRPS):
         super().__init__(name=name or self.__class__.__name__, epsilon=epsilon)
 
     def call(self, y_true, y_pred):
-        y_pred[...,1:2] = tf.math.softplus(y_pred[...,1:2])
+        y_pred = tf.stack([y_pred[...,0],tf.math.softplus(y_pred[...,1])], axis=-1)
         return super().call(y_true, y_pred)
     
 class CRPS_exp(CRPS):
@@ -81,7 +81,7 @@ class CRPS_exp(CRPS):
         super().__init__(name=name or self.__class__.__name__, epsilon=epsilon)
 
     def call(self, y_true, y_pred):
-        y_pred[...,1:2] = tf.math.exp(y_pred[...,1:2])
+        y_pred = tf.stack([y_pred[...,0],tf.math.exp(y_pred[...,1])], axis=-1)
         return super().call(y_true, y_pred)
     
 class CRPS_abs(CRPS):
@@ -90,7 +90,7 @@ class CRPS_abs(CRPS):
         super().__init__(name=name or self.__class__.__name__, epsilon=epsilon)
 
     def call(self, y_true, y_pred):
-        y_pred[...,1:2] = tf.math.abs(y_pred[...,1:2])
+        y_pred = tf.stack([y_pred[...,0],tf.math.abs(y_pred[...,1])], axis=-1)
         return super().call(y_true, y_pred)
 
 class ProbRegLoss(keras.losses.Loss):
