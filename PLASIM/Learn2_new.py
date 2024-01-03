@@ -532,7 +532,7 @@ def select_compatible(run_args, conditions, require_unique=True, config=None):
         raise KeyError(f"Multiple runs contain satisfy {conditions = } ({compatible_keys}) and your are requiring just one")
     return compatible_keys[0]
 
-def remove_args_at_default(run_args, config_dict_flat):
+def remove_args_at_default(run_args:dict, config_dict_flat:dict):
     '''
     Removes from a dictionary of parameters the values that are at their default one.
 
@@ -548,14 +548,7 @@ def remove_args_at_default(run_args, config_dict_flat):
     dict
         epurated run_args
     '''
-    _run_args = deepcopy(run_args)
-    for k,args in _run_args.items():
-        new_args = {}
-        for arg,value in args:
-            if value != config_dict_flat[arg]:
-                new_args[arg] = value
-        _run_args[k] = new_args
-    return _run_args
+    return {k: remove_default_kwargs(v, config_dict_flat) for k,v in run_args.items()}
 
 def group_by_varying(run_args, variable='tau', config_dict_flat=None, sort=False, ignore=None):
     '''
