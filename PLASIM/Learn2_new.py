@@ -394,7 +394,7 @@ def remove_default_kwargs(kwargs:dict, config_dict_flat:dict):
 
     Parameters
     ----------
-    run_args : dict
+    kwargs : dict
         dictionary with the arguments of the run
     config_dict_flat : dict
         flattened config dictionary with the default values
@@ -3511,7 +3511,7 @@ class Trainer():
         runs = ut.json2dict(self.runs_file) # get runs dictionary
 
         # remove kwargs at their default value
-        kwargs = remove_args_at_default(kwargs, self.config_dict_flat)
+        kwargs = remove_default_kwargs(kwargs, self.config_dict_flat)
 
         # check if the run has already been performed
         matching_runs = []
