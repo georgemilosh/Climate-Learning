@@ -388,6 +388,31 @@ def check_config_dict(config_dict, correct_mistakes=True):
         raise KeyError('Invalid config dictionary') from e
     return config_dict_flat
 
+def remove_default_kwargs(kwargs:dict, config_dict_flat:dict):
+    '''
+    Removes from a dictionary of parameters the values that are at their default one.
+
+    Parameters
+    ----------
+    run_args : dict
+        dictionary with the arguments of the run
+    config_dict_flat : dict
+        flattened config dictionary with the default values
+
+    Returns
+    -------
+    dict
+        epurated run_args
+    '''
+    
+    new_kwargs = {}
+    for arg,value in kwargs:
+        if value != config_dict_flat[arg]:
+            new_kwargs[arg] = value
+        else:
+            logger.warning(f'removing {arg} from run_args because it is at its default value {value}')
+    return new_kwargs
+
 ####################################
 ### OPERATIONS WITH RUN METADATA ###
 ####################################
@@ -3491,6 +3516,9 @@ class Trainer():
             ut.dict2json({},self.runs_file)
         
         runs = ut.json2dict(self.runs_file) # get runs dictionary
+
+        # remove kwargs at their default value
+        kwargs = remove_args_at_default(kwargs, self.config_dict_flat)
 
         # check if the run has already been performed
         matching_runs = []
