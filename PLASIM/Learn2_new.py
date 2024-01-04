@@ -406,7 +406,7 @@ def remove_default_kwargs(kwargs:dict, config_dict_flat:dict):
     '''
     
     new_kwargs = {}
-    for arg,value in kwargs:
+    for arg,value in kwargs.items():
         if value != config_dict_flat[arg]:
             new_kwargs[arg] = value
         else:
