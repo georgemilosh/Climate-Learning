@@ -57,42 +57,6 @@ class CRPS(keras.losses.Loss):
 
         return sig*(res*tf.math.erf(res/np.sqrt(2)) + 2*phi(res) -1/np.sqrt(np.pi))
 
-class CRPS_relu(CRPS):
-    '''Continuous Ranked Probability Score. Sigma is processed through a ReLU function'''
-    def __init__(self,name=None, epsilon=None) -> None:
-        super().__init__(name=name or self.__class__.__name__, epsilon=epsilon)
-        
-    def call(self, y_true, y_pred):
-        y_pred = tf.stack([y_pred[...,0],tf.math.maximum(y_pred[...,1], 0)], axis=-1)
-        return super().call(y_true, y_pred)
-    
-class CRPS_softplus(CRPS):
-    '''Continuous Ranked Probability Score. Sigma is processed through a softplus function'''
-    def __init__(self,name=None, epsilon=None) -> None:
-        super().__init__(name=name or self.__class__.__name__, epsilon=epsilon)
-
-    def call(self, y_true, y_pred):
-        y_pred = tf.stack([y_pred[...,0],tf.math.softplus(y_pred[...,1])], axis=-1)
-        return super().call(y_true, y_pred)
-    
-class CRPS_exp(CRPS):
-    '''Continuous Ranked Probability Score. Sigma is processed through an exponential function'''
-    def __init__(self,name=None, epsilon=None) -> None:
-        super().__init__(name=name or self.__class__.__name__, epsilon=epsilon)
-
-    def call(self, y_true, y_pred):
-        y_pred = tf.stack([y_pred[...,0],tf.math.exp(y_pred[...,1])], axis=-1)
-        return super().call(y_true, y_pred)
-    
-class CRPS_abs(CRPS):
-    '''Continuous Ranked Probability Score. Sigma is processed through an absolute value function'''
-    def __init__(self,name=None, epsilon=None) -> None:
-        super().__init__(name=name or self.__class__.__name__, epsilon=epsilon)
-
-    def call(self, y_true, y_pred):
-        y_pred = tf.stack([y_pred[...,0],tf.math.abs(y_pred[...,1])], axis=-1)
-        return super().call(y_true, y_pred)
-
 class ProbRegLoss(keras.losses.Loss):
     def __init__(self, name=None, epsilon=None, maxsig=None):
         super().__init__(name=name or self.__class__.__name__)
@@ -155,6 +119,25 @@ def weighted(cls, function):
 # create a module level variable to store the threshold
 ln._current_threshold = None
 
+class Sigma_Activation(keras.layers.Layer):
+    def __init__(self, activation='relu', name=None,):
+        super().__init__(trainable=False, name=name or self.__class__.__name__)
+        if activation == 'abs':
+            self.activation = tf.math.abs
+        elif activation == 'exp':
+            self.activation = tf.math.exp
+        else:
+            self.activation = keras.activations.get(activation)
+
+    def call(self, x):
+        return tf.concat([x[...,:-1], self.activation(x[...,-1:])], axis=-1)
+    
+create_core_model = ln.create_model
+
+def create_model(sigma_activation='relu', create_core_model_kwargs=None):
+    model = create_core_model(**create_core_model_kwargs)
+    model = keras.models.Sequential([model, Sigma_Activation(sigma_activation)])
+
 # redefine prepare_XY to use A instead of Y
 class Trainer(ln.Trainer):
     def prepare_XY(self, fields, **prepare_XY_kwargs):
@@ -201,16 +184,7 @@ def get_loss_function(loss_name: str, u=1):
     elif loss_name.startswith('pretr'):
         cls = PreTrainingLoss
     elif loss_name.startswith('crps'):
-        if loss_name.endswith('relu'):
-            cls = CRPS_relu
-        elif loss_name.endswith('exp'):
-            cls = CRPS_exp
-        elif loss_name.endswith('softplus'):
-            cls = CRPS_softplus
-        elif loss_name.endswith('abs'):
-            cls = CRPS_abs
-        else:
-            cls = CRPS
+        cls = CRPS
     # elif loss_name.startswith('weighted'):
     #     return WeightedProbRegLoss(a=2, b=1)
     else:
@@ -239,6 +213,8 @@ ln.Trainer = Trainer
 ln.get_default_metrics = get_default_metrics
 ln.get_loss_function = get_loss_function
 ln.postprocess = postprocess
+ln.create_model = create_model
+ln.create_core_model = create_core_model
 
 # uptade module level config dictionary
 ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram])
@@ -247,7 +223,7 @@ ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram])
 ut.set_values_recursive(ln.CONFIG_DICT,
                         {
                             'return_threshold': True,
-                            'loss': 'prob_reg_loss',
+                            'loss': 'crps',
                             'return_metric': 'val_ParametricCrossEntropyLoss',
                             'monitor' : 'val_ParametricCrossEntropyLoss',
                             'metric' : 'val_ParametricCrossEntropyLoss',
