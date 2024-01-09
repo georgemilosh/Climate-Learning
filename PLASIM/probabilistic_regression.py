@@ -134,9 +134,10 @@ class Sigma_Activation(keras.layers.Layer):
     
 create_core_model = ln.create_model
 
-def create_model(sigma_activation='relu', create_core_model_kwargs=None):
-    model = create_core_model(**create_core_model_kwargs)
+def create_model(input_shape, sigma_activation='relu', create_core_model_kwargs=None):
+    model = create_core_model(input_shape, **create_core_model_kwargs)
     model = keras.models.Sequential([model, Sigma_Activation(sigma_activation)])
+    return model
 
 # redefine prepare_XY to use A instead of Y
 class Trainer(ln.Trainer):
