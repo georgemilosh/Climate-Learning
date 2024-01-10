@@ -186,10 +186,6 @@ mods = []
 
 
 ## machine learning
-# from imblearn.over_sampling import RandomOverSampler
-from imblearn.under_sampling import RandomUnderSampler
-from imblearn.pipeline import Pipeline
-
 import tensorflow as tf
 from tensorflow import keras
 layers = keras.layers
@@ -1669,6 +1665,10 @@ def undersample(X, Y, u=1, random_state=42):
         raise NotImplementedError(f'{u = } < 1')
     elif u == 1:
         return X, Y
+    
+    # from imblearn.over_sampling import RandomOverSampler
+    from imblearn.under_sampling import RandomUnderSampler
+    from imblearn.pipeline import Pipeline
 
     n_pos_tr = np.sum(Y)
     n_neg_tr = len(Y) - n_pos_tr
