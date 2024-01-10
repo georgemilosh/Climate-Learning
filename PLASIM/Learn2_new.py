@@ -182,6 +182,8 @@ logger.level = logging.INFO
 
 HOSTNAME = socket.gethostname()
 
+mods = []
+
 
 ## machine learning
 # from imblearn.over_sampling import RandomOverSampler
@@ -3723,11 +3725,15 @@ def deal_with_lock(**kwargs):
             folder = sys.argv[1]
             print(f'moving code to {folder = }')
             move_to_folder(folder, **kwargs)
-            
+
+            ## create json files in folder
+            # config
             ut.dict2json(CONFIG_DICT,f'{folder}/config.json')
 
             # runs file (which will keep track of various runs performed in newly created folder)
             ut.dict2json({},f'{folder}/runs.json')
+
+            # field infos
             ut.dict2json(fields_infos, f'{folder}/fields_infos.json')
 
             return True
@@ -3762,6 +3768,7 @@ def parse_command_line():
 
         
 def main():
+    print(f"\n\nRunning Learn2_new with {mods if mods else 'no'} mods\n\n")
     if deal_with_lock():
         return
     
