@@ -1,6 +1,7 @@
-#########################################################################
-# In this file we showcase an example of inheritance from Learn2_new.py #
-######################################################################### 
+#######################################################################################################
+# In this file we showcase an example of inheritance from Learn2_new.py                               #
+# For an example of multiple inheritance, see intrinsically_interpretable_probabilistic_regression.py #
+#######################################################################################################
 
 import Learn2_new as ln
 ut = ln.ut
@@ -8,7 +9,10 @@ logger = ln.logger
 # log to stdout
 import logging
 import sys
-import os
+from pathlib import Path
+
+ln.mods.append(Path(__file__).stem) # add this module to the list of mods of Learn2_new.
+ln.dependencies[Path(__file__).name] = '' # add this module to the list of dependencies, so it will be automatically copied by ln.move_to_folder
 
 if __name__ == '__main__':
     logging.getLogger().level = logging.INFO
@@ -50,14 +54,3 @@ ut.set_values_recursive(ln.CONFIG_DICT, {'return_threshold': True}, inplace=True
 # override the main function as well (you don't need to edit the following code)
 if __name__ == '__main__':
     ln.main()
-
-    lock = ln.Path(__file__).resolve().parent / 'lock.txt'
-    if os.path.exists(lock): # there is a lock
-        # check for folder argument
-        if len(sys.argv) == 2:
-            folder = sys.argv[1]
-            print(f'moving code to {folder = }')
-            # copy this file
-            path_to_here = ln.Path(__file__).resolve() # path to this file
-            ln.shutil.copy(path_to_here, folder)
-
