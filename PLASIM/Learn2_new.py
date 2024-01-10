@@ -235,6 +235,16 @@ except ImportError: # custom copy for numpy<1.20
 arg_sep = '--' # separator between arguments
 value_sep = '__' # separator between an argument and its value
 
+# dependencies that need to be copied to the run folder: keys are source files, values are the subfolders in the run folder
+dependencies = {
+    'import_config.py': '',
+    'cleanup.py': '',
+    '../ERA/ERA_Fields_New.py': 'ERA',
+    '../ERA/TF_Fields.py': 'ERA',
+    '../general_purpose/utilities.py': 'ERA',
+    '../general_purpose/cartopy_plots.py': 'ERA',
+}
+
 ########## USAGE ###############################
 def usage(): 
     '''
@@ -852,31 +862,27 @@ def move_to_folder(folder, additional_files=None):
         If there is already code in `folder`
     '''
     folder = Path(folder).resolve()
-    ERA_folder = folder / 'ERA' # GM: container of the useful routines in a subfolder "folder/ERA". The abbreviation comes from the original routines deveoped for ERA5 reanalysis
-
-    if os.path.exists(ERA_folder):
+    if os.path.exists(folder):
         raise FileExistsError(f'Cannot copy scripts to {folder}: you already have some there')
-    ERA_folder.mkdir(parents=True,exist_ok=True)
+    
+    # create subdirectories for the dependencies
+    for subf in set(dependencies.values()):
+        (folder / subf).mkdir(parents=True,exist_ok=True)
 
     # copy this file
     path_to_here = Path(__file__).resolve() # path to this file
     shutil.copy(path_to_here, folder)
+    
+    path_to_here = path_to_here.parent # now it is the path to the folder where this script is
 
-    # copy other files in the same directory as this one
-    path_to_here = path_to_here.parent
-    shutil.copy(path_to_here / 'import_config.py', folder)
-    shutil.copy(path_to_here / 'cleanup.py', folder)
+    # copy dependencies
+    for src,dest in dependencies.items():
+        shutil.copy(path_to_here / src, folder / dest)
 
     # copy additional files
     if additional_files:
         for file in additional_files:
             shutil.copy(file, folder)
-
-    # copy useful files from other directories to 'folder/ERA/'
-    shutil.copy(path_to_here.parent / 'ERA/ERA_Fields_New.py', ERA_folder)
-    shutil.copy(path_to_here.parent / 'ERA/TF_Fields.py', ERA_folder)
-    shutil.copy(path_to_here.parent / 'general_purpose/cartopy_plots.py', ERA_folder)
-    shutil.copy(path_to_here.parent / 'general_purpose/utilities.py', ERA_folder)
 
     print(f'Now you can go to {folder} and run the learning from there:\n')
     print(f'\n\ncd \"{folder}\"\n')
