@@ -11,8 +11,7 @@ import logging
 import sys
 from pathlib import Path
 
-ln.mods.append(Path(__file__).stem) # add this module to the list of mods of Learn2_new.
-ln.dependencies[Path(__file__).name] = '' # add this module to the list of dependencies, so it will be automatically copied by ln.move_to_folder
+ln.add_mod(__file__)
 
 if __name__ == '__main__':
     logging.getLogger().level = logging.INFO

@@ -245,6 +245,10 @@ dependencies = {
     '../general_purpose/cartopy_plots.py': 'ERA',
 }
 
+def add_mod(file, destination=''):
+    mods.append(Path(file).stem) # add this module to the list of mods of Learn2_new.
+    dependencies[Path(file).name] = destination # add this module to the list of dependencies, so it will be automatically copied by ln.move_to_folder
+
 ########## USAGE ###############################
 def usage(): 
     '''
