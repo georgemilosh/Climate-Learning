@@ -4,7 +4,8 @@ logger = ln.logger
 # log to stdout
 import logging
 import sys
-import os
+
+ln.add_mod(__file__)
 
 if __name__ == '__main__':
     logging.getLogger().level = logging.INFO
@@ -236,14 +237,3 @@ ut.set_values_recursive(ln.CONFIG_DICT,
 # override the main function as well
 if __name__ == '__main__':
     ln.main()
-
-    lock = ln.Path(__file__).resolve().parent / 'lock.txt'
-    if os.path.exists(lock): # there is a lock
-        # check for folder argument
-        if len(sys.argv) == 2:
-            folder = sys.argv[1]
-            print(f'moving code to {folder = }')
-            # copy this file
-            path_to_here = ln.Path(__file__).resolve() # path to this file
-            ln.shutil.copy(path_to_here, folder)
-
