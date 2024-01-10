@@ -135,6 +135,8 @@ class Sigma_Activation(keras.layers.Layer):
 create_core_model = ln.create_model
 
 def create_model(input_shape, sigma_activation='relu', create_core_model_kwargs=None):
+    if create_core_model_kwargs is None:
+        create_core_model_kwargs = {}
     model = create_core_model(input_shape, **create_core_model_kwargs)
     model = keras.models.Sequential([model, Sigma_Activation(sigma_activation)])
     return model

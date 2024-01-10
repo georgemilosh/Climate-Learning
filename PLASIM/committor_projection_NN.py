@@ -5,7 +5,7 @@
 # '''
 import Learn2_new as ln
 logger = ln.logger
-early_stopping = ln.early_stopping
+# early_stopping = ln.early_stopping # this seems useless
 ut = ln.ut
 np = ln.np
 tf = ln.tf
@@ -308,16 +308,18 @@ def create_model(input_shape, filters_per_field=[1,1,1], merge_to_one=False, bat
 
 orig_train_model = ln.train_model
 
-def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics, early_stopping_kwargs=None, enable_early_stopping=False, scheduler_kwargs=None,
-                u=1, batch_size=1024, checkpoint_every=1, additional_callbacks=['csv_logger'], return_metric='val_CustomLoss', load_kernels_from=None, learn_kernels=True):
+def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics, load_kernels_from=None, learn_kernels=True, orig_train_model_kwargs=None):
     '''
-    Extra arguments:
+    Wrapper of the original train_model function. The extra arguments are:
 
     load_kernels_from : None|str|list
         How to initialize the kernels
     learn_kernels : bool
         Whether to train the kernels or leave them as they are at the initialization. By default True
     '''
+    if orig_train_model_kwargs is None:
+        orig_train_model_kwargs = {}
+
     if load_kernels_from is not None:
         if isinstance(load_kernels_from, str):
             if load_kernels_from.startswith('composite'):
@@ -358,6 +360,7 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
         model.build(input_shape=proj.output_shape)
 
         # compute the output of the first layer
+        batch_size = orig_train_model_kwargs.get('batch_size', 1024)
         _X_va = []
         for b in range(Y_va.shape[0]//batch_size + 1):
             _X_va.append(proj(X_va[b*batch_size:(b+1)*batch_size]).numpy())
@@ -370,10 +373,8 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
 
         logger.info('New data shapes:')
         logger.info(f'{X_tr.shape = }, {X_va.shape = }, {Y_tr.shape = }, {Y_va.shape = }')
-    
-    return orig_train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics, early_stopping_kwargs=early_stopping_kwargs, enable_early_stopping=enable_early_stopping, scheduler_kwargs=scheduler_kwargs,
-                            u=u, batch_size=batch_size, checkpoint_every=checkpoint_every, additional_callbacks=additional_callbacks, return_metric=return_metric)
 
+    return orig_train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics, **orig_train_model_kwargs)
 
 def load_model(checkpoint, compile=False):
     '''
@@ -406,6 +407,7 @@ def load_model(checkpoint, compile=False):
 #######################################################
 # set the modified functions to override the old ones #
 #######################################################
+ln.orig_train_model = orig_train_model
 ln.create_model = create_model
 ln.train_model = train_model
 ln.load_model = load_model
