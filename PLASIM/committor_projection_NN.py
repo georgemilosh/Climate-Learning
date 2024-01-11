@@ -13,6 +13,8 @@ keras = ln.keras
 layers = keras.layers
 pd = ln.pd
 
+from functools import wraps
+
 # log to stdout
 import logging
 import sys
@@ -225,12 +227,14 @@ class GradientRegularizer(keras.regularizers.Regularizer):
     def get_config(self):
         return {'c': self.c, 'weights': self.weights, 'periodic_lon': self.periodic_lon, 'normalize': self.normalize}
     
-class Trainer(ln.Trainer):
-    def prepare_XY(self, fields, **prepare_XY_kwargs):
-        res =  super().prepare_XY(fields, **prepare_XY_kwargs)
-        logger.info('Saving latitude as module level variable')
-        ln.lat = self.lat
-        return res
+orig_prepare_XY = ln.prepare_XY
+@wraps(orig_prepare_XY)
+def prepare_XY(self, fields, **kwargs):
+    res = orig_prepare_XY(self, fields, **kwargs)
+    # res = X, Y, year_permutation, lat, lon, [threshold]
+    logger.info('Saving latitude as module level variable')
+    ln.lat = res[3]
+    logger.info(f'{ln.lat = }')
 
 
 def create_model(input_shape, filters_per_field=[1,1,1], merge_to_one=False, batch_normalization=False, reg_mode='l2', reg_c=1, reg_weights=None, reg_periodicity=True, reg_norm=True, dense_units=[8,2], dense_activations=['relu', None], dense_dropouts=False, dense_l2coef=None):
@@ -410,7 +414,7 @@ ln.orig_train_model = orig_train_model
 ln.train_model = train_model
 ln.create_model = create_model
 ln.load_model = load_model
-ln.Trainer = Trainer
+ln.prepare_XY = prepare_XY
 ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram]) # module level config dictionary
 
 if __name__ == '__main__':
