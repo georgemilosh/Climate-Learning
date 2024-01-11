@@ -1,3 +1,7 @@
+import time
+print('this is mod2')
+time.sleep(2)
+
 import core as ln
 
 ln.mods.append(__name__)

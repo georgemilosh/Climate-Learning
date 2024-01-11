@@ -117,8 +117,6 @@ def weighted(cls, function):
     return WeightedLoss
 
 
-# create a module level variable to store the threshold
-ln._current_threshold = None
 
 class Sigma_Activation(keras.layers.Layer):
     def __init__(self, activation='relu', name=None,):
@@ -141,6 +139,9 @@ def create_model(input_shape, sigma_activation='relu', create_core_model_kwargs=
     model = create_core_model(input_shape, **create_core_model_kwargs)
     model = keras.models.Sequential([model, Sigma_Activation(sigma_activation)])
     return model
+
+# create a module level variable to store the threshold
+ln._current_threshold = None
 
 # redefine prepare_XY to use A instead of Y
 class Trainer(ln.Trainer):
