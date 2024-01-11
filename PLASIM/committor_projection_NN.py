@@ -229,12 +229,14 @@ class GradientRegularizer(keras.regularizers.Regularizer):
     
 orig_prepare_XY = ln.prepare_XY
 @wraps(orig_prepare_XY)
-def prepare_XY(self, fields, **kwargs):
-    res = orig_prepare_XY(self, fields, **kwargs)
+def prepare_XY(fields, **kwargs):
+    res = orig_prepare_XY(fields, **kwargs)
     # res = X, Y, year_permutation, lat, lon, [threshold]
     logger.info('Saving latitude as module level variable')
     ln.lat = res[3]
     logger.info(f'{ln.lat = }')
+
+    return res
 
 
 def create_model(input_shape, filters_per_field=[1,1,1], merge_to_one=False, batch_normalization=False, reg_mode='l2', reg_c=1, reg_weights=None, reg_periodicity=True, reg_norm=True, dense_units=[8,2], dense_activations=['relu', None], dense_dropouts=False, dense_l2coef=None):
