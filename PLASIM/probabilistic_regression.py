@@ -172,8 +172,19 @@ class Trainer(ln.Trainer):
             self.Y = A
             ln._current_threshold = threshold # save the threshold in a module level variable
         return self.X, self.Y, self.year_permutation, self.lat, self.lon
+    
+# we redefine check_config_dict to ensure return_threshold is True
+orig_check_config_dict = ln.check_config_dict
+def check_config_dict(config_dict, correct_mistakes=True):
+    config_dict_flat = orig_check_config_dict(config_dict, correct_mistakes=correct_mistakes)
+    if not config_dict_flat['return_threshold']:
+        if correct_mistakes:
+            config_dict_flat['return_threshold'] = True
+        else:
+            raise ValueError('return_threshold must be True')
+    return config_dict_flat
 
-old_get_loss_function = ln.get_loss_function
+orig_get_loss_function = ln.get_loss_function
 def get_loss_function(loss_name: str, u=1):
     loss_name = loss_name.lower()
     args = []
@@ -193,7 +204,7 @@ def get_loss_function(loss_name: str, u=1):
     # elif loss_name.startswith('weighted'):
     #     return WeightedProbRegLoss(a=2, b=1)
     else:
-        return old_get_loss_function(loss_name, u=u)
+        return orig_get_loss_function(loss_name, u=u)
     
     if func:
         return weighted(cls, func)(*args, **kwargs)
@@ -215,6 +226,7 @@ def postprocess(x):
 # set the modified functions to override the old ones #
 #######################################################
 ln.Trainer = Trainer
+ln.check_config_dict = check_config_dict
 ln.get_default_metrics = get_default_metrics
 ln.get_loss_function = get_loss_function
 ln.postprocess = postprocess
