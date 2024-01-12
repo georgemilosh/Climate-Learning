@@ -3778,7 +3778,7 @@ def parse_command_line():
 
         
 def main():
-    print(f"\n\nRunning Learn2_new with {mods if mods else 'no'} mods\n\n")
+    print(f"\n\nRunning {f'Learn2_new with {mods = }' if mods else 'vanilla Learn2_new'}\n\n")
     if deal_with_lock():
         return
     

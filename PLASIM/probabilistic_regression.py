@@ -214,6 +214,8 @@ def get_default_metrics(fullmetrics=False, u=1):
     if fullmetrics:
         metrics = [
             ParametricCrossEntropyLoss(ln._current_threshold),
+            ProbRegLoss(),
+            CRPS(),
         ]
     else:
         metrics=None
