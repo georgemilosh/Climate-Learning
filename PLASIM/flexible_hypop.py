@@ -44,14 +44,12 @@ import committor_projection_NN as core
 
 try:
     ln = core.ln
-except NameError:
+except AttributeError:
     ln = core
 assert ln.__name__ == 'Learn2_new', 'core must import Learn2_new as ln or be Learn2_new itself'
 
-try:
-    Trainer = core.Trainer
-except NameError:
-    Trainer = ln.Trainer
+
+Trainer = ln.Trainer
 
 logger = core.logger
 
