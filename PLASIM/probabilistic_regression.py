@@ -50,7 +50,7 @@ class CRPS(keras.losses.Loss):
 
     def call(self, y_true, y_pred):
         sig = y_pred[...,1:2]
-        assert tf.debugging.assert_non_negative(sig, 'Model predicted negative variance, please fix it!')
+        tf.debugging.assert_non_negative(sig, 'Model predicted negative variance, please fix it!')
         sig = sig + self.epsilon
         y_pred = y_pred[...,0:1]
         res = (y_true - y_pred)/sig
@@ -72,7 +72,7 @@ class ProbRegLoss(keras.losses.Loss):
             penalty = tf.math.square(y_pred[...,1:2]) - sig2
         # mu = y_pred[...,0:1]
         y_pred = y_pred[...,0:1] # for memory efficiency
-        assert y_pred.shape == sig2.shape == y_true.shape
+        assert y_pred.shape == sig2.shape == y_true.shape, f'{y_pred.shape = }, {sig2.shape = }, {y_true.shape = }'
         return tf.math.square(y_true - y_pred)/sig2 + tf.math.log(sig2) + penalty
     
 # class WeightedProbRegLoss(ProbRegLoss):
@@ -95,7 +95,8 @@ class ParametricCrossEntropyLoss(keras.losses.Loss):
 
     def call(self, y_true, y_pred):
         y_true = tf.cast(y_true >= self.threshold, tf.float32)
-        sig = tf.math.abs(y_pred[...,1:2])
+        sig = y_pred[...,1:2]
+        tf.debugging.assert_non_negative(sig, 'Model predicted negative variance, please fix it!')
         y_pred = y_pred[...,0:1]
         y_pred = q(y_pred,sig,self.threshold)
         assert y_pred.shape == y_true.shape, f'{y_pred.shape = }, {y_true.shape = }'
