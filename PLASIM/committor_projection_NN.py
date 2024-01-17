@@ -339,9 +339,18 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
                 np.save(f'{folder}/significance.npy', comp)
             else:
                 raise NotImplementedError(f'Unknown option {load_kernels_from}')
+            
+            proj = model.layers[0]
+            for i in range(5):
+                try:
+                    FPF = proj.filters_per_field
+                    break
+                except AttributeError:
+                    proj = proj.layers[0]
+
 
             load_kernels_from = []
-            for i,fpf in enumerate(model.layers[0].filters_per_field):
+            for i,fpf in enumerate(FPF):
                 if fpf is None:
                     continue
                 elif fpf == 1:
@@ -353,15 +362,25 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
         if not isinstance(load_kernels_from, list):
             raise TypeError(f'at this point load_kernels_from should be of type list, not {type(load_kernels_from)}')
 
-        model.layers[0].set_weights(load_kernels_from)
+        proj.set_weights(load_kernels_from)
 
     if not learn_kernels: # we can compute the result of the first layer on the data at once at the beginning. Also since we won't compute gradients through the projection layer, it is not trained.
         logger.info('Projection is not trainable: computing it at the beginning')
 
         # split the model
-        proj = keras.models.Sequential(model.layers[:1])
+        proj = model.layers[0]
+        rest = model.layers[1:]
+        for i in range(5):
+            try:
+                FPF = proj.filters_per_field
+                break
+            except AttributeError:
+                proj = proj.layers[0]
+                rest = proj.layers[1:] + rest
+
+        proj = keras.models.Sequential([proj])
         proj.save(f'{folder}/projection') # save the projection
-        model = keras.models.Sequential(model.layers[1:]) # override model
+        model = keras.models.Sequential(rest) # override model
         model.build(input_shape=proj.output_shape)
 
         # compute the output of the first layer
