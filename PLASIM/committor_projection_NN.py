@@ -328,12 +328,12 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     if load_kernels_from is not None:
         if isinstance(load_kernels_from, str):
             if load_kernels_from.startswith('composite'):
-                comp = np.mean(X_tr[Y_tr==1], axis=0)
+                comp = np.mean(X_tr[Y_tr > 0.5], axis=0)
                 np.save(f'{folder}/composite.npy', comp)
             elif load_kernels_from.startswith('significance'):
-                comp = np.mean(X_tr[Y_tr==1], axis=0)
+                comp = np.mean(X_tr[Y_tr > 0.5], axis=0)
                 np.save(f'{folder}/composite.npy', comp)
-                sig = np.std(X_tr[Y_tr==1], axis=0)
+                sig = np.std(X_tr[Y_tr > 0.5], axis=0)
                 sig[sig==0] = 1
                 comp = comp/sig
                 np.save(f'{folder}/significance.npy', comp)
