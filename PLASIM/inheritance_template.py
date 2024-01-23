@@ -2,6 +2,8 @@
 # In this file we showcase an example of inheritance from Learn2_new.py                               #
 # For an example of multiple inheritance, see intrinsically_interpretable_probabilistic_regression.py #
 #######################################################################################################
+description = """Inheritance template"""
+dependencies = None
 
 import Learn2_new as ln
 ut = ln.ut
@@ -10,8 +12,6 @@ logger = ln.logger
 import logging
 import sys
 from pathlib import Path
-
-ln.add_mod(__file__)
 
 if __name__ == '__main__':
     logging.getLogger().level = logging.INFO
@@ -43,6 +43,7 @@ def normalize_X(X, fold_folder, mode='mycustommode', recompute=False):
 # set the modified functions to override the old ones #
 #######################################################
 def enable():
+    ln.add_mod(__file__, description, dependencies) # add this mod
     # override functions
     ln.Trainer = Trainer
     ln.normalize_X = normalize_X
@@ -54,6 +55,7 @@ def enable():
     ut.set_values_recursive(ln.CONFIG_DICT, {'return_threshold': True}, inplace=True)
 
 def disable():
+    ln.remove_mod(__file__)
     # restore original functions
     ln.Trainer = orig_Trainer
     ln.normalize_X = orig_normalize_X

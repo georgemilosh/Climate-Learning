@@ -3,6 +3,9 @@
 
 # @author: Alessandro Lovo
 # '''
+description = """Intrinsically interpretable neural network architecture. Can be used to perform committor projection."""
+dependencies = None
+
 import Learn2_new as ln
 logger = ln.logger
 # early_stopping = ln.early_stopping # this seems useless
@@ -19,8 +22,6 @@ from functools import wraps
 import logging
 import sys
 from pathlib import Path
-
-ln.add_mod(__file__)
 
 if __name__ == '__main__':
     logging.getLogger().level = logging.INFO
@@ -429,6 +430,7 @@ def load_model(checkpoint, compile=False):
 # set the modified functions to override the old ones #
 #######################################################
 def enable():
+    ln.add_mod(__file__, description, dependencies)
     ln.orig_train_model = orig_train_model
     ln.train_model = train_model
     ln.create_model = create_model
@@ -437,6 +439,7 @@ def enable():
     ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram]) # module level config dictionary
 
 def disable():
+    ln.remove_mod(__file__)
     del ln.orig_train_model
     ln.train_model = orig_train_model
     ln.create_model = orig_create_model

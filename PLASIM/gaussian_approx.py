@@ -3,6 +3,9 @@
 
 # @author: Alessandro Lovo
 # '''
+description = """Gaussian approximation"""
+dependencies = None
+
 import Learn2_new as ln
 logger = ln.logger
 ut = ln.ut
@@ -18,8 +21,6 @@ import scipy.special as ss
 import logging
 import sys
 import os
-
-ln.add_mod(__file__)
 
 if __name__ == '__main__':
     logging.getLogger().level = logging.INFO
@@ -534,14 +535,15 @@ def k_fold_cross_val(folder, X, Y, train_model_kwargs=None, optimal_checkpoint_k
 # set the modified functions to override the old ones #
 #######################################################
 def enable():
+    ln.add_mod(__file__, description, dependencies)
     ln.k_fold_cross_val = k_fold_cross_val
     ln.train_model = train_model
     ln.Trainer = Trainer
-
     ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram]) # module level config dictionary
     ut.set_values_recursive(ln.CONFIG_DICT, {'return_threshold': True}, inplace=True)
 
 def disable():
+    ln.remove_mod(__file__)
     ln.k_fold_cross_val = orig_k_fold_cross_val
     ln.train_model = orig_train_model
     ln.Trainer = orig_Trainer

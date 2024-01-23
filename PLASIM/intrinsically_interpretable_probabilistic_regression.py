@@ -3,6 +3,9 @@
 
 # @author: Alessandro Lovo
 # '''
+description = """Intrinsically interpretable probabilistic regression. Combines iinn and pr."""
+dependencies = None # we don't have any dependencies intrinsic to this module.
+
 import committor_projection_NN as iinn
 import probabilistic_regression as pr
 
@@ -15,8 +18,6 @@ ut = ln.ut
 import logging
 import sys
 
-ln.add_mod(__file__)
-
 if __name__ == '__main__':
     logging.getLogger().level = logging.INFO
     logging.getLogger().handlers = [logging.StreamHandler(sys.stdout)]
@@ -26,9 +27,11 @@ def enable():
     # we need to enable iinn first as both pr and iinn modify the create_model function. And pr adds the activation function to the core model, so it needs to come last.
     iinn.enable()
     pr.enable()
+    ln.add_mod(__file__, description, dependencies)
 
 def disable():
     # when disabling we go in reverse order: pr and then iinn
+    ln.remove_mod(__file__)
     pr.disable()
     iinn.disable()
 

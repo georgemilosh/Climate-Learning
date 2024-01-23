@@ -3,6 +3,9 @@
 
 # @author: Alessandro Lovo
 # '''
+description = """Resampling."""
+dependencies = None
+
 import Learn2_new as ln
 logger = ln.logger
 early_stopping = ln.early_stopping
@@ -15,8 +18,6 @@ pd = ln.pd
 import logging
 import sys
 import os
-
-ln.add_mod(__file__)
 
 if __name__ == '__main__':
     logging.getLogger().level = logging.INFO
@@ -533,12 +534,14 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
 # set the modified function to override the old one #
 #####################################################
 def enable():
+    ln.add_mod(__file__, description, dependencies)
     ln.train_model = train_model
     ln.optimal_checkpoint = optimal_checkpoint
     ln.compute_p_func = compute_p_func
     ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram]) # module level config dictionary
 
 def disable():
+    ln.remove_mod(__file__)
     ln.train_model = orig_train_model
     ln.optimal_checkpoint = orig_optimal_checkpoint
     del ln.compute_p_func

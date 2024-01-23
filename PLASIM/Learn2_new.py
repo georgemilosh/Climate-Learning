@@ -68,9 +68,9 @@ You can also import parameters from a previous run by using the argument 'import
         tau=0
         T=12
         fields="['t2m']"
-        
-To facilitate debugging and development it is highly advised to work with small dataset. We have orginazed our files so that 
-    if you choose: datafolder=Data_CESM_short the code will load for a different source (with fewer number of years) 
+
+To facilitate debugging and development it is highly advised to work with small dataset. We have orginazed our files so that
+    if you choose: datafolder=Data_CESM_short the code will load for a different source (with fewer number of years)
 
 Somewhat less obvious is the treatment of skip connections that are used in `create_model` method. The point is that we convert the input
 to the dictionary inside the function but we couldn't include it as a kwarg for Learn2_new.py because of conflicts with file names when
@@ -78,7 +78,7 @@ saving model checkpoints. Thus we provide an input which is subsequently process
 
     python Learn2_new.py conv_skip="[[[0,2]],[[0,2],[1,2]]]"=
 will result in in two runs, one with a skip connections between layers 0 and 2, and the second run with two skip connections, one between
-0 and 2 layers and one between 1 and 2 layers. 
+0 and 2 layers and one between 1 and 2 layers.
 
     While originally we developed the code to work with a single time, we have subsequently modified it to allow inputs which
     use sliding windows with time. To engage such a sliding window it is important to specify the input parameters precisely:
@@ -88,7 +88,7 @@ will result in in two runs, one with a skip connections between layers 0 and 2, 
         in time. The difference that is computed `leftmargin` = `label_period_start` - `time_start` tells us how long the extra
         time information is (going back in time). The window will be slided on a daily basis, so the extra dimension length
         will become `leftmargin`+1. It should be noted that currently we do not support tensorflow Datasets and thus one should
-        be careful and not apply big time windows, or possibly risk to overrun RAM. having leftmargin nonzero is safer if 
+        be careful and not apply big time windows, or possibly risk to overrun RAM. having leftmargin nonzero is safer if
         dimensionality reduction was performed beforehand.
 
 
@@ -97,7 +97,7 @@ FAQ
 Q: what is tau?
     It is the delay between the prediction and the observation, and is usually supposed to be negative (prediction before observation)
 
-Q: What if I want to work with 1000 years that are a subset of 8000 years of Plasim_LONG? 
+Q: What if I want to work with 1000 years that are a subset of 8000 years of Plasim_LONG?
     You can do it by running with `dataset_years = 8000` and `year_list = 'range(1000)'`, which will use the first 1000 years of the 8000 year dataset
     you can also provide `year_list = 'range(1000,3000,2)'` which will take the even years between 1000 and 3000
 
@@ -182,7 +182,7 @@ logger.level = logging.INFO
 
 HOSTNAME = socket.gethostname()
 
-mods = []
+mods = {}
 
 
 ## machine learning
@@ -225,7 +225,7 @@ except ImportError: # custom copy for numpy<1.20
         # define a function which will raise error when called
         def sliding_window_view(*args, **kwargs):
             raise NotImplementedError("you need to update ERA_Fields_New.py to have the sliding_window_view function, or update numpy to 1.20 or higher")
-    
+
 
 # separators to create the run name from the run arguments
 arg_sep = '--' # separator between arguments
@@ -241,12 +241,26 @@ dependencies = {
     '../general_purpose/cartopy_plots.py': 'ERA',
 }
 
-def add_mod(file, destination=''):
-    mods.append(Path(file).stem) # add this module to the list of mods of Learn2_new.
-    dependencies[Path(file).name] = destination # add this module to the list of dependencies, so it will be automatically copied by ln.move_to_folder
+def get_dependencies():
+    all_dependencies = dependencies.copy()
+    for mod in mods.values():
+        all_dependencies.update(mod['dependencies'])
+    return all_dependencies
+
+def add_mod(file, description=None, dependencies=None, destination=''):
+    mods[Path(file).stem] = { # add this module to the dict of mods of Learn2_new.
+        'description': description,
+        'dependencies': {
+            Path(file).name : destination, # add this module to the list of dependencies, so it will be automatically copied by ln.move_to_folder
+            **(dependencies or {}) # add the dependencies of the mod
+        }
+    }
+
+def remove_mod(file):
+    mods.pop(Path(file).stem)
 
 ########## USAGE ###############################
-def usage(): 
+def usage():
     '''
     Returns the documentation of this module that explains how to use it.
     '''
@@ -266,7 +280,7 @@ def get_default_params(func, recursive=False):
         to be able to use the recursive feature, the function must be defined inside this module
     recursive : bool, optional
         if True arguments of the type '*_kwargs' will be interpreted as kwargs to pass to function * and `get_default_params` will be applied to * as well to retrieve the default values
-    
+
     Returns
     -------
     default_params : dict
@@ -305,7 +319,7 @@ def build_config_dict(functions):
     -----------
     functions : list
         list of functions or string with the function name
-    
+
     Returns
     -------
     d : dict
@@ -358,7 +372,7 @@ def check_config_dict(config_dict, correct_mistakes=True):
                 ut.set_values_recursive(config_dict, {'fields': config_dict_flat['fields']}, inplace=True)
             else:
                 raise ValueError(f"{label_field = } is not one of the loaded fields: please add a ghost field as {label_field+'_ghost'}")
-            
+
 
         unusual_settings = 0
         logger.warning('Checking config dictionary for unusual settings\n\n')
@@ -395,7 +409,7 @@ def check_config_dict(config_dict, correct_mistakes=True):
             time.sleep(t) # pause
         else:
             logger.warning('Found no unusual settings in the config dictionary.\n\n')
-        
+
     except Exception as e:
         raise KeyError('Invalid config dictionary') from e
     return config_dict_flat
@@ -416,7 +430,7 @@ def remove_default_kwargs(kwargs:dict, config_dict_flat:dict):
     dict
         epurated run_args
     '''
-    
+
     new_kwargs = {}
     for arg,value in kwargs.items():
         if value != config_dict_flat[arg]:
@@ -450,11 +464,11 @@ def parse_run_name(run_name, evaluate=False):
     evaluate : bool, optional
         whether to try to evaluate the string expressions (True), or leave them as strings (False).
         If unable to evalate an expression, it is left as is
-    
+
     Returns
     -------
     dict
-    
+
     Examples
     --------
     >>> parse_run_name('a__5--b__7')
@@ -507,7 +521,7 @@ def select_compatible(run_args, conditions, require_unique=True, config=None):
     KeyError
         If require_unique and either none or more than one run are found compatible.
 
-    Examples   
+    Examples
     --------
     >>> run_args = {'1': {'tau': -5}, '2': {'percent': 1, 'tau': -10}, '3': {'percent': 1, 'tau': -5}}
     >>> select_compatible(run_args, {'tau': -10})
@@ -597,7 +611,7 @@ def group_by_varying(run_args, variable='tau', config_dict_flat=None, sort=False
     [{'args': {}, 'runs': ['1', '2', '3'], 'percent': [5, 1, 1]}]
     '''
     _run_args = deepcopy(run_args)
-    
+
     # remove arguments to ignore
     if ignore is not None:
         if isinstance(ignore, str):
@@ -607,7 +621,7 @@ def group_by_varying(run_args, variable='tau', config_dict_flat=None, sort=False
         for args in _run_args.values():
             for ign in ignore:
                 args.pop(ign, None)
-    
+
     # find the groups
     try:
         # move the variable to a separate dictionary removing it from the arguments in _run_args
@@ -656,11 +670,11 @@ def make_groups(runs, variable='tau', config_dict_flat=None, sort=False, ignore=
         wether and how to sort the runs according to the variable, default False, i.e. no sorting, which means the runs will be in chronological order
     ignore : list[str], optional
         list of kwargs to ignore when grouping runs together
-    
+
     Returns
     -------
     list
-        list of groups. 
+        list of groups.
         Each group is a dictionary with the same structure as the output of `group_by_varying` but the argument 'runs' contains the full run dictionary instead of just the run numbers
     '''
     run_args = {k:v['args'] for k,v in runs.items()}
@@ -710,16 +724,16 @@ def get_run(load_from, current_run_args:dict=None,  ignorable_keys=None, runs_pa
             Providing 'first--percent__1' will return the first compatible performed run with `percent` = 1
             Providing 'last--percent__1--tau__same' will return the last compatible run with `percent` = 1 and `tau` at the same value of the current run
             To use the 'same' keyword you must provide `current_run_name`
-            `load_from` can also be the full name of a run, in which case compatibility checks are skipped. 
+            `load_from` can also be the full name of a run, in which case compatibility checks are skipped.
         If int:
             it is the number of the run (>0) or if negative is the n-th last run
-        If None: 
+        If None:
             the function returns None
     current_run_args : dict, optional
         Flattened dictionary with all the arguments of the current run, used to check for compatibility issues when loading a model
     ignorable_keys : list[str], optional
         list of arguments to ignore when checking for compatibility
-    
+
     Returns
     -------
     run_name : str
@@ -734,7 +748,7 @@ def get_run(load_from, current_run_args:dict=None,  ignorable_keys=None, runs_pa
     '''
     if load_from is None:
         return None
-    
+
     if ignorable_keys is None:
         ignorable_keys = []
 
@@ -761,14 +775,14 @@ def get_run(load_from, current_run_args:dict=None,  ignorable_keys=None, runs_pa
             if_ambiguous_choose = 'last'
         elif load_from.startswith('first'):
             if_ambiguous_choose = 'first'
-        
+
         try:
             load_from = int(load_from)
         except ValueError: # cannot convert load_from to int, so it must be a string that doesn't contain only numbers:
             load_from = parse_run_name(load_from, evaluate=True)
     elif isinstance(load_from, dict):
         if_ambiguous_choose = load_from.pop('if_ambiguous_choose', None)
-    
+
     # now load_from is either int or dict
 
     # handle 'same' options
@@ -781,7 +795,7 @@ def get_run(load_from, current_run_args:dict=None,  ignorable_keys=None, runs_pa
                 additional_relevant_keys.append(k)
         for k in additional_relevant_keys:
             load_from.pop(k)
-    
+
     # arguments relevant for model architecture
     relevant_keys = list(get_default_params(create_model).keys()) + list(get_default_params(load_data).keys()) + ['nfolds'] + additional_relevant_keys
     relevant_keys = list(set(relevant_keys).difference(ignorable_keys))
@@ -801,14 +815,14 @@ def get_run(load_from, current_run_args:dict=None,  ignorable_keys=None, runs_pa
             compatible_runs[run_id] = run
 
     runs = compatible_runs
-    
+
 
     if len(runs) == 0:
         logger.warning('None of the previous runs are compatible with this one for performing transfer learning')
         # GM: It would be nice if the warning specifies the function that reports them.
         # AL: This can be achieved in formatting the logger
         return None
-    
+
     logger.info(f'Found {len(runs)} compatible runs with the current one.')
 
     if isinstance(load_from, int):
@@ -838,7 +852,7 @@ def get_run(load_from, current_run_args:dict=None,  ignorable_keys=None, runs_pa
     else:
         r = runs[str(l)]
     run_name = r['name']
-    
+
     return run_name
 
 ######################################
@@ -864,19 +878,21 @@ def move_to_folder(folder, additional_files=None):
     folder = Path(folder).resolve()
     if os.path.exists(folder):
         raise FileExistsError(f'Cannot copy scripts to {folder}: you already have some there')
-    
+
+    # get all dependencies
+    all_dependencies = get_dependencies()
     # create subdirectories for the dependencies
-    for subf in set(dependencies.values()):
+    for subf in set(all_dependencies.values()):
         (folder / subf).mkdir(parents=True,exist_ok=True)
 
     # copy this file
     path_to_here = Path(__file__).resolve() # path to this file
     shutil.copy(path_to_here, folder)
-    
+
     path_to_here = path_to_here.parent # now it is the path to the folder where this script is
 
     # copy dependencies
-    for src,dest in dependencies.items():
+    for src,dest in all_dependencies.items():
         shutil.copy(path_to_here / src, folder / dest)
 
     # copy additional files
@@ -888,8 +904,8 @@ def move_to_folder(folder, additional_files=None):
     print(f'\n\ncd \"{folder}\"\n')
     # print(f'cd \"{folder}\"\n has been copied to your clipboard :)')
     # pyperclip.copy(f'cd \"{folder}\"')
-    
-    
+
+
 ############################################
 ########## DATA PREPROCESSING ##############
 ############################################
@@ -969,13 +985,13 @@ except FileNotFoundError:
             'label': 'Surface Soil Moisture',
         }
     }
-    
+
     fields_infos = {
         'Plasim' : fields_infos_Plasim,
         'CESM'   : field_infos_CESM,
         'ERA5'   : field_infos_ERA5,
     }
-    
+
 
 @ut.exec_time(logger)  # prints the time it takes for the function to run
 @ut.indent_logger(logger)   # indents the log messages produced by this function
@@ -1030,21 +1046,21 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
         name of the file from which to load the land sea mask, by default None
     lsm2mask : bool, optional
         whether to apply land sea mask to the area mask (See Plasim_Field)
-    
-        
+
+
     Returns
     -------
     _fields: dict
         dictionary of ERA_Fields.Plasim_Field objects
     '''
-    
+
     if area != filter_area:
         logger.warning(f'Fields will be filtered on a different area ({filter_area}) than the region of interest ({area}). If {area} is not a subset of {filter_area} the area integral will be different with and without filtering.')
     if datafolder is None:
         datafolder = f'Data_{Model}'
     elif Model.lower() not in datafolder.lower():
         logger.warning(f'{datafolder = } does not contain the name of the model ({Model})')
-    
+
     dataset_suffix = ''
     if Model.lower() == 'plasim':
         if dataset_years == 1000:
@@ -1065,7 +1081,7 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
     elif isinstance(year_list, tuple):
         year_list = np.arange(*year_list) # unpack the arguments of the tuple
 
-    if sampling == '3hrs': 
+    if sampling == '3hrs':
         prefix = ''
         if dataset_suffix == '':
             file_suffix = f'../Climate/{datafolder}/'
@@ -1099,7 +1115,7 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
         if field_name.endswith('_filtered'): # TO IMPROVE: if you have to filter the data load just the interesting part
             field_name = field_name.rsplit('_', 1)[0] # remove '_filtered'
             do_filter = True
-            
+
         if field_name not in fields_infos[Model]:
             raise KeyError(f'Unknown field {field_name}')
         f_infos = fields_infos[Model][field_name]
@@ -1137,7 +1153,7 @@ def load_data(dataset_years=8000, year_list=None, sampling='', Model='Plasim', a
 
     if _area_integral_override:
         raise KeyError(f'Ignored elements in _area_integral_override: {list(_area_integral_override.keys())}. Check for misspelling!')
-    
+
     return _fields
 
 @ut.exec_time(logger)
@@ -1188,9 +1204,9 @@ def assign_labels(field, time_start=30, time_end=120, T=14, percent=5, threshold
         elif (label_period_start is not  None) and (label_period_end is not None):
             A = field.compute_time_average(day_start=day0+label_period_start, day_end=day0+label_period_end, T=T, weights=A_weights)
             _, threshold = ef.is_over_threshold(field.to_numpy(A), threshold=None, percent=percent)
-    
+
     A = field.compute_time_average(day_start=day0+time_start, day_end=day0+time_end, T=T, weights=A_weights)
-    if hasattr(field, 'A'): 
+    if hasattr(field, 'A'):
         field.A = A # This is a placeholder variable that can be used as a running mean save. Problem is that our routines do not output it and rewritting could cause issues with backward compatibility
     labels, threshold = ef.is_over_threshold(field.to_numpy(A), threshold=threshold, percent=percent)
     logger.info(f"{threshold = }")
@@ -1239,7 +1255,7 @@ def make_X(fields, time_start=30, time_end=120, T=14, tau=0):
 
 @ut.exec_time(logger)
 @ut.indent_logger(logger)
-def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0, percent=5, threshold=None, label_period_start=None, 
+def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0, percent=5, threshold=None, label_period_start=None,
             label_period_end=None, A_weights=None, return_threshold=False):
     '''
     Combines `make_X` and `assign_labels`
@@ -1271,7 +1287,7 @@ def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0,
         if provided will influence how running mean is computed
     return_threshold: bool, optional
         if provided as True the output also involves threshold_new
-        
+
     Returns:
     --------
     X : np.ndarray
@@ -1303,8 +1319,8 @@ def make_XY(fields, label_field='t2m', time_start=30, time_end=120, T=14, tau=0,
         except KeyError:
             raise KeyError(f'Unable to find label field {label_field} among the provided fields {list(fields.keys())}')
 
-    Y = assign_labels(lf, time_start=time_start, time_end=time_end, T=T, percent=percent, threshold=threshold, 
-                      label_period_start=label_period_start, label_period_end=label_period_end, A_weights=A_weights, 
+    Y = assign_labels(lf, time_start=time_start, time_end=time_end, T=T, percent=percent, threshold=threshold,
+                      label_period_start=label_period_start, label_period_end=label_period_end, A_weights=A_weights,
                       return_threshold=return_threshold)
     if return_threshold: # Y is actually a tuple
         Y, threshold_new = Y
@@ -1333,7 +1349,7 @@ def roll_X(X, roll_axis='lon', roll_steps=0):
         'lat' : southward
         'lon' : eastward
         'field' : forward in the numbering of the fields
-    
+
     Returns
     -------
     np.ndarray
@@ -1379,14 +1395,14 @@ def normalize_X(X, fold_folder, mode='pointwise', recompute=False):
             'global': mean and std are computed globally on each field
             'mean': mean and std are computed pointwise and then averaged over each field
     recompute: bool
-        If True the normalization will be computed again based on the inputs, even if the 
+        If True the normalization will be computed again based on the inputs, even if the
         normalization files already exists. Notice, this action will overwrite the files
 
     Returns
     -------
     X_n : np.ndarray of same shape as X
         normalized data
-    X_mean : np.ndarray 
+    X_mean : np.ndarray
         mean of X along the axes given by the normalization mode
     X_std : np.ndarray
         std of X along the axes given by the normalization mode
@@ -1426,21 +1442,21 @@ def normalize_X(X, fold_folder, mode='pointwise', recompute=False):
 
         logger.info(f'{np.sum((X_std < 1e-4)*(X_std > 0))/np.product(X_std.shape)*100 :.4f}\% of the data have non zero std below 1e-4')
         X_std[X_std==0] = 1 # If there is no variance we shouldn't divide by zero ### hmmm: this may create discontinuities
-                            # This is necessary because we will be masking (filtering) certain parts of the map 
+                            # This is necessary because we will be masking (filtering) certain parts of the map
                             #     for certain fields, e.g. mrso, setting them to zero. Also there are some fields that don't
                             #     vary over the ocean. I've tried normalizing by field, rather than by grid point, in which case
                             #     the problem X_std==0 does not arise, but then the results came up slightly worse.
         # save X_mean and X_std
         logger.info(f'saving to: {fold_folder}/X_mean.npy and {fold_folder}/X_std.npy')
-        np.save(f'{fold_folder}/X_mean.npy', X_mean) 
+        np.save(f'{fold_folder}/X_mean.npy', X_mean)
         np.save(f'{fold_folder}/X_std.npy', X_std)
-    
+
     return  (X - X_mean)/X_std, X_mean, X_std
 
 
 #####################################################
-########### PCA Autoencoder  ################        
-##################################################### 
+########### PCA Autoencoder  ################
+#####################################################
 
 class PCAencoder(PCA):
     def predict(self,*args,**kwargs):
@@ -1487,7 +1503,7 @@ class PCAer:
             logger.info(f'saving in {self.folder}/encoder.pkl')
             with open(f'{self.folder}/encoder.pkl', 'wb') as file_pi:
                 pickle.dump(self.encoder, file_pi)
-        return result_fit 
+        return result_fit
 
     def fit_with_timeout(self,counter,*args,timeout=300,maxIter=3, **kwargs):
         '''
@@ -1514,17 +1530,17 @@ class PCAer:
         else:
             logger.error("reached too many iterations")
             return None
-    
+
     def score(self,*args,**kwargs):
         return self.encoder.score(args[0].reshape(args[0].shape[0],-1))
-    
+
     def decoder(self,X):
         return self.encoder.inverse_transform(X).reshape(self.shape)
-    
+
     def summary(self):
         logger.info(f'PCA with {self.Z_DIM} components')
 
-####### MIXING ########    
+####### MIXING ########
 
 def shuffle_years(X, permutation=None, seed=0, apply=False):
     '''
@@ -1540,7 +1556,7 @@ def shuffle_years(X, permutation=None, seed=0, apply=False):
         if `permutation` is None, then it is computed using the provided seed.
     apply : bool, optional
         if True the function returns the permuted data, otherwise the permutation is returned
-    
+
     Returns
     -------
     if apply:
@@ -1584,7 +1600,7 @@ def balance_folds(weights, nfolds=10, verbose=False):
             self.sum = 0
             self.hunger = np.infty # how much a fold 'wants' the next datapoint
             self.name = name
-        
+
         def add(self, a):
             self.indexs.append(a[1])
             self.sum += a[0]
@@ -1608,7 +1624,7 @@ def balance_folds(weights, nfolds=10, verbose=False):
     ws = [(a,i) for i,a in enumerate(weights)]
     ws.sort()
     ws = ws[::-1]
-    
+
     sums = []
     if verbose:
         logger.info('Balancing folds')
@@ -1665,7 +1681,7 @@ def undersample(X, Y, u=1, random_state=42):
         raise NotImplementedError(f'{u = } < 1')
     elif u == 1:
         return X, Y
-    
+
     # from imblearn.over_sampling import RandomOverSampler
     from imblearn.under_sampling import RandomUnderSampler
     from imblearn.pipeline import Pipeline
@@ -1673,11 +1689,11 @@ def undersample(X, Y, u=1, random_state=42):
     n_pos_tr = np.sum(Y)
     n_neg_tr = len(Y) - n_pos_tr
     logger.info(f'number of training data before undersampling: {len(Y)} of which {n_neg_tr} negative and {n_pos_tr} positive')
-    
+
     undersampling_strategy = n_pos_tr/(n_neg_tr/u)
     # TODO #52 seems that this condition is restrictive. I don't see a reason why we need to limit the majority class to never be smaller@georgemilosh
     # as indicated by Alessandro there could be problems if we tried to remove this valueerror
-    if undersampling_strategy > 1: # you cannot undersample so much that the majority class becomes the minority one 
+    if undersampling_strategy > 1: # you cannot undersample so much that the majority class becomes the minority one
         raise ValueError(f'Too high undersmapling factor, maximum for this dataset is u={n_neg_tr/n_pos_tr}')
     pipeline = Pipeline(steps=[('u', RandomUnderSampler(random_state=random_state, sampling_strategy=undersampling_strategy))])
     # reshape data to feed it to the pipeline
@@ -1687,7 +1703,7 @@ def undersample(X, Y, u=1, random_state=42):
     X = X.reshape((X.shape[0], *X_shape[1:])) # reshape back
 
     return X, Y
-    
+
 
 ################################################
 ########## NEURAL NETWORK DEFINITION ###########
@@ -1711,7 +1727,7 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
     strides : int, 2-tuple or list of ints or 2-tuples, optional
         same as kernel_sizes
     padding : string, optional defaults to 'valid'
-        one of "valid" or "same" (case-insensitive). "valid" means no padding. "same" results in padding with zeros evenly to 
+        one of "valid" or "same" (case-insensitive). "valid" means no padding. "same" results in padding with zeros evenly to
         the left/right or up/down of the input. When padding="same" and strides=1, the output has the same size as the input
     batch_normalizations : bool or list of bools, optional
         whether to add a BatchNormalization layer after each Conv2D layer
@@ -1723,8 +1739,8 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
         size of max pooling layer to be applied after dropout. If 0 no max pool is applied
     conv_l2coef : list of floats which encodes the values of L2 regularizers in convolutional layers, optional, defaults to None
     encoder_conv_skip: a list of lists that gets converted to a dictionary
-        creates a skip connection between two layers given by key and value entries in the dictionary. 
-        If empty no skip connections are included. The skip connection will not work if 
+        creates a skip connection between two layers given by key and value entries in the dictionary.
+        If empty no skip connections are included. The skip connection will not work if
         the dimensions of layers mismatch. For this convolutional architecture should be implemented in future
 
     rnn_units : list of int, optional
@@ -1733,14 +1749,14 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
         Either 'LSTM' or 'GRU'
     rnn_activations : str or list of str, optional
         activation functions after each RNN layer
-    rnn_dropouts : float in [0,1] or list of floats in [0,1], optional 
+    rnn_dropouts : float in [0,1] or list of floats in [0,1], optional
     rnn_l2coef :list of floats, optional
         hich encodes the values of L2 regularizers in RNN layers, optional, defaults to None
     rnn_batch_norm :  bool or list of bools, optional
         whether to add a BatchNormalization layer after each dense layer
     rnn_return_sequences : bool or list of bools, optional
         whether to return internal states of RNNs
-        
+
 
     dense_units : list of int, optional
         number of neurons for each fully connected layer
@@ -1760,7 +1776,7 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
         conv_skip = dict(tuple(map(tuple, conv_skip)))
     else:
         conv_skip = dict({})
-    
+
     # convolutional layers
     # adjust the shape of the arguments to be of the same length as conv_channels
     args = [kernel_sizes, strides, batch_normalizations, conv_activations, conv_dropouts, max_pool_sizes, conv_l2coef, padding]
@@ -1776,9 +1792,9 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
                 raise ValueError(f'Invalid length for argument {arg = } when compared with {conv_channels = }')
         logger.info(f'convolutional args = {args}')
         kernel_sizes, strides, batch_normalizations, conv_activations, conv_dropouts, max_pool_sizes, conv_l2coef, padding = args
-        
+
         n_layers = len(conv_channels)
-        
+
         # Add convolutional layers
         for i in range(n_layers):
             if conv_l2coef[i] is not None:
@@ -1786,9 +1802,9 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
             else:
                 kernel_regularizer=None
             # print(i, f"Conv2D, filters = {encoder_conv_filters[i]}, kernel_size = {encoder_conv_kernel_size[i]}, strides = {encoder_conv_strides[i]}, padding = {encoder_conv_padding[i]}")
-            conv = layers.Conv2D(filters = conv_channels[i], 
+            conv = layers.Conv2D(filters = conv_channels[i],
                     kernel_size = kernel_sizes[i],
-                    strides = strides[i], 
+                    strides = strides[i],
                     padding = padding[i],
                     kernel_regularizer=kernel_regularizer,
                     name = f'conv_layer_{i}')(x[-1])
@@ -1796,7 +1812,7 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
             if batch_normalizations[i]:
                 conv = layers.BatchNormalization(name=f'batch_norm_{i}')(conv)
                 # print("conv = BatchNormalization()(conv)")
-                
+
             if conv_activations[i] == 'LeakyRelu':
                 actv = layers.LeakyReLU(name=f'conv_activation_{i}')(conv)
                 # print("actv = LeakyReLU()(conv)")
@@ -1810,14 +1826,14 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
             if max_pool_sizes[i]: # otherwise I get an error if max_pool_sizes[i] is None  because it cannot compare NoneType and int
                 if max_pool_sizes[i] > 1:
                     actv = layers.MaxPooling2D(max_pool_sizes[i], name=f'max_pool_{i}')(actv)
-            
+
             if conv_skip is not None:
                 #logger.info(f'{i = },{conv_skip = }')
                 if i in conv_skip.keys(): # The arrow of the skip connection starts here
                     # print('arrow_start = actv')
                     arrow_start = actv
                     logger.info(f'{arrow_start = }')
-                    
+
                 if i in conv_skip.values(): # The arrow of the skip connection end here
                     # print('conv = keras.layers.add([conv, arrow_start])')
                     actv = keras.layers.Add()([actv, arrow_start])
@@ -1825,9 +1841,9 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
                     #if encoder_use_batch_norm:
                     #    actv = BatchNormalization()(actv)
                     #    # print("actv = BatchNormalization()(actv)")
-            
+
             x.append(actv)
-    
+
     if rnn_units is not None:
         feature_shape = tff.K.int_shape(x[-1])[1:] # The idea is to keep the sequence (axis=1) shape assuming it exists
         logger.info(f'{feature_shape = }')
@@ -1848,7 +1864,7 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
                 kernel_regularizer=tf.keras.regularizers.l2(rnn_l2coef[i])
             else:
                 kernel_regularizer=None
-            
+
             if rnn_type[i] == 'LSTM':
                 rnn = layers.LSTM(rnn_units[i], kernel_regularizer=kernel_regularizer, return_sequences=rnn_return_sequences[i], name=f"rnn_layer_{i}")(x[-1])
             elif rnn_type[i] == 'GRU':
@@ -1864,10 +1880,10 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
             if rnn_dropouts[i]:
                 actv = layers.Dropout(rate=rnn_dropouts[i],name=f"rnn_dropout_{i}")(actv)
             x.append(actv)
-        
+
     # dense layers
     # adjust the shape of the arguments to be of the same length as conv_channels
-    
+
 
     if dense_units is not None:
         x.append(layers.Flatten()(x[-1]))
@@ -1885,7 +1901,7 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
                 kernel_regularizer=tf.keras.regularizers.l2(dense_l2coef[i])
             else:
                 kernel_regularizer=None
-            
+
             dense = layers.Dense(dense_units[i], kernel_regularizer=kernel_regularizer, name=f"dense_layer_{i}")(x[-1])
             if dense_batch_norm[i]:
                 dense = layers.BatchNormalization(name=f"dense_batch_{i}")(dense)
@@ -1896,9 +1912,9 @@ def create_model(input_shape, conv_channels=[32,64,64], kernel_sizes=3, strides=
             if dense_dropouts[i]:
                 actv = layers.Dropout(rate=dense_dropouts[i],name=f"dense_dropout_{i}")(actv)
             x.append(actv)
-        
+
         #model.add(layers.Dense(dense_units[i], activation=dense_activations[i],kernel_regularizer=kernel_regularizer))
-        
+
         #if dense_dropouts[i]:
         #    model.add(layers.Dropout(dense_dropouts[i]))
     model = tf.keras.Model(x[0], x[-1], name="model")
@@ -2005,7 +2021,7 @@ def make_checkpoint_callback(file_path, checkpoint_every=1):
         pass
     elif checkpoint_every == 1: # save every epoch
         ckpt_callback = keras.callbacks.ModelCheckpoint(filepath=file_path, save_weights_only=True, verbose=1)
-    elif isinstance(checkpoint_every, int): # save every `checkpoint_every` epochs 
+    elif isinstance(checkpoint_every, int): # save every `checkpoint_every` epochs
         ckpt_callback = keras.callbacks.ModelCheckpoint(filepath=file_path, save_weights_only=True, verbose=1, period=checkpoint_every)
     elif isinstance(checkpoint_every, str): # parse string options
         if checkpoint_every[0].isnumeric():
@@ -2096,7 +2112,7 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
 
     ## deal with callbacks
     callbacks = []
-    
+
     ## deal with trainable weights
     if trainable_layers is None:
         trainable_layers = [True] * len(model.layers)
@@ -2108,15 +2124,15 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
             elif trainable_layers < 0: # how many trainable layers are there (starting from beginning)
                 logger.info('provided trainable_layers<0: model layers trainable before this layer')
                 trainable_layers = [True] * (-trainable_layers) + [False] * (len(model.layers) + trainable_layers)
-            else: 
+            else:
                 raise ValueError(f'trainable_layers = 0 provided')
             logger.info(f'resulting {trainable_layers = }')
-        
+
         if len(trainable_layers) != len(model.layers):
             raise ValueError(f'{len(trainable_layers) = } is not equal to {len(model.layers) = }')
         else:
             #logger.info('Trainable layers include:')
-            
+
             for li, layer in enumerate(model.layers):
                 layer.trainable = trainable_layers[li]
             trainable_layer_names = []
@@ -2149,13 +2165,13 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
             enable_early_stopping = False
         else:
             callbacks.append(early_stopping(**early_stopping_kwargs))
-            
-     
+
+
     if scheduler_kwargs is None:
         scheduler_kwargs = {}
     logger.info(f"{scheduler_kwargs = }")
     #cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=ckpt_path_callback,save_weights_only=True,verbose=1)
-    scheduler_callback = tf.keras.callbacks.LearningRateScheduler(partial(scheduler, **scheduler_kwargs)) 
+    scheduler_callback = tf.keras.callbacks.LearningRateScheduler(partial(scheduler, **scheduler_kwargs))
     callbacks.append(scheduler_callback)
     callbacks.append(PrintLR(**dict(model=model))) # print learning rate in the terminal
     #callbacks.append(TerminateOnNaN()) # fail during training on NaN loss
@@ -2302,7 +2318,7 @@ def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='m
         If `direction` not in ['maximize', 'minimize']
     '''
     run_folder = run_folder.rstrip('/')
-    
+
     fold_subfolder = (fold_subfolder.rstrip('/') + '/') if fold_subfolder else ''
 
     # Here we insert analysis of the previous training with the assessment of the ideal checkpoint
@@ -2330,7 +2346,7 @@ def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='m
         opt_checkpoint = opt_f(historyCustom)
     else:
         opt_checkpoint = np.array([opt_f(h) for h in historyCustom]) # each fold independently
-    
+
     opt_checkpoint += first_epoch
 
     if collective:
@@ -2404,7 +2420,7 @@ def get_transfer_learning_folders(load_from, current_run_folder:str, nfolds:int,
 
     if load_from_root_folder != root_folder:
         logger.warning(f'Loading from external folder {load_from_root_folder} instead of {root_folder}')
-    
+
     # Find the model which has the weights we can use for transfer learning, if it is possible
     load_from = get_run(load_from, current_run_args=current_run_args, ignorable_keys=ignorable_keys,runs_path=f'{load_from_root_folder}/runs.json')
     if load_from is None:
@@ -2459,7 +2475,7 @@ def get_loss_function(loss_name: str, u=1):
         return keras.losses.SparseCategoricalCrossentropy(from_logits=True)
     else:
         raise ValueError(f'Could not parse {loss_name = }')
-    
+
 def get_default_metrics(fullmetrics=False, u=1):
     if fullmetrics:
         tf_sampling = tf.cast([0.5*np.log(u), -0.5*np.log(u)], tf.float32) # Debiasor of logits (this translates into debiasing the probabilities)
@@ -2479,9 +2495,9 @@ def get_default_metrics(fullmetrics=False, u=1):
 @ut.indent_logger(logger)
 def margin_removal_with_sliding_window(X,time_start,leftmargin,rightmargin,time_end,T,sliding=False):
     '''
-    the procedure is to stride the time axis with the window size "leftmargin+1" 
+    the procedure is to stride the time axis with the window size "leftmargin+1"
        <- there is a +1 because this argument of `sliding_window_view` does nothing when input is 1
-       `sliding_window_view` normally just puts the new axis at the end, but for using LSTMs, for instance, 
+       `sliding_window_view` normally just puts the new axis at the end, but for using LSTMs, for instance,
        this is not well adapted so we move the axis right after the natural time (0-th axis)
 
     Input
@@ -2497,7 +2513,7 @@ def margin_removal_with_sliding_window(X,time_start,leftmargin,rightmargin,time_
     if (leftmargin is not None) or (rightmargin is not None):
         X = X.reshape(-1,time_end-time_start-T+1,*X.shape[1:])
         logger.info(f'preparing for margin removal: {X.shape = }')
-            
+
     if (leftmargin is not None) and (sliding is True): # adding a dimension to X_tr and X_va with a time moving window
         X = np.moveaxis(sliding_window_view(X, leftmargin+1, axis=1),-1,2)
         logger.info(f'after sliding window: {X.shape = }')
@@ -2517,7 +2533,7 @@ def margin_removal_with_sliding_window(X,time_start,leftmargin,rightmargin,time_
 
 @ut.exec_time(logger)
 @ut.indent_logger(logger)
-def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=None, optimal_checkpoint_kwargs=None, 
+def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=None, optimal_checkpoint_kwargs=None,
                      load_from='last', ignorable_keys=None, nfolds=10, val_folds=1, u=1, normalization_mode='pointwise',
                      fullmetrics=True, training_epochs=40, training_epochs_tl=10, loss='sparse_categorical_crossentropy', prune_threshold=None, min_folds_before_pruning=None,
                      Z_DIM=None, T=14, time_start=30, time_end=120, label_period_start=None, label_period_end=None):
@@ -2565,7 +2581,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
         whether to use a set of evaluation metrics or just the loss
     training_epochs : int, optional
         number of training epochs when creating a model from scratch
-    training_epochs_tl : int, optional 
+    training_epochs_tl : int, optional
         numer of training epochs when using transfer learning
     loss : str, optional
         loss function to minimize, by default 'sparse_categorical_crossentropy'
@@ -2583,27 +2599,27 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
     Z_DIM: int, optional
         if Z_DIM is not None, pca decomposition is performed to Z_DIM components
     T : int, optional
-        width of the window for the running average  
-    time_start : int, optional 
+        width of the window for the running average
+    time_start : int, optional
         first day of the period of interest (copied from make_XY to be able to compute `timestamps`)
     time_end : int, optional
         first day after the end of the period of interst (copied from make_XY)
     label_period_start : int, optional
         if provided the first day of the period of interest for the label threshold determination (copied from make_XY)
-        This variable is necessary if for some reason we need to also load data that lies outside the range of where 
+        This variable is necessary if for some reason we need to also load data that lies outside the range of where
         the labels that we need for training/validation and testing directly
             leftmargin = label_period_start - time_start
-            if positive will be treated as a 
+            if positive will be treated as a
     label_period_end : int, optional
         if provided the first day after the end of the period of interst for the label threshold determination (copied from make_XY)
-        This variable is necessary if for some reason we need to also load data that lies outside the range of where 
+        This variable is necessary if for some reason we need to also load data that lies outside the range of where
         the labels that we need for training/validation and testing directly
     Returns
     -------
     float
         average score of the run
     '''
-    
+
     if create_model_kwargs is None:
         create_model_kwargs = {}
     if train_model_kwargs is None:
@@ -2611,11 +2627,11 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
     if optimal_checkpoint_kwargs is None:
         optimal_checkpoint_kwargs = {}
     folder = folder.rstrip('/')
-    
+
     """leftmargin: (int), optional
         Specifies the number of timestamps that we use to make the prediction. By default is absent (one time stamp)
         The use of `leftmargin` is only recommended if PCA was performed since otherwise too much RAM is taken"""
-    
+
     # X and Y are extracted from time_start to time_end, but we only care about the part inside label_period_start to label_period_end for training and testing
     if label_period_start is None: # label_period_start == time_start implied
         leftmargin = None # basically left margin
@@ -2625,14 +2641,14 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
             raise ValueError(f'leftmargin = label_period_start - time_start < 0 which is not allowed!')
         elif leftmargin == 0:
             leftmargin = None
-    
+
     if label_period_end is None:
         rightmargin = None
     else:
         rightmargin = time_end - label_period_end - T + 1 # that's because when we perform running mean we have to avoid using last T days
         if rightmargin < 0:
             raise ValueError(f'leftmargin = time_end - label_period_end - T + 1 which is not allowed!')
-        
+
 
     # get the folders from which to load the models
     load_from, info = get_transfer_learning_folders(load_from, folder, nfolds, optimal_checkpoint_kwargs=optimal_checkpoint_kwargs, ignorable_keys=ignorable_keys)
@@ -2653,15 +2669,15 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
 
         # split data
         X_tr, Y_tr, X_va, Y_va = k_fold_cross_val_split(i, X, Y, nfolds=nfolds, val_folds=val_folds)
-            
-        
+
+
 
         if normalization_mode: # normalize X_tr and X_va
             X_tr, _, _ = normalize_X(X_tr, fold_folder, mode=normalization_mode)
-            #X_va = (X_va - X_mean)/X_std 
+            #X_va = (X_va - X_mean)/X_std
             X_va, _, _ = normalize_X(X_va, fold_folder) # we expect that the previous operation stores X_mean, X_std
             logger.info(f'after normalization: {X_tr.shape = }, {X_va.shape = }, {Y_tr.shape = }, {Y_va.shape = }')
-        
+
         if Z_DIM is not None:
             with PCAer(Z_DIM=Z_DIM, folder=fold_folder) as pcaer:
                 pcaer.fit_with_timeout(0,X_tr)
@@ -2686,7 +2702,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
 
 
         # check for transfer learning
-        model = None        
+        model = None
         if load_from is None:
             model = create_model(input_shape=X_tr.shape[1:], **create_model_kwargs)
         else:
@@ -2743,11 +2759,11 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
                     info['status'] = 'PRUNED'
                     logger.log(41,f'Pruning after {i+1}/{nfolds} folds')
                     break
-        
+
     np.save(f'{folder}/RAM_stats.npy', my_memory)
 
     # recompute the scores if collective=True
-    # Here we want to use the `optimal_checkpoint` function to compute the best checkpoint for this network. 
+    # Here we want to use the `optimal_checkpoint` function to compute the best checkpoint for this network.
     # Mind that before we used it to determine the optimal checkpoint from the network from which to perform transfer learning, so we need to change the parameters
     try:
         collective = optimal_checkpoint_kwargs['collective']
@@ -2763,7 +2779,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
             first_epoch = optimal_checkpoint_kwargs['first_epoch']
         except KeyError:
             first_epoch = get_default_params(optimal_checkpoint)['first_epoch']
-            
+
         opt_checkpoint, fold_subfolder = optimal_checkpoint(folder,nfolds, **optimal_checkpoint_kwargs)
 
         # recompute the scores
@@ -2777,7 +2793,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
             logger.info(f'{X_tr.shape = }, {X_va.shape = }')
             fold_folder = f'{folder}/fold_{i}'
             if normalization_mode: # normalize X_tr and X_va
-                #X_va = (X_va - X_mean)/X_std 
+                #X_va = (X_va - X_mean)/X_std
                 X_va, _, _ = normalize_X(X_va, fold_folder) # we expect that the previous operation stores X_mean, X_std
                 logger.info(f'after normalization: {X_va.shape = }, {Y_va.shape = }')
 
@@ -2785,11 +2801,11 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
                 with PCAer(Z_DIM=Z_DIM, folder=fold_folder) as pcaer: # the fit is expected to have already been performed thus we must merely load
                     X_va = pcaer.encoder.predict(X_va)
                     logger.info(f'after PCA: {X_va.shape = }')
-            
+
             X_va = margin_removal_with_sliding_window(X_va,time_start,leftmargin,rightmargin,time_end,T,sliding=True)
             Y_va = margin_removal_with_sliding_window(Y_va,time_start,leftmargin,rightmargin,time_end,T)
-            
-            
+
+
             model = load_model(f'{fold_folder}/{fold_subfolder}cp-{opt_checkpoint:04d}.ckpt')
 
             Y_pred = []
@@ -2798,7 +2814,7 @@ def k_fold_cross_val(folder, X, Y, create_model_kwargs=None, train_model_kwargs=
             Y_pred = np.concatenate(Y_pred)
             Y_pred_unbiased = ut.unbias_probabilities(Y_pred, u=u)
             np.save(f'{fold_folder}/Y_pred_unbiased.npy', Y_pred_unbiased)
-        
+
 
     score_mean = np.mean(scores)
     score_std = np.std(scores)
@@ -2858,7 +2874,7 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
     -------
     X : np.ndarray
         data. If flatten_time_axis with shape (days, lat, lon, fields), else (years, days, lat, lon, fields)
-    Y : np.ndarray 
+    Y : np.ndarray
         labels. If flatten_time_axis with shape (days,), else (years, days)
     tot_permutation : np.ndarray
         with shape (years,), final permutaion of the years that reproduces X and Y once applied to the just loaded data
@@ -2882,7 +2898,7 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
     lat = np.copy(f.field.lat.data) # 1d array
     lon = np.copy(f.field.lon.data) # 1d array
 
-    
+
     return_threshold = ut.extract_nested(make_XY_kwargs, 'return_threshold', False)
     print(f"{return_threshold = }")
 
@@ -2890,7 +2906,7 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
         X,Y, threshold = make_XY(fields, **make_XY_kwargs)
     else:
         X,Y = make_XY(fields, **make_XY_kwargs)
-    
+
     time_start = ut.extract_nested(make_XY_kwargs, 'time_start', None) # We need to extract these values to limit the season of Y which matters for balancing folds (see below)
     time_end = ut.extract_nested(make_XY_kwargs, 'time_end', None)
     label_period_start = ut.extract_nested(make_XY_kwargs, 'label_period_start', None)
@@ -2914,9 +2930,9 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
         lon = lon % 360 # move all values between 0 and 360
         i = np.argmin(lon) # index of the minimum longitude (most close to Greenwich)
         if i+1 == len(lon):
-            increases = lon[i-1] < lon[i] # whether lon is monotonically increasing or not 
+            increases = lon[i-1] < lon[i] # whether lon is monotonically increasing or not
         else:
-            increases = lon[i] < lon[i+1] # whether lon is monotonically increasing or not 
+            increases = lon[i] < lon[i+1] # whether lon is monotonically increasing or not
         if increases:
             lon[:i] -= 360 # make negative the values before i
         else:
@@ -2928,7 +2944,7 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
     # mixing
     logger.info('Mixing')
     start_time = time.time()
-    
+
     if year_permutation is None:
         # premixing
         if do_premix:
@@ -2961,7 +2977,7 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
         logger.warning('Mixing overriden by provided permutation')
 
     # apply permutation to X
-    if year_permutation is not None:    
+    if year_permutation is not None:
         X = X[year_permutation]
     logger.info(f'Mixing completed in {ut.pretty_time(time.time() - start_time)}\n')
     logger.info(f'{X.shape = }, {Y.shape = }')
@@ -2983,15 +2999,15 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
             # flatten the time axis dropping the organizatin in years
             if flatten_time_axis:
                 if (time_start and time_start and T and tau) is None:
-                    time_series.append(temp.flatten()) 
+                    time_series.append(temp.flatten())
                 else:
-                    time_series.append((temp[:,time_start+tau:time_end+tau-T+1]).flatten()) 
+                    time_series.append((temp[:,time_start+tau:time_end+tau-T+1]).flatten())
             else:
                 if (time_start and time_start and T and tau) is None:
                     time_series.append(temp)
                 else:
-                    time_series.append((temp[:,time_start+tau:time_end+tau-T+1])) 
-        
+                    time_series.append((temp[:,time_start+tau:time_end+tau-T+1]))
+
         logger.info(f"{time_series = }")
         time_series = np.array(time_series).T
         logger.info(f"{time_series.shape = }")
@@ -2999,7 +3015,7 @@ def prepare_XY(fields, make_XY_kwargs=None, roll_X_kwargs=None,
             return X, Y, year_permutation, lat, lon, time_series, threshold
         else:
             return X, Y, year_permutation, lat, lon, time_series
-    
+
     if return_threshold:
         return X, Y, year_permutation, lat, lon, threshold
     else:
@@ -3018,13 +3034,13 @@ def prepare_data_and_mask(load_data_kwargs=None, prepare_XY_kwargs=None):
         arguments to pass to the function `load_data`
     prepare_XY_kwargs: dict
         arguments to pass to the function `prepare_XY`
-        
+
     Returns
     -------
     (
         X : np.ndarray
             data. If flatten_time_axis with shape (days, lat, lon, fields), else (years, days, lat, lon, fields)
-        Y : np.ndarray 
+        Y : np.ndarray
             labels. If flatten_time_axis with shape (days,), else (years, days)
         year_permutation : np.ndarray
             with shape (years,), final permutaion of the years that reproduces X and Y once applied to the just loaded data
@@ -3056,12 +3072,12 @@ def prepare_data(load_data_kwargs=None, prepare_XY_kwargs=None):
         arguments to pass to the function `load_data`
     prepare_XY_kwargs: dict
         arguments to pass to the function `prepare_XY`
-        
+
     Returns
     -------
     X : np.ndarray
         data. If flatten_time_axis with shape (days, lat, lon, fields), else (years, days, lat, lon, fields)
-    Y : np.ndarray 
+    Y : np.ndarray
         labels. If flatten_time_axis with shape (days,), else (years, days)
     year_permutation : np.ndarray
         with shape (years,), final permutaion of the years that reproduces X and Y once applied to the just loaded data
@@ -3075,7 +3091,7 @@ def prepare_data(load_data_kwargs=None, prepare_XY_kwargs=None):
     # load data
     fields = load_data(**load_data_kwargs)
 
-    return prepare_XY(fields, **prepare_XY_kwargs)  
+    return prepare_XY(fields, **prepare_XY_kwargs)
 
 @ut.exec_time(logger)
 def run(folder, load_data_kwargs=None, prepare_XY_kwargs=None, k_fold_cross_val_kwargs=None, log_level=logging.INFO):
@@ -3167,9 +3183,9 @@ class Trainer():
             logger.info(f"Loading config file from folder {config.rsplit('/',1)[0]}")
         else:
             raise TypeError(f'Invalid type {type(config)} for config')
-        
+
         self.config_dict_flat = check_config_dict(self.config_dict, correct_mistakes=False)
-        
+
         # cached (heavy) variables
         self.fields = None
         self.X = None
@@ -3233,7 +3249,7 @@ class Trainer():
         '''
         first_from_scratch = kwargs.pop('first_from_scratch', False)  # this argument is removed from the kwargs because it affects only the first run
         repetitions = kwargs.pop('repetitions',1) # this argument affects only the scheduling, not the runs
-        
+
         # detect variables over which to iterate
         iterate_over = [] # list of names of arguments that are lists and so need to be iterated over
         non_iterative_kwargs = {} # dictionary of provided arguments that have a single value
@@ -3277,7 +3293,7 @@ class Trainer():
             iterate_over.remove(k)
         # remaining arguments
         new_iterate_over += iterate_over
-        
+
         iterate_over = new_iterate_over
 
         # retrieve values of the arguments
@@ -3303,7 +3319,7 @@ class Trainer():
         if len(self.scheduled_kwargs) == 0: # this is fix to avoid empty scheduled_kwargs if it happens there are no iterative kwargs
             self.scheduled_kwargs = [non_iterative_kwargs]
 
-        if first_from_scratch: 
+        if first_from_scratch:
             self.scheduled_kwargs[0]['load_from'] = None # disable transfer learning for the first run
             logger.warning('Forcing the first run to be loaded from scratch')
 
@@ -3328,7 +3344,7 @@ class Trainer():
             for i,kw in enumerate(self.scheduled_kwargs):
                 logger.info(f'{i}: {kw}')
 
-    
+
     def telegram(self, telegram_bot_token='~/ENSMLbot.txt', chat_ID=None, telegram_logging_level=31, telegram_logging_format=None):
         '''
         Adds a telegram handler to the logger of this module, if `telegram_bot_token` and `chat_ID` are both not None
@@ -3462,7 +3478,7 @@ class Trainer():
                     except KeyError:
                         logger.error(f'Unable to find label field {label_field} among the provided fields {list(self.fields.keys())}')
                         raise KeyError
-                
+
                 np.save(f'{folder}/area_integral.npy', lf.to_numpy(lf.area_integral))
                 ta = lf.to_numpy(lf._time_average)
                 np.save(f'{folder}/time_average.npy', ta)
@@ -3470,7 +3486,7 @@ class Trainer():
 
                 # save labels
                 np.save(f'{folder}/labels_permuted.npy', self.Y)
-                
+
 
                 # do kfold
                 score, info = k_fold_cross_val(folder, self.X, self.Y, **k_fold_cross_val_kwargs)
@@ -3480,7 +3496,7 @@ class Trainer():
                     os.chmod(self.config_file, S_IREAD|S_IRGRP|S_IROTH) # we make it readable for all users
                 if os.access(self.fields_infos_file, os.W_OK): # the file is writeable
                     os.chmod(self.fields_infos_file, S_IREAD|S_IRGRP|S_IROTH) # we make it readable for all users
-            
+
             except Exception as e:
                 logger.critical(f'Run on {folder = } failed due to {repr(e)}')
                 tb = traceback.format_exc() # log the traceback to the log file
@@ -3519,7 +3535,7 @@ class Trainer():
 
         if not os.path.exists(self.runs_file): # create run dictionary if not found
             ut.dict2json({},self.runs_file)
-        
+
         runs = ut.json2dict(self.runs_file) # get runs dictionary
 
         # remove kwargs at their default value
@@ -3565,7 +3581,7 @@ class Trainer():
         nfolds = ut.extract_nested(run_kwargs, 'nfolds')
         optimal_checkpoint_kwargs = ut.extract_nested(run_kwargs, 'optimal_checkpoint_kwargs')
         ignorable_keys = ut.extract_nested(run_kwargs, 'ignorable_keys', None) #return None if ignorable_keys is not found. This is needed for codes that re-implement k_fold_cross_val before issue #74
-        load_from, tl_info = get_transfer_learning_folders(load_from, f'{self.root_folder}/{folder}', nfolds, optimal_checkpoint_kwargs=optimal_checkpoint_kwargs, 
+        load_from, tl_info = get_transfer_learning_folders(load_from, f'{self.root_folder}/{folder}', nfolds, optimal_checkpoint_kwargs=optimal_checkpoint_kwargs,
                                                            current_run_args=ut.collapse_dict(run_kwargs), ignorable_keys=ignorable_keys)
         if tl_info:
             tl_info = tl_info['tl_from']
@@ -3598,13 +3614,13 @@ class Trainer():
                         return None
                     else:
                         logger.log(45, f"Rerunning {r['name']}")
-                        
+
                 # update the folder name
                 folder = make_run_name(run_id, **kwargs)
 
         logger.log(42, f'{folder = }\n')
 
-        
+
         ###################
         ## start running ##
         ###################
@@ -3612,10 +3628,10 @@ class Trainer():
         folder = f'R{folder}'
 
         start_time = time.time()
-        
+
         runs[run_id] = {
-            'name': folder, 
-            'args': kwargs, 
+            'name': folder,
+            'args': kwargs,
             'transfer_learning_from': tl_info if tl_info else None,
             'status': 'RUNNING',
             'host': HOSTNAME,
@@ -3651,7 +3667,7 @@ class Trainer():
                 f.write(f'{folder}\n')
 
             score, info = self.run(f'{self.root_folder}/{folder}', **run_kwargs)
-            
+
             runs = ut.json2dict(self.runs_file)
             runs[run_id]['status'] = info['status'] # either COMPLETED or PRUNED
             if info['status'] == 'PRUNED':
@@ -3660,7 +3676,7 @@ class Trainer():
             elif info['status'] == 'COMPLETED': # remove the leading R
                 runs[run_id]['name'] = f'{folder[1:]}'
                 shutil.move(f'{self.root_folder}/{folder}', f'{self.root_folder}/{folder[1:]}')
-            
+
             runs[run_id]['score'] = ast.literal_eval(str(score)) # ensure json serializability
             runs[run_id]['scores'] = info['scores']
             logger.log(42, 'run completed!!!\n\n')
@@ -3675,7 +3691,7 @@ class Trainer():
                 raise e
             info['status'] = 'FAILED'
 
-        finally: # in any case we need to save the end time and save runs to json            
+        finally: # in any case we need to save the end time and save runs to json
             if runs[run_id]['status'] == 'RUNNING': # the run has not completed but the above except block has not been executed (e.g. due to KeybordInterruptError)
                 runs[run_id]['status'] = 'FAILED'
                 runs[run_id]['name'] = f'F{folder[1:]}'
@@ -3694,7 +3710,7 @@ class Trainer():
             ut.dict2json(runs,self.runs_file)
 
             # clear home directory
-            
+
             try:
                 os.remove(f"{os.environ['HOME']}/.current_run_on_{HOSTNAME}")
             except (FileNotFoundError, PermissionError) as e:
@@ -3706,11 +3722,11 @@ class Trainer():
 
 CONFIG_DICT = build_config_dict([Trainer.run, Trainer.telegram]) # module level config dictionary
 # config file will be built from the default parameters of the functions given here and of the functions they call in a recursive manner
-        
+
 
 def deal_with_lock(**kwargs):
     '''
-    Checks if there is a lock and moves the code to the folder parsed from the input as well as 
+    Checks if there is a lock and moves the code to the folder parsed from the input as well as
     control json dictionaries such as `config.json`, `runs.json` and `fields_infos.json`.
     **kwargs are passed to `move_to_folder`
 
@@ -3728,7 +3744,7 @@ def deal_with_lock(**kwargs):
     lock = Path(__file__).resolve().parent / 'lock.txt'
     if os.path.exists(lock): # there is a lock
         # check for folder argument
-        if len(sys.argv) < 2: 
+        if len(sys.argv) < 2:
             print(usage())
             return True
         if len(sys.argv) == 2:
@@ -3750,7 +3766,7 @@ def deal_with_lock(**kwargs):
         else:
             with open(lock) as l:
                 raise ValueError(l.read())
-    
+
     return False
 
 def parse_command_line():
@@ -3776,14 +3792,14 @@ def parse_command_line():
 
     return arg_dict
 
-        
+
 def main():
-    print(f"\n\nRunning {f'Learn2_new with {mods = }' if mods else 'vanilla Learn2_new'}\n\n")
+    print(f"\n\nRunning {f'Learn2_new with mods = {list(mods.keys())}' if mods else 'vanilla Learn2_new'}\n\n")
     if deal_with_lock():
         return
-    
+
     # the code below is executed only if there is no lock
-    
+
     arg_dict = parse_command_line()
 
     logger.info(f'{arg_dict = }')
@@ -3805,7 +3821,7 @@ def main():
             raise KeyError(f'{import_params_from} is not a valid run')
         logger.info(f'Importing parameters from run {import_params_from}')
         logger.info(ut.dict2str(rargs))
-        
+
         for k,v in rargs.items(): # add the imported parameters to arg_dict, but not the ones explicitly provided in the command line
             if k not in arg_dict:
                 arg_dict[k] = v
@@ -3822,7 +3838,7 @@ def main():
     # if o != 'Y':
     #     logger.error('Aborting')
     #     sys.exit(0)
-    
+
     trainer.run_multiple()
 
 

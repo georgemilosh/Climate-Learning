@@ -1,11 +1,12 @@
+description = """Probabilistic regression."""
+dependencies = None
+
 import Learn2_new as ln
 ut = ln.ut
 logger = ln.logger
 # log to stdout
 import logging
 import sys
-
-ln.add_mod(__file__)
 
 if __name__ == '__main__':
     logging.getLogger().level = logging.INFO
@@ -220,6 +221,7 @@ def postprocess(x):
 # set the modified functions to override the old ones #
 #######################################################
 def enable():
+    ln.add_mod(__file__, description, dependencies)
     ln.Trainer = Trainer
     ln.check_config_dict = check_config_dict
     ln.get_default_metrics = get_default_metrics
@@ -243,6 +245,7 @@ def enable():
                             inplace=True)
 
 def disable():
+    ln.remove_mod(__file__)
     ln.Trainer = orig_Trainer
     ln.check_config_dict = orig_check_config_dict
     ln.get_default_metrics = orig_get_default_metrics
