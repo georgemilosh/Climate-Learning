@@ -240,7 +240,7 @@ def prepare_XY(fields, **kwargs):
     return res
 
 orig_create_model = ln.create_model
-def create_model(input_shape, filters_per_field=[1,1,1], merge_to_one=False, batch_normalization=False, reg_spatial_gradient=True, reg_mode='l2', reg_c=1, reg_weights=None, reg_periodicity=True, reg_norm=True, dense_units=[8,2], dense_activations=['relu', None], dense_dropouts=False, dense_l2coef=None):
+def create_model(input_shape, filters_per_field=[1,1,1], merge_to_one=False, batch_normalization=False, regularization='gradient', reg_mode='l2', reg_c=1, reg_weights=None, reg_periodicity=True, reg_norm=True, dense_units=[8,2], dense_activations=['relu', None], dense_dropouts=False, dense_l2coef=None):
     '''
     Creates a neural network
 
@@ -255,8 +255,8 @@ def create_model(input_shape, filters_per_field=[1,1,1], merge_to_one=False, bat
         With this setting there is no point in having more than 1 filter per field. Default is False
     batch_normalization : bool, optional
         whether to perform batch normalization after the projection. This helps if the input data is not normalized, by default False
-    reg_spatial_gradient : bool, optional
-        whether to regularize the projection by penalizing the spatial gradient or rather simply apply a `reg_mode` penalty to the weights, by default True
+    regularization : str, optional
+        whether to regularize the projection by penalizing the spatial gradient ('gradient') or rather simply apply a `reg_mode` penalty to the weights, by default 'gradient'
     reg_mode : str, optional
         how to regularize the graident, either 'l1' or 'l2', by default 'l2'
     reg_c : float, optional
@@ -282,7 +282,7 @@ def create_model(input_shape, filters_per_field=[1,1,1], merge_to_one=False, bat
     '''
     regularizer = None
     if reg_c:
-        if reg_spatial_gradient:
+        if regularization == 'gradient':
             regularizer = GradientRegularizer(mode=reg_mode, c=reg_c, weights=reg_weights, periodic_lon=reg_periodicity, normalize=reg_norm, lat=ln.lat)
         else:
             if reg_mode == 'l2':
