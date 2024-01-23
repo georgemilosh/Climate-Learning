@@ -48,7 +48,7 @@ def compute_weight_matrix(reshape_mask, lat):
         raise ValueError(f'reshape_mask should be a 3d array! Instead {reshape_mask.shape = }')
 
     geosep = ut.Reshaper(reshape_mask)
-    
+
     W = np.zeros(shape_r*2)
     #f -> field
     #i -> lat
@@ -69,7 +69,7 @@ def compute_weight_matrix(reshape_mask, lat):
                     W[ind2,ind2] += w
                     W[ind1,ind2] += -w
                     W[ind2,ind1] += -w
-                
+
                 # add longitude gradient
                 try:
                     ind1 = geosep.reshape_index((i,j,f))
@@ -81,7 +81,7 @@ def compute_weight_matrix(reshape_mask, lat):
                     W[ind2,ind2] += wi
                     W[ind1,ind2] += -wi
                     W[ind2,ind1] += -wi
-                
+
             # add periodic longitude point
             try:
                 ind1 = geosep.reshape_index((i,shape[-2] - 1,f))
@@ -129,7 +129,7 @@ class GaussianCommittor(object):
                 import cupy as cp
                 from gpuutils import GpuUtils
                 df = GpuUtils.analyzeSystem().set_index('gpu_index')
-                # get the value of 'gpu_index' of the GPU with the most free memory 
+                # get the value of 'gpu_index' of the GPU with the most free memory
                 gpu_id = df['available_memories_in_mb'].idxmax()
                 gpu_memory = df['available_memories_in_mb'].max()
                 cp.cuda.runtime.setDevice(gpu_id)
@@ -142,7 +142,7 @@ class GaussianCommittor(object):
                 logger.error('Please install cupy and gpuutils to use GPU')
             except:
                 logger.error('Failed to use GPU, using CPU instead')
-        
+
         logger.info('Setting engine as CPU')
         self.GPU = False
         self.engine = np
@@ -190,7 +190,7 @@ class GaussianCommittor(object):
         del XAs_cov # this frees GPU memory
 
         assert self.regularization_matrix.shape == sigma_XX.shape
-        
+
         # compute the (regularized) projection pattern
         self.p = self.engine.linalg.inv(sigma_XX + self.engine.asarray(self.regularization_matrix, dtype=self.precision)) @ sigma_XA
         # now that we have the projection pattern we don't need sigma_XX and sigma_XA anymore
@@ -213,11 +213,21 @@ class GaussianCommittor(object):
         self.lam_AA = lam[-1,-1]
         self.lam_fA = lam[0,-1]
 
-        # compute the coefficients for the rescaling
-        self.a = np.sqrt(self.lam_AA/2)*self.threshold
-        self.b = self.lam_fA/np.sqrt(2*self.lam_AA)
+        # compute the predicted standard deviation
+        self.sigma = 1./np.sqrt(self.lam_AA)
 
-    def q(self,x):
+        # compute the coefficient for the predicted mean (mu = m*f)
+        self.m = -self.lam_fA/self.lam_AA
+
+        # compute the coefficients for the rescaling
+        # self.a = np.sqrt(self.lam_AA/2)*self.threshold
+        # self.a = self.threshold / np.sqrt(2) / self.sigma
+        # self.b = self.lam_fA/np.sqrt(2*self.lam_AA)
+        # self.b = -self.m / np.sqrt(2) / self.sigma
+        self.a, self.b = msigma2ab(self.m, self.sigma, self.threshold)
+
+
+    def q(self,x=None):
         '''
         committor function
 
@@ -231,13 +241,29 @@ class GaussianCommittor(object):
         np.ndarray[float]
             predicted committor with shape (...,)
         '''
-        self.f = x @ self.p
+        if x is not None:
+            self.f = x @ self.p
         # return 0.5*ss.erfc((self.lam_AA*self.threshold + self.lam_fA*self.f)/np.sqrt(2*self.lam_AA))
         return 0.5*ss.erfc(self.a + self.b*self.f)
+
+    def mu(self, x=None):
+        if x is not None:
+            self.f = x @ self.p
+        return self.m * self.f
 
     def __call__(self,x):
         '''Alias for self.q'''
         return self.q(x)
+
+def msigma2ab(m,sigma,threshold):
+    a = threshold / np.sqrt(2) / sigma
+    b = -m / np.sqrt(2) / sigma
+    return a,b
+
+def ab2msigma(a,b,threshold):
+    sigma = threshold / np.sqrt(2) / a
+    m = -b * np.sqrt(2) * sigma
+    return m,sigma
 
 # Here we redefine the `prepare_XY` function to save the heatwave amplitude A
 class Trainer(ln.Trainer):
@@ -255,7 +281,7 @@ class Trainer(ln.Trainer):
                 except KeyError:
                     logger.error(f'Unable to find label field {label_field} among the provided fields {list(self.fields.keys())}')
                     raise KeyError
-                
+
             A = lf.to_numpy(lf._time_average).reshape(lf.years, -1)[self.year_permutation].flatten()
 
             assert self.Y.shape == A.shape
@@ -314,9 +340,10 @@ def train_model(model, X_tr, A_tr, Y_tr, X_va, A_va, Y_va, folder, return_metric
 
     history = {'CrossEntropyLoss': [ce_tr], 'val_CrossEntropyLoss': [ce_va], 'r': [r_tr], 'val_r': [r_va]}
 
-    ## save A_va, Y_va and Y_pred_unbiased
+    ## save A_va, Y_va, f_va and Y_pred_unbiased (committor)
     np.save(f'{folder}/A_va.npy', A_va)
     np.save(f'{folder}/Y_va.npy', Y_va)
+    np.save(f'{folder}/f_va.npy', model.f)
     np.save(f'{folder}/Y_pred_unbiased.npy', q_va)
 
     ## deal with history
@@ -378,7 +405,7 @@ def k_fold_cross_val(folder, X, Y, train_model_kwargs=None, optimal_checkpoint_k
         number of folds to be used for the validation set for every split
     u : float, optional
         undersampling factor (>=1). If = 1 no undersampling is performed
-    
+
     regularization : 'identity' or 'gradient'
         How to regularize the covariance matrix
     reg_c : float
@@ -408,6 +435,9 @@ def k_fold_cross_val(folder, X, Y, train_model_kwargs=None, optimal_checkpoint_k
 
     # unbundle X
     X, A, threshold, lat = X
+
+    #save threshold
+    np.save(f'{folder}/threshold.npy', threshold)
 
     # reshape X to remove zero_variance features
     geosep = ut.Reshaper(np.std(X[:10], axis=0) != 0)
@@ -452,7 +482,7 @@ def k_fold_cross_val(folder, X, Y, train_model_kwargs=None, optimal_checkpoint_k
 
         if normalization_mode: # normalize X_tr and X_va
             X_tr, _, _ = ln.normalize_X(X_tr, fold_folder, mode=normalization_mode)
-            #X_va = (X_va - X_mean)/X_std 
+            #X_va = (X_va - X_mean)/X_std
             X_va, _, _ = ln.normalize_X(X_va, fold_folder) # we expect that the previous operation stores X_mean, X_std
             logger.info(f'after normalization: {X_tr.shape = }, {X_va.shape = }, {Y_tr.shape = }, {Y_va.shape = }')
 
@@ -465,16 +495,16 @@ def k_fold_cross_val(folder, X, Y, train_model_kwargs=None, optimal_checkpoint_k
         np.save(f'{fold_folder}/proj.npy', geosep.inv_reshape(model.p))
         np.save(f'{fold_folder}/ab.npy', np.array([model.a, model.b])) # rescaling coefficients
         # with the knowledge of these two we can compute the committor
-        
+        np.save(f'{fold_folder}/msigma.npy', np.array([model.m, model.sigma])) # m and sigma to easily compute predicted mean and std
 
         scores.append(score)
 
         my_memory.append(ln.psutil.virtual_memory())
-        logger.info(f'RAM memory: {my_memory[i][3]:.3e}') # Getting % usage of virtual_memory ( 3rd field)
+        logger.info(f'RAM memory: {my_memory[i][3]:.3e}') # Getting % usage of virtual_memory (3rd field)
 
         ln.gc.collect() # Garbage collector which removes some extra references to the objects. This is an attempt to micromanage the python handling of RAM
-        
-    np.save(f'{folder}/RAM_stats.npy', my_memory)        
+
+    np.save(f'{folder}/RAM_stats.npy', my_memory)
 
     score_mean = np.mean(scores)
     score_std = np.std(scores)
