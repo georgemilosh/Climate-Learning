@@ -7,7 +7,9 @@ description = """Intrinsically interpretable probabilistic regression. Combines 
 dependencies = None # we don't have any dependencies intrinsic to this module.
 
 import committor_projection_NN as iinn
+iinn.enable() # we have to activate iinn first, before even importing pr, as both pr and iinn modify the create_model function. This way pr will see the original ln as the one modified by iinn.
 import probabilistic_regression as pr
+iinn.disable()
 
 ln = pr.ln
 
