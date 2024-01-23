@@ -74,18 +74,6 @@ class ProbRegLoss(keras.losses.Loss):
         y_pred = y_pred[...,0:1] # for memory efficiency
         assert y_pred.shape == sig2.shape == y_true.shape, f'{y_pred.shape = }, {sig2.shape = }, {y_true.shape = }'
         return tf.math.square(y_true - y_pred)/sig2 + tf.math.log(sig2) + penalty
-    
-# class WeightedProbRegLoss(ProbRegLoss):
-#     def __init__(self, name=None, epsilon=None, a=0, b=1) -> None:
-#         super().__init__(name=name or self.__class__.__name__, epsilon=epsilon)
-#         self.a = a
-#         self.b = b
-
-#     def call(self, y_true, y_pred):
-#         weights = keras.activations.sigmoid((y_true - self.a)/self.b)
-#         loss = super().call(y_true, y_pred)
-#         assert weights.shape == loss.shape
-#         return weights*loss
 
 class ParametricCrossEntropyLoss(keras.losses.Loss):
     def __init__(self, threshold=0, epsilon=None):
@@ -114,7 +102,7 @@ def weighted(cls, function):
             loss = super().call(y_true, y_pred)
             assert weights.shape == loss.shape
             return weights*loss
-        
+
     return WeightedLoss
 
 
@@ -131,7 +119,7 @@ class Sigma_Activation(keras.layers.Layer):
 
     def call(self, x):
         return tf.concat([x[...,:-1], self.activation(x[...,-1:])], axis=-1)
-    
+
 create_core_model = ln.create_model
 
 def create_model(input_shape, sigma_activation='relu', create_core_model_kwargs=None):
@@ -145,6 +133,7 @@ def create_model(input_shape, sigma_activation='relu', create_core_model_kwargs=
 ln._current_threshold = None
 
 # redefine prepare_XY to use A instead of Y
+orig_Trainer = ln.Trainer
 class Trainer(ln.Trainer):
     def prepare_XY(self, fields, **prepare_XY_kwargs):
         if self._prepare_XY_kwargs != prepare_XY_kwargs:
@@ -161,7 +150,7 @@ class Trainer(ln.Trainer):
                 except KeyError:
                     logger.error(f'Unable to find label field {label_field} among the provided fields {list(self.fields.keys())}')
                     raise KeyError
-                
+
             A = lf.to_numpy(lf._time_average).reshape(lf.years, -1)[self.year_permutation].flatten()
 
             assert self.Y.shape == A.shape
@@ -173,7 +162,7 @@ class Trainer(ln.Trainer):
             self.Y = A
             ln._current_threshold = threshold # save the threshold in a module level variable
         return self.X, self.Y, self.year_permutation, self.lat, self.lon
-    
+
 # we redefine check_config_dict to ensure return_threshold is True
 orig_check_config_dict = ln.check_config_dict
 def check_config_dict(config_dict, correct_mistakes=True):
@@ -206,11 +195,12 @@ def get_loss_function(loss_name: str, u=1):
     #     return WeightedProbRegLoss(a=2, b=1)
     else:
         return orig_get_loss_function(loss_name, u=u)
-    
+
     if func:
         return weighted(cls, func)(*args, **kwargs)
     return cls(*args, **kwargs)
-    
+
+orig_get_default_metrics = ln.get_default_metrics
 def get_default_metrics(fullmetrics=False, u=1):
     if fullmetrics:
         metrics = [
@@ -222,34 +212,47 @@ def get_default_metrics(fullmetrics=False, u=1):
         metrics=None
     return metrics
 
+orig_postprocess = ln.postprocess
 def postprocess(x):
     return x
 
 #######################################################
 # set the modified functions to override the old ones #
 #######################################################
-ln.Trainer = Trainer
-ln.check_config_dict = check_config_dict
-ln.get_default_metrics = get_default_metrics
-ln.get_loss_function = get_loss_function
-ln.postprocess = postprocess
-ln.create_model = create_model
-ln.create_core_model = create_core_model
+def enable():
+    ln.Trainer = Trainer
+    ln.check_config_dict = check_config_dict
+    ln.get_default_metrics = get_default_metrics
+    ln.get_loss_function = get_loss_function
+    ln.postprocess = postprocess
+    ln.create_model = create_model
+    ln.create_core_model = create_core_model
 
-# uptade module level config dictionary
-ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram])
+    # uptade module level config dictionary
+    ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram])
 
-# change default values without modifying functions, below an example
-ut.set_values_recursive(ln.CONFIG_DICT,
-                        {
-                            'return_threshold': True,
-                            'loss': 'crps',
-                            'return_metric': 'val_ParametricCrossEntropyLoss',
-                            'monitor' : 'val_ParametricCrossEntropyLoss',
-                            'metric' : 'val_ParametricCrossEntropyLoss',
-                        },
-                        inplace=True) 
+    # change default values without modifying functions, below an example
+    ut.set_values_recursive(ln.CONFIG_DICT,
+                            {
+                                'return_threshold': True,
+                                'loss': 'crps',
+                                'return_metric': 'val_ParametricCrossEntropyLoss',
+                                'monitor' : 'val_ParametricCrossEntropyLoss',
+                                'metric' : 'val_ParametricCrossEntropyLoss',
+                            },
+                            inplace=True)
+
+def disable():
+    ln.Trainer = orig_Trainer
+    ln.check_config_dict = orig_check_config_dict
+    ln.get_default_metrics = orig_get_default_metrics
+    ln.get_loss_function = orig_get_loss_function
+    ln.postprocess = orig_postprocess
+    ln.create_model = create_core_model
+    del ln.create_core_model
+    ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram])
 
 # override the main function as well
 if __name__ == '__main__':
+    enable()
     ln.main()

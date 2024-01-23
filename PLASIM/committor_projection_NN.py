@@ -238,7 +238,7 @@ def prepare_XY(fields, **kwargs):
 
     return res
 
-
+orig_create_model = ln.create_model
 def create_model(input_shape, filters_per_field=[1,1,1], merge_to_one=False, batch_normalization=False, reg_mode='l2', reg_c=1, reg_weights=None, reg_periodicity=True, reg_norm=True, dense_units=[8,2], dense_activations=['relu', None], dense_dropouts=False, dense_l2coef=None):
     '''
     Creates a neural network
@@ -322,7 +322,6 @@ def split_model(model, maxiter=5):
 
 
 orig_train_model = ln.train_model
-
 def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics, load_kernels_from=None, learn_kernels=True, orig_train_model_kwargs=None):
     '''
     Wrapper of the original train_model function. The extra arguments are:
@@ -397,6 +396,7 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
 
     return orig_train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, loss, metrics, **orig_train_model_kwargs)
 
+orig_load_model = ln.load_model
 def load_model(checkpoint, compile=False):
     '''
     Loads a neural network and its weights. Checkpoints with the weights are supposed to be in the same folder as where the model structure is
@@ -428,12 +428,22 @@ def load_model(checkpoint, compile=False):
 #######################################################
 # set the modified functions to override the old ones #
 #######################################################
-ln.orig_train_model = orig_train_model
-ln.train_model = train_model
-ln.create_model = create_model
-ln.load_model = load_model
-ln.prepare_XY = prepare_XY
-ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram]) # module level config dictionary
+def enable():
+    ln.orig_train_model = orig_train_model
+    ln.train_model = train_model
+    ln.create_model = create_model
+    ln.load_model = load_model
+    ln.prepare_XY = prepare_XY
+    ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram]) # module level config dictionary
+
+def disable():
+    del ln.orig_train_model
+    ln.train_model = orig_train_model
+    ln.create_model = orig_create_model
+    ln.load_model = orig_load_model
+    ln.prepare_XY = orig_prepare_XY
+    ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram])
 
 if __name__ == '__main__':
+    enable()
     ln.main()

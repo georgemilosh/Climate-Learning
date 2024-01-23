@@ -265,6 +265,7 @@ def ab2msigma(a,b,threshold):
     m = -b * np.sqrt(2) * sigma
     return m,sigma
 
+orig_Trainer = ln.Trainer
 # Here we redefine the `prepare_XY` function to save the heatwave amplitude A
 class Trainer(ln.Trainer):
     def prepare_XY(self, fields, **prepare_XY_kwargs):
@@ -293,7 +294,7 @@ class Trainer(ln.Trainer):
             self.X = (X,A,threshold,self.lat)
         return self.X, self.Y, self.year_permutation, self.lat, self.lon
 
-
+orig_train_model = ln.train_model
 @ut.exec_time(logger)
 @ut.indent_logger(logger)
 def train_model(model, X_tr, A_tr, Y_tr, X_va, A_va, Y_va, folder, return_metric='val_CrossEntropyLoss'):
@@ -363,6 +364,7 @@ def train_model(model, X_tr, A_tr, Y_tr, X_va, A_va, Y_va, folder, return_metric
     logger.log(42, f'{score = }')
     return score
 
+orig_k_fold_cross_val = ln.k_fold_cross_val
 @ut.exec_time(logger)
 @ut.indent_logger(logger)
 def k_fold_cross_val(folder, X, Y, train_model_kwargs=None, optimal_checkpoint_kwargs=None, load_from=None, nfolds=10, val_folds=1, u=1, normalization_mode='pointwise',
@@ -531,12 +533,20 @@ def k_fold_cross_val(folder, X, Y, train_model_kwargs=None, optimal_checkpoint_k
 #######################################################
 # set the modified functions to override the old ones #
 #######################################################
-ln.k_fold_cross_val = k_fold_cross_val
-ln.train_model = train_model
-ln.Trainer = Trainer
+def enable():
+    ln.k_fold_cross_val = k_fold_cross_val
+    ln.train_model = train_model
+    ln.Trainer = Trainer
 
-ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram]) # module level config dictionary
-ut.set_values_recursive(ln.CONFIG_DICT, {'return_threshold': True}, inplace=True)
+    ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram]) # module level config dictionary
+    ut.set_values_recursive(ln.CONFIG_DICT, {'return_threshold': True}, inplace=True)
+
+def disable():
+    ln.k_fold_cross_val = orig_k_fold_cross_val
+    ln.train_model = orig_train_model
+    ln.Trainer = orig_Trainer
+    ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram]) # module level config dictionary
 
 if __name__ == '__main__':
+    enable()
     ln.main()

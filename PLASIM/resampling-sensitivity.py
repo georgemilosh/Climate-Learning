@@ -27,7 +27,7 @@ def select(*arrays, amount=0.1, p=None, if_not_enough_data='raise'):
     selects a given amount of data from a set of arrays according to a probability distribution
     Parameters
     ----------
-    *arrays : M arrays with first dimension of size N  
+    *arrays : M arrays with first dimension of size N
         The arrays from which to select from. They are assumed to be synchronized, i.e. if, for example, the first element of an array is selected, it is selected in every array (same indices are selected)
     amount : int or float, optional
         Amount of data to select. If int: number of elements; if float fraction of elsements, by default 0.1, which means 10% of the elements
@@ -93,7 +93,7 @@ def select(*arrays, amount=0.1, p=None, if_not_enough_data='raise'):
             else:
                 logger.error(f'You are asking to select {amount} datapoints but only {selectable_data} are selectable in the reservoir.')
                 raise ValueError(f'You are asking to select {amount} datapoints but only {selectable_data} are selectable in the reservoir.')
-        
+
         if np.abs(s - 1) > 1e-7:
             p /= s
 
@@ -117,7 +117,7 @@ def compute_p_func(q, Y, assume_label_knowledge, p_mode='future_loss', p_arg=Non
         if p_mode == 'uniform':
             p0_func = lambda qs: None
             p1_func = lambda qs: None
-            
+
         elif p_mode == 'future_loss':
             # We give higher probability of being picked to events that would produce a high crossentropy loss if added, namely events that are now misclassified have a higher probability of being picked
             epsilon = 1e-7 # GM: I guess you are assuming float32 precision. Maybe 1e-15 could still work?
@@ -131,7 +131,7 @@ def compute_p_func(q, Y, assume_label_knowledge, p_mode='future_loss', p_arg=Non
                 return -np.log(np.maximum(epsilon, qs))
         else:
             raise ValueError(f'{p_mode = } not supported when assuming label knowledge')
-    
+
     else: # options where we assume we don't have knowledge of the labels
         p1_func = lambda qs: None
         if p_mode == 'uniform':
@@ -158,6 +158,7 @@ def compute_p_func(q, Y, assume_label_knowledge, p_mode='future_loss', p_arg=Non
 
 
 # we redefine optimal_checkpoint fonction to account for eons
+orig_optimal_checkpoint = ln.optimal_checkpoint
 def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='minimize', first_epoch=1, collective=True, fold_subfolder='eon_last'):
     '''
     Computes the epoch that had the best score
@@ -198,7 +199,7 @@ def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='m
         If `direction` not in ['maximize', 'minimize']
     '''
     run_folder = run_folder.rstrip('/')
-    
+
     if fold_subfolder == 'eon_last':
         fold_subfolder = []
         for i in range(nfolds):
@@ -235,14 +236,14 @@ def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='m
         elif len(set([len(historyCustom[i] for i in range(nfolds))])) > 1:
             logger.error('Cannot compute a collective checkpoint from folds trained a different number of epochs. Computing independent checkpoints instead')
             collective = False
-    
+
     if collective:
         fold_subfolder = fold_subfolder[0] # fold_subfolder is a list of elements that are all the same, so we take just the first
         historyCustom = np.mean(np.array(historyCustom),axis=0)
         opt_checkpoint = opt_f(historyCustom)
     else:
         opt_checkpoint = np.array([opt_f(h) for h in historyCustom]) # each fold independently
-    
+
     opt_checkpoint += first_epoch
 
     if collective:
@@ -252,7 +253,7 @@ def optimal_checkpoint(run_folder, nfolds, metric='val_CustomLoss', direction='m
 
     return opt_checkpoint, fold_subfolder
 
-
+orig_train_model = ln.train_model
 # we redefine the train model function
 @ut.exec_time(logger)
 @ut.indent_logger(logger)
@@ -338,7 +339,7 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
     np.save(f'{folder}/Y_va.npy', Y_va) # save validation labels
-    
+
     # The data is split into positive and negative labels so that the same percentage enters
     i_tr = np.arange(Y_tr.shape[0]) # the subset of the data that will be used
 
@@ -382,7 +383,7 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
         # (0.1, 0.2, 0.3, 0.4) -> [(0.1, 0.2), (0.2, 0.3), (0.3, 0.4)]
     else:
         p_args = [p_arg_orig]
-        
+
 
 
     ## first eon
@@ -443,7 +444,7 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
     logger.log(42, f'{score = }')
 
     # thanks to early stopping the model is reverted back to the best checkpoint
-    
+
     # compute q on the training dataset (using batches so I am sure the data fits in memory)
     q_tr = []
     for b in range(Y_tr.shape[0]//batch_size + 1):
@@ -579,10 +580,18 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
 #####################################################
 # set the modified function to override the old one #
 #####################################################
-ln.train_model = train_model
-ln.optimal_checkpoint = optimal_checkpoint
-ln.compute_p_func = compute_p_func
-ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram]) # module level config dictionary
+def enable():
+    ln.train_model = train_model
+    ln.optimal_checkpoint = optimal_checkpoint
+    ln.compute_p_func = compute_p_func
+    ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram]) # module level config dictionary
+
+def disable():
+    ln.train_model = orig_train_model
+    ln.optimal_checkpoint = orig_optimal_checkpoint
+    del ln.compute_p_func
+    ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram]) # module level config dictionary
 
 if __name__ == '__main__':
+    enable()
     ln.main()

@@ -23,6 +23,7 @@ if __name__ == '__main__':
 sys.path.append('../../MaxSeparation/')
 import MaxSeparator as ms
 
+orig_train_model = ln.train_model
 @ut.exec_time(logger)
 @ut.indent_logger(logger)
 def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, patience=0,
@@ -76,7 +77,7 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, patience=0,
 
     X0_va = X_va[Y_va==0]
     X1_va = X_va[Y_va==1]
-    
+
     # prepare the model
     model.set_data(X0_tr,X1_tr)
     model.compute_rotation()
@@ -138,6 +139,7 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, patience=0,
     logger.log(42, f'{score = }')
     return score
 
+orig_k_fold_cross_val = ln.k_fold_cross_val
 @ut.exec_time(logger)
 @ut.indent_logger(logger)
 def k_fold_cross_val(folder, X, Y, train_model_kwargs=None, optimal_checkpoint_kwargs=None, load_from=None, nfolds=10, val_folds=1, u=1, normalization_mode='pointwise',
@@ -184,7 +186,7 @@ def k_fold_cross_val(folder, X, Y, train_model_kwargs=None, optimal_checkpoint_k
         whether to use a set of evaluation metrics or just the loss
     training_epochs : int, optional
         number of training epochs when creating a model from scratch
-    training_epochs_tl : int, optional 
+    training_epochs_tl : int, optional
         numer of training epochs when using transfer learning
     loss : str, optional
         loss function to minimize, by default 'sparse_categorical_crossentropy'
@@ -244,13 +246,13 @@ def k_fold_cross_val(folder, X, Y, train_model_kwargs=None, optimal_checkpoint_k
 
         if normalization_mode: # normalize X_tr and X_va
             X_tr, X_mean, X_std = ln.normalize_X(X_tr, mode=normalization_mode)
-            X_va = (X_va - X_mean)/X_std 
+            X_va = (X_va - X_mean)/X_std
 
             # save X_mean and X_std
             np.save(f'{fold_folder}/X_mean.npy', X_mean) # GM: Why not include all of this in normalize_X? It may simplify the code -> AL: Because normalize_X doesn't know about fold_folder
             np.save(f'{fold_folder}/X_std.npy', X_std)
-        
-            
+
+
         logger.info(f'{X_tr.shape = }, {X_va.shape = }')
 
         # at this point data is ready to be fed to the networks
@@ -277,11 +279,11 @@ def k_fold_cross_val(folder, X, Y, train_model_kwargs=None, optimal_checkpoint_k
         logger.info(f'RAM memory: {my_memory[i][3]:.3e}') # Getting % usage of virtual_memory ( 3rd field)
 
         ln.gc.collect() # Garbage collector which removes some extra references to the objects. This is an attempt to micromanage the python handling of RAM
-        
+
     np.save(f'{folder}/RAM_stats.npy', my_memory)
 
     # recompute the scores if collective=True
-    # Here we want to use the `optimal_checkpoint` function to compute the best checkpoint for this network. 
+    # Here we want to use the `optimal_checkpoint` function to compute the best checkpoint for this network.
     # Mind that before we used it to determine the optimal checkpoint from the network from which to perform transfer learning, so we need to change the parameters
     try:
         collective = optimal_checkpoint_kwargs['collective']
@@ -297,7 +299,7 @@ def k_fold_cross_val(folder, X, Y, train_model_kwargs=None, optimal_checkpoint_k
             first_epoch = optimal_checkpoint_kwargs['first_epoch']
         except KeyError:
             first_epoch = ln.get_default_params(ln.optimal_checkpoint)['first_epoch']
-            
+
         opt_checkpoint, fold_subfolder = ln.optimal_checkpoint(folder,nfolds, **optimal_checkpoint_kwargs)
 
         # recompute the scores
@@ -313,7 +315,7 @@ def k_fold_cross_val(folder, X, Y, train_model_kwargs=None, optimal_checkpoint_k
 
             Y_pred = model(X_va)
             np.save(f'{fold_folder}/Y_pred_unbiased.npy', Y_pred)
-        
+
 
     score_mean = np.mean(scores)
     score_std = np.std(scores)
@@ -340,10 +342,16 @@ def k_fold_cross_val(folder, X, Y, train_model_kwargs=None, optimal_checkpoint_k
 #######################################################
 # set the modified functions to override the old ones #
 #######################################################
-ln.k_fold_cross_val = k_fold_cross_val
-ln.train_model = train_model
+def enable():
+    ln.k_fold_cross_val = k_fold_cross_val
+    ln.train_model = train_model
+    ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram]) # module level config dictionary
 
-ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram]) # module level config dictionary
+def disable():
+    ln.k_fold_cross_val = orig_k_fold_cross_val
+    ln.train_model = orig_train_model
+    ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram]) # module level config dictionary
 
 if __name__ == '__main__':
+    enable()
     ln.main()

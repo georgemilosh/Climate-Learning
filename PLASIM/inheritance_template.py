@@ -26,11 +26,12 @@ if __name__ == '__main__':
 # define your custom functions                                                 #
 # below is an example redefining the Trainer class and a module level function #
 ################################################################################
-
+orig_Trainer = ln.Trainer
 class Trainer(ln.Trainer):
     def extra_feature(self):
         pass
 
+orig_normalize_X = ln.normalize_X
 def normalize_X(X, fold_folder, mode='mycustommode', recompute=False):
     if mode == 'mycustommode':
         # do custom stuff
@@ -41,15 +42,23 @@ def normalize_X(X, fold_folder, mode='mycustommode', recompute=False):
 #######################################################
 # set the modified functions to override the old ones #
 #######################################################
-ln.Trainer = Trainer
-ln.normalize_X = normalize_X
+def enable():
+    # override functions
+    ln.Trainer = Trainer
+    ln.normalize_X = normalize_X
 
-# uptade module level config dictionary
-ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram])
+    # uptade module level config dictionary
+    ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram])
 
-# change default values without modifying functions, below an example
-ut.set_values_recursive(ln.CONFIG_DICT, {'return_threshold': True}, inplace=True) 
+    # change default values without modifying functions, below an example
+    ut.set_values_recursive(ln.CONFIG_DICT, {'return_threshold': True}, inplace=True)
 
-# override the main function as well (you don't need to edit the following code)
+def disable():
+    # restore original functions
+    ln.Trainer = orig_Trainer
+    ln.normalize_X = orig_normalize_X
+    ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram]) # rebuild config dict
+
 if __name__ == '__main__':
+    enable() # enable this mod
     ln.main()
