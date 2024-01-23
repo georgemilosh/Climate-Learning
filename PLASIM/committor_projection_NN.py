@@ -86,7 +86,7 @@ class Dense2D(layers.Layer):
                 ))
             else:
                 self.kernels.append(None) # no filters for this field
-    
+
     def call(self, x):
         if x.shape[-1] != self.nfields:
             raise ValueError(f'Expected {self.nfields} fields, received {x.shape[-1]}')
@@ -98,7 +98,7 @@ class Dense2D(layers.Layer):
         elif self.merge_to_one:
             x = self.sum(x)
         else:
-            x = self.conc(x)            
+            x = self.conc(x)
 
         return x
 
@@ -174,7 +174,7 @@ class GradientRegularizer(keras.regularizers.Regularizer):
                     self.broadcasted_coslat = (np.ones(x.shape[:2]).T*self.coslat).T # these double transposition helps using numpy native operators
             elif self.weights.shape[:-1] != x.shape[:-1]:
                 raise ValueError(f'weight shape {self.weights.shape} does not match received input shape {x.shape[:-1]}')
-        
+
         if self.mode == 'l1':
             op = tf.math.abs
         else:
@@ -226,7 +226,7 @@ class GradientRegularizer(keras.regularizers.Regularizer):
 
     def get_config(self):
         return {'c': self.c, 'weights': self.weights, 'periodic_lon': self.periodic_lon, 'normalize': self.normalize}
-    
+
 orig_prepare_XY = ln.prepare_XY
 @wraps(orig_prepare_XY)
 def prepare_XY(fields, **kwargs):
@@ -280,7 +280,7 @@ def create_model(input_shape, filters_per_field=[1,1,1], merge_to_one=False, bat
     regularizer = None
     if reg_c:
         regularizer = GradientRegularizer(mode=reg_mode, c=reg_c, weights=reg_weights, periodic_lon=reg_periodicity, normalize=reg_norm, lat=ln.lat)
-    
+
     model = keras.models.Sequential()
 
     model.add(Dense2D(filters_per_field=filters_per_field, merge_to_one=merge_to_one, regularizer=regularizer, input_shape=input_shape))
@@ -309,6 +309,16 @@ def create_model(input_shape, filters_per_field=[1,1,1], merge_to_one=False, bat
             model.add(layers.Dropout(dense_dropouts[i]))
 
     return model
+
+def split_model(model, maxiter=5):
+    proj = model.layers[0]
+    rest = model.layers[1:]
+    for i in range(maxiter):
+        if hasattr(proj, 'filters_per_field'):
+            break
+        proj = proj.layers[0]
+        rest = proj.layers[1:] + rest
+    return proj, keras.models.Sequential(rest)
 
 
 orig_train_model = ln.train_model
@@ -339,15 +349,10 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
                 np.save(f'{folder}/significance.npy', comp)
             else:
                 raise NotImplementedError(f'Unknown option {load_kernels_from}')
-            
-            proj = model.layers[0]
-            for i in range(5):
-                try:
-                    FPF = proj.filters_per_field
-                    break
-                except AttributeError:
-                    proj = proj.layers[0]
 
+            # split the model
+            proj, _ = split_model(model)
+            FPF = proj.filters_per_field
 
             load_kernels_from = []
             for i,fpf in enumerate(FPF):
@@ -368,19 +373,11 @@ def train_model(model, X_tr, Y_tr, X_va, Y_va, folder, num_epochs, optimizer, lo
         logger.info('Projection is not trainable: computing it at the beginning')
 
         # split the model
-        proj = model.layers[0]
-        rest = model.layers[1:]
-        for i in range(5):
-            try:
-                FPF = proj.filters_per_field
-                break
-            except AttributeError:
-                proj = proj.layers[0]
-                rest = proj.layers[1:] + rest
+        proj, rest = split_model(model)
 
         proj = keras.models.Sequential([proj])
         proj.save(f'{folder}/projection') # save the projection
-        model = keras.models.Sequential(rest) # override model
+        model = rest # override model
         model.build(input_shape=proj.output_shape)
 
         # compute the output of the first layer
