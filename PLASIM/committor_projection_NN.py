@@ -327,8 +327,8 @@ def split_model(model, maxiter=5):
     for i in range(maxiter):
         if hasattr(proj, 'filters_per_field'):
             break
-        proj = proj.layers[0]
         rest = proj.layers[1:] + rest
+        proj = proj.layers[0]
     return proj, keras.models.Sequential(rest)
 
 
