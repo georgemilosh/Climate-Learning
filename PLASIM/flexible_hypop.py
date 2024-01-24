@@ -44,6 +44,7 @@ import committor_projection_NN as core
 
 try:
     ln = core.ln
+    core.enable() # enable the mod
 except AttributeError:
     ln = core
 assert ln.__name__ == 'Learn2_new', 'core must import Learn2_new as ln or be Learn2_new itself'
@@ -61,7 +62,7 @@ def new_study_name(study_name):
         study_name = 'study'
     if len(previous_studies) == 0:
         return study_name
-    
+
     c = 1
     while True:
         new_name = f'{study_name}_{c}'
@@ -71,10 +72,10 @@ def new_study_name(study_name):
 
 class ScoreOptimizer():
     """
-    This class is used to optimize the hyperparameters of the machine learning model. It uses the Optuna library. 
-    The class takes in a trainer object, a study_name, and a dictionary of common_kwargs as arguments. 
-    The trainer object is used to train the machine learning model and evaluate its performance. 
-    The study_name is used to name the Optuna study, which stores the results of the optimization 
+    This class is used to optimize the hyperparameters of the machine learning model. It uses the Optuna library.
+    The class takes in a trainer object, a study_name, and a dictionary of common_kwargs as arguments.
+    The trainer object is used to train the machine learning model and evaluate its performance.
+    The study_name is used to name the Optuna study, which stores the results of the optimization
     process. The common_kwargs are additional arguments that are passed to the trainer object when training the model.
     """
     def __init__(self, trainer, study_name='study', common_kwargs=None, repetitions=1, load_if_exists=True):
@@ -104,14 +105,14 @@ class ScoreOptimizer():
                 f.write(f'{"#"*20}\n# This script was run for study {self.name} on {ln.ut.now()}.\n# It was the {c}th script to be run for this study.\n\n# This script was saved for logging purposes. Do not attempt to run it again\n{"#"*20}\n\n')
                 f.write(open(__file__).read())
             os.chmod(script, S_IREAD | S_IROTH | S_IRGRP)
-        
+
 
     def objective(self, trial):
         #### select hyperparameters ####
         """
-        The ScoreOptimizer class has an objective method that defines the objective function for the Optuna study. 
-        This method takes in a trial object from Optuna and uses it to suggest hyperparameters for the machine learning model. 
-        These hyperparameters are then passed to the trainer object to train the model and evaluate its performance. 
+        The ScoreOptimizer class has an objective method that defines the objective function for the Optuna study.
+        This method takes in a trial object from Optuna and uses it to suggest hyperparameters for the machine learning model.
+        These hyperparameters are then passed to the trainer object to train the model and evaluate its performance.
         The performance score is returned as the result of the objective function.
         """
         hyp = {}
@@ -119,23 +120,23 @@ class ScoreOptimizer():
         # >> EDITABLE
 
         # Here you can add the hyperparameters to optimize using optuna suggestions. For example the following code optimizes learning rate, batch size and regularization
-        
+
 
         # optimizing learning rate, batch size and regularization:
-        
+
         ## learning rate
         lr = trial.suggest_float('lr', 1e-5, 1e-2, log=True) # learning rate
         lr = literal_eval(f'{lr:.7f}') # limit the resolution of the learning rate
         hyp['lr'] = lr
 
         ## extra lr prameters
-        # lr_min = trial.suggest_float('lr_min', 1e-7, lr, log=True) 
-        # lr_min = literal_eval(f'{lr_min:.7f}') 
+        # lr_min = trial.suggest_float('lr_min', 1e-7, lr, log=True)
+        # lr_min = literal_eval(f'{lr_min:.7f}')
         # hyp['lr_min'] = lr_min
         # hyp['epoch_tol'] = trial.suggest_int('epoch_tol', 1, 5)
         # hyp['decay'] = literal_eval(f"{trial.suggest_float(f'decay', 0.05, 0.5, log=True):.05f}")
         # hyp['warmup'] = trial.suggest_categorical(f'warmup', [True, False])
-        
+
         ## batch size
         hyp['batch_size'] = trial.suggest_categorical(f'batch_size', [32, 64, 128, 256, 512])
 
@@ -145,7 +146,7 @@ class ScoreOptimizer():
         # Add more hyperparameters here
 
         # << EDITABLE
-        
+
 
 
         # remove arguments that remained empty lists (this facilitates commenting lines to remove kwargs to optimize)
@@ -183,7 +184,7 @@ class ScoreOptimizer():
             except Exception as e:
                 # we get an exception that is not handled by Trainer._run
                 raise RuntimeError("If upon_failed_run was set to 'continue', something very bad happened if we reached this block") from e
-            
+
             finally:
                 runs = ln.ut.json2dict('runs.json')
                 run_ids.append(list(runs.keys())[-1])
@@ -228,7 +229,7 @@ class ScoreOptimizer():
 
 if __name__ == '__main__':
     # >> EDITABLE
-    
+
     # specify the name of the study
     study_name = 'study'
     # specify wheter to load an existing compatible study
