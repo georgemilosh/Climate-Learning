@@ -105,7 +105,7 @@ class Dense2D(layers.Layer):
 
 
 class GradientRegularizer(keras.regularizers.Regularizer):
-    def __init__(self, mode='l2', c=1, weights=None, periodic_lon=True, normalize=True, lat=None):
+    def __init__(self, mode='l2', c=1, weights=None, periodic_lon=True, normalize=False, lat=None):
         '''
         Makes a filter smooth by penalizing the difference between adjacent pixels
 
@@ -240,7 +240,7 @@ def prepare_XY(fields, **kwargs):
     return res
 
 orig_create_model = ln.create_model
-def create_model(input_shape, filters_per_field=[1,1,1], merge_to_one=False, batch_normalization=False, regularization='gradient', reg_mode='l2', reg_c=1, reg_weights=None, reg_periodicity=True, reg_norm=True, dense_units=[8,2], dense_activations=['relu', None], dense_dropouts=False, dense_l2coef=None):
+def create_model(input_shape, filters_per_field=[1,1,1], merge_to_one=False, batch_normalization=False, regularization='gradient', reg_mode='l2', reg_c=1, reg_weights=None, reg_periodicity=True, reg_norm=False, dense_units=[8,2], dense_activations=['relu', None], dense_dropouts=False, dense_l2coef=None):
     '''
     Creates a neural network
 
