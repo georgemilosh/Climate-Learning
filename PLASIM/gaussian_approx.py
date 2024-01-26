@@ -16,6 +16,7 @@ layers = keras.layers
 pd = ln.pd
 
 import scipy.special as ss
+from scipy import sparse
 
 # log to stdout
 import logging
@@ -26,7 +27,7 @@ if __name__ == '__main__':
     logging.getLogger().level = logging.INFO
     logging.getLogger().handlers = [logging.StreamHandler(sys.stdout)]
 
-def compute_weight_matrix(reshape_mask, lat):
+def compute_weight_matrix(reshape_mask, lat) -> sparse.dia_matrix:
     '''
     Compute the matrix W such that
     $$ H_2(p) = p^\top W p $$
@@ -40,7 +41,7 @@ def compute_weight_matrix(reshape_mask, lat):
 
     Returns
     -------
-    np.ndarray[float]
+    spares.dia_matrix[float]
         W
     '''
     shape = reshape_mask.shape
@@ -50,7 +51,7 @@ def compute_weight_matrix(reshape_mask, lat):
 
     geosep = ut.Reshaper(reshape_mask)
 
-    W = np.zeros(shape_r*2)
+    W = sparse.lil_matrix(shape_r*2)
     #f -> field
     #i -> lat
     #j -> lon
@@ -94,7 +95,7 @@ def compute_weight_matrix(reshape_mask, lat):
                 W[ind2,ind2] += wi
                 W[ind1,ind2] += -wi
                 W[ind2,ind1] += -wi
-    return W
+    return W.todia() # most of the entries of W are around the diagonal, so this is more efficient
 
 class GaussianCommittor(object):
     def __init__(self, regularization_matrix=0, threshold=0, GPU=True):
@@ -193,7 +194,7 @@ class GaussianCommittor(object):
         assert self.regularization_matrix.shape == sigma_XX.shape
 
         # compute the (regularized) projection pattern
-        self.p = self.engine.linalg.inv(sigma_XX + self.engine.asarray(self.regularization_matrix, dtype=self.precision)) @ sigma_XA
+        self.p = self.engine.linalg.inv(sigma_XX + self.engine.asarray(self.regularization_matrix.toarray() if isinstance(self.regularization_matrix, sparse.spmatrix) else self.regularization_matrix, dtype=self.precision)) @ sigma_XA
         # now that we have the projection pattern we don't need sigma_XX and sigma_XA anymore
         del sigma_XX, sigma_XA # this frees GPU memory
 
@@ -457,7 +458,7 @@ def k_fold_cross_val(folder, X, Y, train_model_kwargs=None, optimal_checkpoint_k
             W = np.identity(geosep.surviving_coords)
         elif regularization == 'gradient':
             W = compute_weight_matrix(geosep.reshape_mask,lat)
-            np.save(f'{folder}/W.npy', W)
+            sparse.save_npz(f'{folder}/W.npz', W)
         else:
             logger.error(f'Unrecognized regularization mode {regularization}')
             raise KeyError()
