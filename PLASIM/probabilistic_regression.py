@@ -108,26 +108,30 @@ def weighted(cls, function):
 
 
 
-class Sigma_Activation(keras.layers.Layer):
-    def __init__(self, activation='relu', name=None,):
+class Sigma_Activation(tf.keras.layers.Layer):
+    def __init__(self, activation='relu', min_sigma=None, name=None,):
         super().__init__(trainable=False, name=name or self.__class__.__name__)
         if activation == 'abs':
             self.activation = tf.math.abs
         elif activation == 'exp':
             self.activation = tf.math.exp
         else:
-            self.activation = keras.activations.get(activation)
+            self.activation = tf.keras.activations.get(activation)
+        self.min_sigma = min_sigma
 
     def call(self, x):
-        return tf.concat([x[...,:-1], self.activation(x[...,-1:])], axis=-1)
+        sigma = self.activation(x[...,-1:])
+        if self.min_sigma is not None:
+            sigma = tf.maximum(sigma, self.min_sigma)
+        return tf.concat([x[...,:-1], sigma], axis=-1)
 
 create_core_model = ln.create_model
 
-def create_model(input_shape, sigma_activation='relu', create_core_model_kwargs=None):
+def create_model(input_shape, sigma_activation='relu', min_sigma=None, create_core_model_kwargs=None):
     if create_core_model_kwargs is None:
         create_core_model_kwargs = {}
     model = create_core_model(input_shape, **create_core_model_kwargs)
-    model = keras.models.Sequential([model, Sigma_Activation(sigma_activation)])
+    model = keras.models.Sequential([model, Sigma_Activation(activation=sigma_activation, min_sigma=min_sigma)])
     return model
 
 # create a module level variable to store the threshold
