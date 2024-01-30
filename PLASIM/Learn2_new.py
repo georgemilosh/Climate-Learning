@@ -436,7 +436,7 @@ def remove_default_kwargs(kwargs:dict, config_dict_flat:dict):
         if value != config_dict_flat[arg]:
             new_kwargs[arg] = value
         else:
-            logger.warning(f'removing {arg} from run_args because it is at its default value {value}')
+            logger.debug(f'removing {arg} from run_args because it is at its default value {value}')
     return new_kwargs
 
 ####################################
