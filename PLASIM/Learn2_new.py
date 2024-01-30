@@ -683,7 +683,7 @@ def make_groups(runs, variable='tau', config_dict_flat=None, sort=False, ignore=
         g['runs'] = [runs[k] for k in g['runs']]
     return groups
 
-def get_subset(runs, conditions, config_dict=None):
+def get_subset(runs:dict, conditions:dict, config_dict=None) -> dict:
     '''
     Wrapper of `select_compatible` that allows to extract a subset of runs that satisfy certain conditions
 
@@ -707,6 +707,57 @@ def get_subset(runs, conditions, config_dict=None):
     subset = select_compatible(run_args, conditions, require_unique=False, config=config_dict)
     subset = {k:runs[k] for k in subset}
     return subset
+
+def get_run_kwargs(run_id:str, root_path:str='./') -> dict:
+    """
+    Retrieves the keyword arguments for a specific run based on the run_id and root_path.
+
+    Parameters
+    ----------
+    run_id : str
+        The identifier of the run to retrieve the keyword arguments for.
+        It can either be a simple integer or a path (absolute or relative to the root_path) to an external folder. See examples
+
+    root_path : str, optional
+        The root path to search for the run. This is where this script is running. Defaults to './'.
+
+    Returns
+    -------
+        dict: The keyword arguments for the specified run (as a flat dictionary).
+
+    Examples
+    --------
+    get_run_kwargs('42') # returns the keyword arguments for the run with id 42 in the current folder
+    get_run_kwargs('42', '/path/to/root/folder') # returns the keyword arguments for the run with id 42 in the root folder
+    get_run_kwargs('/path/to/external/folder/42') # returns the keyword arguments for the run with id 42 in the external folder, including those specified in the config file in the external folder
+    """
+
+    external_folder = False
+    if '/' not in run_id:
+        path = root_path
+    else:
+        external_folder = True
+        path, run_id = run_id.rsplit('/',1)
+        logger.info(f'Looking for run {run_id} in external folder {path}')
+    try:
+        run_id = str(int(run_id))
+    except ValueError:
+        raise ValueError('run_id must be the string representation of an integer')
+
+    runs = ut.json2dict(f'{path}/runs.json')
+    try:
+        rargs = runs[run_id]['args']
+    except KeyError:
+        raise KeyError(f'{run_id} is not a valid run')
+
+    if not external_folder:
+        return rargs
+    # deal with external folder
+    logger.warning(f'Loading external config file from {path}: if there are incopatibilities with the current folder, they may cause issues')
+    config_dict = ut.json2dict(f'{path}/config.json')
+    run_kwargs = ut.collapse_dict(ut.set_values_recursive(config_dict['run_kwargs'], rargs))
+    return run_kwargs
+
 
 def get_run(load_from, current_run_args:dict=None,  ignorable_keys=None, runs_path='./runs.json'):
     '''
@@ -3800,6 +3851,8 @@ def main():
 
     # the code below is executed only if there is no lock
 
+    config_path = './config.json' # set the config run to be in the folder where the script is running
+
     arg_dict = parse_command_line()
 
     logger.info(f'{arg_dict = }')
@@ -3814,13 +3867,10 @@ def main():
     # check if we want to import the parameters from another run (see usage description in the beginnig of this file)
     import_params_from = arg_dict.pop('import_params_from', None)
     if import_params_from is not None:
-        runs = ut.json2dict('./runs.json')
-        try:
-            rargs = runs[str(import_params_from)]['args']
-        except KeyError:
-            raise KeyError(f'{import_params_from} is not a valid run')
         logger.info(f'Importing parameters from run {import_params_from}')
-        logger.info(ut.dict2str(rargs))
+        rargs = get_run_kwargs(import_params_from)
+        rargs = remove_default_kwargs(rargs, ut.collapse_dict(ut.json2dict(config_path)))
+        logger.info(f'Imported parameters: {ut.dict2str(rargs)}')
 
         for k,v in rargs.items(): # add the imported parameters to arg_dict, but not the ones explicitly provided in the command line
             if k not in arg_dict:
@@ -3829,7 +3879,7 @@ def main():
         logger.info(f'\n\nEquivalent command line arguments:\n{ut.dict2str(arg_dict)}')
 
     # create trainer
-    trainer = Trainer(config='./config.json', **trainer_kwargs)
+    trainer = Trainer(config=config_path, **trainer_kwargs)
 
     # schedule runs
     trainer.schedule(**arg_dict)
