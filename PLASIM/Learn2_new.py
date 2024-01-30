@@ -733,6 +733,8 @@ def get_run_kwargs(run_id:str, root_path:str='./') -> dict:
     """
 
     external_folder = False
+    run_id = str(run_id)
+
     if '/' not in run_id:
         path = root_path
     else:
