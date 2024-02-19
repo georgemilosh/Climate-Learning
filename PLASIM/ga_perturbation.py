@@ -47,12 +47,10 @@ class GaPerturbation(object):
         return getattr(self.model, name)
 
 
-create_perturbation_model = ln.create_model
-
-def create_model(input_shape, path_to_ga, **create_perturbation_model_kwargs):
-    if create_perturbation_model_kwargs is None:
-        create_perturbation_model_kwargs = {}
-    model = create_perturbation_model(input_shape, **create_perturbation_model_kwargs)
+def create_perturbation_model(input_shape, path_to_ga, **create_model_kwargs):
+    if create_model_kwargs is None:
+        create_model_kwargs = {}
+    model = ln.create_model(input_shape, **create_model_kwargs)
     return GaPerturbation(model, path_to_ga)
 
 
@@ -232,7 +230,8 @@ def k_fold_cross_val(folder, X, Y, path_to_ga=None, create_model_kwargs=None, tr
         model = None
         if load_from is None:
             fold_path_to_ga = f'{path_to_ga}/fold_{i}'
-            model = create_model(input_shape=X_tr.shape[1:], path_to_ga=fold_path_to_ga, **create_model_kwargs)
+            model = ln.create_model(input_shape=X_tr.shape[1:], **create_model_kwargs)
+            model = GaPerturbation(model, fold_path_to_ga)
         else:
             model = ln.load_model(load_from[i], compile=False)
         summary_buffer = ut.Buffer() # workaround necessary to log the structure of the network to the file, since `model.summary` uses `print`
@@ -317,15 +316,11 @@ def k_fold_cross_val(folder, X, Y, path_to_ga=None, create_model_kwargs=None, tr
 #######################################################
 def enable():
     ln.add_mod(__file__, description, dependencies)
-    ln.create_perturbation_model = create_perturbation_model
-    ln.create_model = create_model
     ln.k_fold_cross_val = k_fold_cross_val
     ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram]) # module level config dictionary
 
 def disable():
     ln.remove_mod(__file__)
-    del ln.create_perturbation_model
-    ln.create_model = create_perturbation_model
     ln.k_fold_cross_val = orig_k_fold_cross_val
     ln.CONFIG_DICT = ln.build_config_dict([ln.Trainer.run, ln.Trainer.telegram])
 
