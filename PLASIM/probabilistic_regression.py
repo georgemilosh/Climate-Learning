@@ -76,6 +76,10 @@ class ProbRegLoss(keras.losses.Loss):
         assert y_pred.shape == sig2.shape == y_true.shape, f'{y_pred.shape = }, {sig2.shape = }, {y_true.shape = }'
         return tf.math.square(y_true - y_pred)/sig2 + tf.math.log(sig2) + penalty
 
+class NLLLoss(ProbRegLoss):
+    def __init__(self, name=None, epsilon=None):
+        super().__init__(name=name or self.__class__.__name__, epsilon=epsilon)
+
 class ParametricCrossEntropyLoss(keras.losses.Loss):
     def __init__(self, threshold=0, epsilon=None):
         super().__init__(name=self.__class__.__name__)
@@ -107,7 +111,7 @@ def weighted(cls, function):
     return WeightedLoss
 
 
-
+# custom activation for sigma
 class Sigma_Activation(tf.keras.layers.Layer):
     def __init__(self, activation='relu', min_sigma=None, name=None,):
         super().__init__(trainable=False, name=name or self.__class__.__name__)
