@@ -8,7 +8,6 @@ dependencies = None
 
 import Learn2_new as ln
 logger = ln.logger
-# early_stopping = ln.early_stopping # this seems useless
 ut = ln.ut
 np = ln.np
 tf = ln.tf
