@@ -31,26 +31,25 @@ if __name__ == '__main__':
     logging.getLogger().handlers = [logging.StreamHandler(sys.stdout)]
 
 
-class GaPerturbation(keras.Model):
-    def __init__(self, model, path_to_ga):
-        self.model = model
+class GaussianLayer(keras.Layer):
+    def __init__(self, path_to_ga, **kwargs):
+        super().__init__(**kwargs)
         ln.logger.log(45, f'Loading GA Perturbation from {path_to_ga}...')
         m, self._sigma = np.load(f'{path_to_ga}/msigma.npy').astype(np.float32)
         self._proj = m*tf.convert_to_tensor(np.load(f'{path_to_ga}/proj.npy'), dtype=tf.float32)
-        self.merge = keras.layers.Add()
+        self.naxes = len(self._proj.shape)
 
     def build(self, input_shape):
-        self.model.build(input_shape)
+        assert input_shape[-self.naxes:] == self._proj.shape
         self.proj = self.add_weight(name='proj', shape=self._proj.shape, initializer='zeros', trainable=False)
         # set weight values from self._proj
         self.proj.assign(self._proj)
         self.sigma = self.add_weight(name='sigma', shape=(), initializer='zeros', trainable=False)
         self.sigma.assign(self._sigma)
 
-
     def call(self, x):
         mu = tf.tensordot(x, self.proj, axes=len(self.proj.shape))
-        ga_output = tf.stack([mu, tf.ones_like(mu)*self.sigma], axis=-1)
+        return tf.stack([mu, tf.ones_like(mu)*self.sigma], axis=-1)
         model_output = self.model(x)
         assert ga_output.shape == model_output.shape, (f'{ga_output.shape = } != {model_output.shape = }')
         return self.merge([ga_output, model_output]) # model_output + ga_output
@@ -76,7 +75,18 @@ def create_model(input_shape, path_to_ga=None, create_inner_model_kwargs=None):
     # split the model to put the sigma_activation at the end
     assert len(model.layers) == 2, model.layers
     model, act = model.layers
-    model = keras.Sequential([GaPerturbation(model, f'{path_to_ga}/fold_{ln.current_fold}'), act])
+
+    # create the gaussian model
+    ga_model = GaussianLayer(path_to_ga)
+
+    # create the full perturbative model
+    inputs = tf.keras.Input(shape=input_shape, name='input')
+    ga_output = ga_model(inputs)
+    model_output = model(inputs)
+    merged_output = layers.Add()([ga_output, model_output])
+    outputs = act(merged_output)
+
+    model = keras.Model(inputs=inputs, outputs=outputs, name='perturbative_model')
     return model
 
 pr.disable()
