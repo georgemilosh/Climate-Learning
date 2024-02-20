@@ -74,7 +74,7 @@ def create_model(input_shape, path_to_ga=None, create_inner_model_kwargs=None):
     model, act = model.layers
 
     # create the gaussian model
-    ga_model = GaussianLayer(path_to_ga)
+    ga_model = GaussianLayer(f'{path_to_ga}/fold_{ln.current_fold}', name='gaussian_model')
 
     # create the full perturbative model
     inputs = tf.keras.Input(shape=input_shape, name='input')
