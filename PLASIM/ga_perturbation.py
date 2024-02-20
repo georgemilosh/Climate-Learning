@@ -31,7 +31,7 @@ if __name__ == '__main__':
     logging.getLogger().handlers = [logging.StreamHandler(sys.stdout)]
 
 
-class GaussianLayer(keras.Layer):
+class GaussianLayer(layers.Layer):
     def __init__(self, path_to_ga, **kwargs):
         super().__init__(**kwargs)
         ln.logger.log(45, f'Loading GA Perturbation from {path_to_ga}...')
@@ -50,9 +50,6 @@ class GaussianLayer(keras.Layer):
     def call(self, x):
         mu = tf.tensordot(x, self.proj, axes=len(self.proj.shape))
         return tf.stack([mu, tf.ones_like(mu)*self.sigma], axis=-1)
-        model_output = self.model(x)
-        assert ga_output.shape == model_output.shape, (f'{ga_output.shape = } != {model_output.shape = }')
-        return self.merge([ga_output, model_output]) # model_output + ga_output
 
 
 orig_k_fold_cross_val_split = ln.k_fold_cross_val_split
