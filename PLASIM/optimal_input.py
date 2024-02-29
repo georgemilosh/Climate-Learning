@@ -1,7 +1,10 @@
 import numpy as np
 import tensorflow as tf
 from tqdm.notebook import tqdm
+import matplotlib.pyplot as plt
 
+def mean_no_batch(x):
+    return tf.reduce_mean(x, axis=np.arange(1,len(x.shape)))
 
 class Regularizer():
     def __init__(self, l1coef=0, l2coef=0, rough_coef=0.1, gradient_regularizer=None, target_roughness=28, area_weights=1, track_components=True):
@@ -16,23 +19,20 @@ class Regularizer():
 
         self.info = {} if track_components else None
 
-    def mean_no_batch(self, x):
-        return tf.reduce_mean(x, axis=np.arange(1,len(x.shape)))
-
     def __call__(self, x):
         o = 0
         if self.l1coef:
-            u = self.mean_no_batch(tf.abs(x)*self.area_weights)
+            u = mean_no_batch(tf.abs(x)*self.area_weights)
             if self.info is not None:
                 self.info['l1'] = u.numpy()
             o = o + self.l1coef*u
         if self.l2coef:
-            u = self.mean_no_batch(x**2*self.area_weights)
+            u = mean_no_batch(x**2*self.area_weights)
             if self.info is not None:
                 self.info['l2'] = np.sqrt(u.numpy())
             o = o + self.l2coef*u
         if self.rough_coef:
-            u = tf.stack([self.gradient_regularizer(x[i]) for i in range(x.shape[0])])
+            u = tf.stack([tf.sqrt(self.gradient_regularizer(x[i])) for i in range(x.shape[0])])
             # u = tf.sqrt(self.gradient_regularizer(x[0]))
             if self.info is not None:
                 self.info['roughness'] = u.numpy()
@@ -95,12 +95,12 @@ class OptimalInput():
         o = self.model(inim)
         reg = self.regularization(inim)
         if self.ori_coef:
-            u = tf.reduce_mean((inim - self.seed_)**2*self.area_weights)
+            u = mean_no_batch((inim - self.seed_)**2*self.area_weights)
             if self.info is not None:
                 self.info['distance_from_seed'] = u.numpy()
             reg = reg + self.ori_coef*u
 
-        loss = o + reg
+        loss = reg - o # we want to maximize model output, so we put a minus sign
         if self.info is not None:
             self.info['input'] = inim.numpy()
             self.info['output'] = o.numpy()
@@ -134,3 +134,28 @@ class OptimalInput():
                 self.optimizer.apply_gradients([(gradients, self.input)])
 
         return self.optimized_input
+
+    def plot_optimization(self, i=None, fig_num=None, figsize=(9,6), roughness_rescale=5, roughness_bounds=(24.9,32.4), deviation_rescale=0.01, ylim=(-1,20)):
+        if not self.opt_history:
+            raise ValueError('There is no optimization to plot. Be sure to optimize with track_history=True')
+        if fig_num is not None:
+            plt.close(fig_num)
+        fig,ax = plt.subplots(num=fig_num,figsize=figsize)
+
+        if i is None:
+            i = slice(None)
+
+        plt.plot([o['loss'][i] for o in self.opt_history], color='gray', label='loss')
+        plt.plot([o['output'][i] for o in self.opt_history], label='output')
+        if 'roughness' in self.opt_history[0]:
+            plt.plot([o['roughness'][i]/roughness_rescale for o in self.opt_history], color='red', label=f'roughness/{roughness_rescale}')
+            for rb in roughness_bounds:
+                plt.axhline(rb/roughness_rescale, color='red', linestyle='dashed')
+
+        if 'distance_from_seed' in self.opt_history[0]:
+            plt.plot([o['distance_from_seed'][i]/deviation_rescale for o in self.opt_history], color='green', label='deviation')
+
+        plt.xlabel('epoch')
+        plt.ylim(ylim)
+        plt.legend()
+        fig.tight_layout()
