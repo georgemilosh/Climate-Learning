@@ -7,9 +7,10 @@ def mean_no_batch(x):
     return tf.reduce_mean(x, axis=np.arange(1,len(x.shape)))
 
 class Regularizer():
-    def __init__(self, l1coef=0, l2coef=0, rough_coef=0.1, gradient_regularizer=None, target_roughness=28, area_weights=1, track_components=True):
+    def __init__(self, l1coef=0, l2coef=0, target_l2=0, rough_coef=0.1, gradient_regularizer=None, target_roughness=28, area_weights=1, track_components=True):
         self.l1coef = l1coef
         self.l2coef = l2coef
+        self.target_l2 = target_l2
 
         self.gradient_regularizer = gradient_regularizer
         self.rough_coef = rough_coef if gradient_regularizer is not None else 0
@@ -27,10 +28,10 @@ class Regularizer():
                 self.info['l1'] = u.numpy()
             o = o + self.l1coef*u
         if self.l2coef:
-            u = mean_no_batch(x**2*self.area_weights)
+            u = tf.sqrt(mean_no_batch(x**2*self.area_weights))
             if self.info is not None:
-                self.info['l2'] = np.sqrt(u.numpy())
-            o = o + self.l2coef*u
+                self.info['l2'] = u.numpy()
+            o = o + self.l2coef*(u - self.target_l2)**2
         if self.rough_coef:
             u = tf.stack([tf.sqrt(self.gradient_regularizer(x[i])) for i in range(x.shape[0])])
             # u = tf.sqrt(self.gradient_regularizer(x[0]))
@@ -107,7 +108,8 @@ class OptimalInput():
             self.info['loss'] = loss.numpy()
             self.info['regularization'] = reg.numpy()
             self.info.update(self.regularization.info)
-            self.opt_history.append(self.info.copy())
+            if self.opt_history is not None:
+                self.opt_history.append(self.info.copy())
         return loss
 
 
@@ -119,6 +121,9 @@ class OptimalInput():
             if self.init_optimizer_every is not None and i % self.init_optimizer_every == 0 and i != 0:
                 self.init_optimizer()
 
+            if i == self.maxiter:
+                self.info = {} # force to track metrics on the last step
+                self.regularization.info = {}
 
             # Perform one optimization step
             with tf.GradientTape() as tape:
@@ -135,7 +140,7 @@ class OptimalInput():
 
         return self.optimized_input
 
-    def plot_optimization(self, i=None, fig_num=None, figsize=(9,6), roughness_rescale=5, roughness_bounds=(24.9,32.4), deviation_rescale=0.01, ylim=(-1,20)):
+    def plot_optimization(self, i=None, fig_num=None, figsize=(9,6), roughness_rescale=None, roughness_bounds=(24.9,32.4), deviation_rescale=0.01, l2_bounds=(0.57, 0.87), l2_rescale=0.1, ylim=(-1,20)):
         if not self.opt_history:
             raise ValueError('There is no optimization to plot. Be sure to optimize with track_history=True')
         if fig_num is not None:
@@ -148,9 +153,16 @@ class OptimalInput():
         plt.plot([o['loss'][i] for o in self.opt_history], color='gray', label='loss')
         plt.plot([o['output'][i] for o in self.opt_history], label='output')
         if 'roughness' in self.opt_history[0]:
+            if roughness_rescale is None:
+                roughness_rescale = int(roughness_bounds[0]/10)
             plt.plot([o['roughness'][i]/roughness_rescale for o in self.opt_history], color='red', label=f'roughness/{roughness_rescale}')
             for rb in roughness_bounds:
                 plt.axhline(rb/roughness_rescale, color='red', linestyle='dashed')
+
+        if 'l2' in self.opt_history[0]:
+            plt.plot([o['l2'][i]/l2_rescale for o in self.opt_history], color='lime', label=f'l2/{l2_rescale}')
+            for rb in l2_bounds:
+                plt.axhline(rb/l2_rescale, color='lime', linestyle='dashed')
 
         if 'distance_from_seed' in self.opt_history[0]:
             plt.plot([o['distance_from_seed'][i]/deviation_rescale for o in self.opt_history], color='green', label='deviation')
