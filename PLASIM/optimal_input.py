@@ -96,7 +96,7 @@ class OptimalInput():
         o = self.model(self.inim_)
         reg = self.regularization(self.inim_)
         if self.ori_coef:
-            u = mean_no_batch((self.inim_ - self.seed_)**2*self.area_weights)
+            u = mean_no_batch((self.inim_ - self.seed_)**2*self.regularization.area_weights)
             if self.info is not None:
                 self.info['distance_from_seed'] = u.numpy()
             reg = reg + self.ori_coef*u
