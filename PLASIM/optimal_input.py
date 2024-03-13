@@ -89,21 +89,21 @@ class OptimalInput():
 
     def loss_function(self, x=None):
         if x is not None:
-            inim = tf.convert_to_tensor(x*self.physical_mask, dtype=tf.float32)
+            self.inim_ = tf.convert_to_tensor(x*self.physical_mask, dtype=tf.float32)
         else:
-            inim = self.input*self.physical_mask
+            self.inim_ = self.input*self.physical_mask
 
-        o = self.model(inim)
-        reg = self.regularization(inim)
+        o = self.model(self.inim_)
+        reg = self.regularization(self.inim_)
         if self.ori_coef:
-            u = mean_no_batch((inim - self.seed_)**2*self.area_weights)
+            u = mean_no_batch((self.inim_ - self.seed_)**2*self.area_weights)
             if self.info is not None:
                 self.info['distance_from_seed'] = u.numpy()
             reg = reg + self.ori_coef*u
 
         loss = reg - o # we want to maximize model output, so we put a minus sign
         if self.info is not None:
-            self.info['input'] = inim.numpy()
+            self.info['input'] = self.inim_.numpy()
             self.info['output'] = o.numpy()
             self.info['loss'] = loss.numpy()
             self.info['regularization'] = reg.numpy()
