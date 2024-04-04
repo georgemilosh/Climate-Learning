@@ -1004,7 +1004,7 @@ except FileNotFoundError:
             'label': f'3 day {h} hPa Geopotential Height',
         }
 
-    field_infos_CESM = {
+    fields_infos_CESM = {
         "t2m": {
             "name": "TSA",
             "filename_suffix": "TSA",
@@ -1021,7 +1021,7 @@ except FileNotFoundError:
         }
     }
 
-    field_infos_ERA5 = {
+    fields_infos_ERA5 = {
         't2m': {
             'name': 't2m',
             'filename_suffix': 't2m',
@@ -1041,8 +1041,8 @@ except FileNotFoundError:
 
     fields_infos = {
         'Plasim' : fields_infos_Plasim,
-        'CESM'   : field_infos_CESM,
-        'ERA5'   : field_infos_ERA5,
+        'CESM'   : fields_infos_CESM,
+        'ERA5'   : fields_infos_ERA5,
     }
 
 
