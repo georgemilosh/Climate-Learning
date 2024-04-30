@@ -64,7 +64,9 @@ def get_run_kwargs(run) -> dict:
         mylocal = [mylocal, shared_local]
     elif isinstance(mylocal, list) and shared_local not in mylocal:
         mylocal.append(shared_local)
-    return ut.set_values_recursive(config_dict['run_kwargs'], {**run['args'], 'year_permutation': year_permutation, 'mylocal': mylocal})
+    return ut.set_values_recursive(config_dict['run_kwargs'], {**run['args'],
+                                                                # 'year_permutation': year_permutation,
+                                                                'mylocal': mylocal})
 
 def get_arg(run, key, config_dict):
     return run['args'].get(key, ut.extract_nested(config_dict, key))
@@ -145,7 +147,7 @@ def compute_metrics(run, recompute_f_va=False, compute_training_metrics=False):
             proj = np.load(f"{fold_subfolder}/proj.npy")
             geosep = ut.Reshaper(proj != 0)
             update_data(run)
-            X_tr, A_tr, X_va, A_va = ln.k_fold_cross_val_split(fold, trainer.X, trainer.Y, nfolds=nfolds)
+            X_tr, A_tr, X_va, A_va_ = ln.k_fold_cross_val_split(fold, trainer.X, trainer.Y, nfolds=nfolds)
             assert (A_va == A_va_).all(), 'computed and loaded A_va differ'
 
             # reshape data
