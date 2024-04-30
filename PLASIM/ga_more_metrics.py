@@ -58,7 +58,13 @@ def get_run(path):
 def get_run_kwargs(run) -> dict:
     config_dict = ut.json2dict(f'{run["folder"]}/config.json')
     year_permutation = np.load(f'{run["folder"]}/{run["name"]}/year_permutation.npy')
-    return ut.set_values_recursive(config_dict['run_kwargs'], {**run['args'], 'year_permutation': year_permutation})
+    mylocal = ut.extract_nested(config_dict, 'mylocal')
+    shared_local = ''
+    if isinstance(mylocal, str) and mylocal != shared_local:
+        mylocal = [mylocal, shared_local]
+    elif isinstance(mylocal, list) and shared_local not in mylocal:
+        mylocal.append(shared_local)
+    return ut.set_values_recursive(config_dict['run_kwargs'], {**run['args'], 'year_permutation': year_permutation, 'mylocal': mylocal})
 
 def get_arg(run, key, config_dict):
     return run['args'].get(key, ut.extract_nested(config_dict, key))
