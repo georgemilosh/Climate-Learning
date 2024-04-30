@@ -59,7 +59,7 @@ def get_run_kwargs(run) -> dict:
     config_dict = ut.json2dict(f'{run["folder"]}/config.json')
     year_permutation = np.load(f'{run["folder"]}/{run["name"]}/year_permutation.npy')
     mylocal = ut.extract_nested(config_dict, 'mylocal')
-    shared_local = ''
+    shared_local = '/ClimateDynamics/MediumSpace/ClimateLearningFR/gmiloshe/PLASIM'
     if isinstance(mylocal, str) and mylocal != shared_local:
         mylocal = [mylocal, shared_local]
     elif isinstance(mylocal, list) and shared_local not in mylocal:
