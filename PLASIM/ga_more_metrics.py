@@ -174,14 +174,14 @@ def compute_metrics(run, recompute_f_va=False, compute_training_metrics=False):
         A_va = tf.convert_to_tensor(A_va.reshape((-1,1)), dtype=tf.float32)
         A_pred = tf.convert_to_tensor(A_pred, dtype=tf.float32)
 
-        mtrcs = {f'val_{me}': loss_fn(A_va, A_pred).numpy() for me,loss_fn in metrics.items()}
+        mtrcs = {f'val_{me}': loss_fn(A_va, A_pred).numpy() for me,loss_fn in _metrics.items()}
 
         if compute_training_metrics:
             mu = m*f_tr
             A_pred = np.stack([mu, sigma*np.ones_like(mu)], axis=-1)
             A_tr = tf.convert_to_tensor(A_tr.reshape((-1,1)), dtype=tf.float32)
             A_pred = tf.convert_to_tensor(A_pred, dtype=tf.float32)
-            mtrcs.update({me: loss_fn(A_tr, A_pred).numpy() for me,loss_fn in metrics.items()})
+            mtrcs.update({me: loss_fn(A_tr, A_pred).numpy() for me,loss_fn in _metrics.items()})
 
         # get metrics from history
         history = pd.read_csv(f"{fold_subfolder}/history.csv").reset_index()
