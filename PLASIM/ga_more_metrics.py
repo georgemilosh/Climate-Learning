@@ -49,7 +49,7 @@ def get_run(path):
     runs = ut.json2dict(f'{path}/runs.json')
 
     run_id = int(run_name.split('--',1)[0]) # if the run is not completed there will be a letter inside run ID and so it will throw an error
-    run =  runs[run_id]
+    run =  runs[str(run_id)]
 
     run['folder'] = str(path)
 
@@ -131,7 +131,7 @@ def compute_metrics(run, recompute_f_va=False, compute_training_metrics=False):
     for fold in range(nfolds):
         print(f'{fold = }')
         fold_subfolder = f"{folder}/{run['name']}/fold_{fold}"
-        m, sigma = get_msigma(folder, run, fold)
+        m, sigma = get_msigma(run, fold)
         A_va_ = np.load(f"{fold_subfolder}/A_va.npy")
         try:
             if recompute_f_va:
