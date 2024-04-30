@@ -132,7 +132,7 @@ def compute_metrics(run, recompute_f_va=False, compute_training_metrics=False):
         print(f'{fold = }')
         fold_subfolder = f"{folder}/{run['name']}/fold_{fold}"
         m, sigma = get_msigma(run, fold)
-        A_va_ = np.load(f"{fold_subfolder}/A_va.npy")
+        A_va = np.load(f"{fold_subfolder}/A_va.npy")
         try:
             if recompute_f_va:
                 raise FileNotFoundError
