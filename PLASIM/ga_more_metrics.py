@@ -137,6 +137,9 @@ def compute_metrics(run, recompute_f_va=False, compute_training_metrics=False):
             if recompute_f_va:
                 raise FileNotFoundError
             f_va = np.load(f"{fold_subfolder}/f_va.npy")
+            if compute_training_metrics:
+                X_tr = np.load(f"{fold_subfolder}/X_tr.npy")
+                A_tr = np.load(f"{fold_subfolder}/A_tr.npy")
         except FileNotFoundError:
             print('Computing f_va')
             proj = np.load(f"{fold_subfolder}/proj.npy")
@@ -165,6 +168,7 @@ def compute_metrics(run, recompute_f_va=False, compute_training_metrics=False):
                 f_tr = X_tr @ proj
                 assert f_tr.shape == X_tr.shape[:1]
                 np.save(f"{fold_subfolder}/f_tr.npy", f_tr)
+                np.save(f"{fold_subfolder}/A_tr.npy", A_tr)
 
         logger.debug('Computing metrics')
         # compute mu and sigma
