@@ -32,7 +32,7 @@ config = ut.json2dict('./config.json')
 
 run_id=None
 path_to_import_config = Path(sys.argv[1])
-if not path_to_import_config.stem == 'config':
+if not path_to_import_config.stem.startswith('config'):
     # maybe is just missing a 'config.json'
     if (path_to_import_config / 'config.json').exists():
         path_to_import_config = path_to_import_config / 'config.json'
