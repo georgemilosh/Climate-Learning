@@ -15,7 +15,7 @@
 *log.log
 *.npy
 *.csv
-
+*.DS_Store
 **/usr/**
 **/Data_CESM/**
 **/CESM/H2SOI/**
