@@ -6,7 +6,13 @@ import matplotlib.pyplot as plt
 def mean_no_batch(x):
     return tf.reduce_mean(x, axis=np.arange(1,len(x.shape)))
 
-class Regularizer():
+class BaseRegularizer():
+    def __init__(self):
+        self.info = None
+    def __call__(self, x):
+        return tf.convert_to_tensor(np.array([0]), dtype=tf.float32)
+
+class Regularizer(BaseRegularizer):
     def __init__(self, l1coef=0, l2coef=0, target_l2=0, rough_coef=0.1, gradient_regularizer=None, target_roughness=28, area_weights=1, track_components=True):
         self.l1coef = l1coef
         self.l2coef = l2coef
@@ -21,7 +27,7 @@ class Regularizer():
         self.info = {} if track_components else None
 
     def __call__(self, x):
-        o = 0
+        o = tf.convert_to_tensor(np.array([0]), dtype=tf.float32)
         if self.l1coef:
             u = mean_no_batch(tf.abs(x)*self.area_weights)
             if self.info is not None:
@@ -43,9 +49,9 @@ class Regularizer():
 
 
 class OptimalInput():
-    def __init__(self, model, regularization, maxiter=100, lr=0.01, init_optimizer_every=None, physical_mask=None, ori_coef=0, weights=None):
+    def __init__(self, model, regularization=None, maxiter=100, lr=0.01, init_optimizer_every=None, physical_mask=None, ori_coef=0, weights=None):
         self.model = model
-        self.regularization = regularization
+        self.regularization = regularization or BaseRegularizer()
         self.maxiter = maxiter
         self.lr = lr
         self.init_optimizer_every = init_optimizer_every
