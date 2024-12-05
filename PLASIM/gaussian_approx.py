@@ -191,8 +191,12 @@ class GaussianCommittor(object):
         sigma_XA = XAs_cov[-1,:-1]
 
         if self.save_Sigmas:
-            self._Sigma_XX = self.engine.asnumpy(sigma_XX)
-            self._Sigma_XA = self.engine.asnumpy(sigma_XA)
+            if self.GPU:
+                self._Sigma_XX = self.engine.asnumpy(sigma_XX)
+                self._Sigma_XA = self.engine.asnumpy(sigma_XA)
+            else:
+                self._Sigma_XX = np.copy(sigma_XX)
+                self._Sigma_XA = np.copy(sigma_XA)
 
         # now we don't need XAs_cov anymore
         del XAs_cov # this frees GPU memory
@@ -209,7 +213,7 @@ class GaussianCommittor(object):
 
         if self.GPU:
             # convert back to CPU
-            self.p = self.engine.asnumpy(self.p)
+            self.p = np.copy(self.p)
 
         # compute the projected coordinate and the rescaling
         self.f_tr = X @ self.p
