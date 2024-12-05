@@ -98,7 +98,7 @@ def compute_weight_matrix(reshape_mask, lat) -> sparse.dia_matrix:
     return W.todia() # most of the entries of W are around the diagonal, so this is more efficient
 
 class GaussianCommittor(object):
-    def __init__(self, regularization_matrix=0, threshold=0, GPU=True):
+    def __init__(self, regularization_matrix=0, threshold=0, GPU=True, save_Sigmas=False):
         '''
         Object to compute a committor function under the gaussian assumption.
 
@@ -121,6 +121,7 @@ class GaussianCommittor(object):
         self.p = None
         self.f_tr = None
         self.f = None
+        self.save_Sigmas = save_Sigmas
 
         self.set_engine('GPU' if GPU else 'CPU')
 
@@ -188,6 +189,11 @@ class GaussianCommittor(object):
         logger.info(f'{XAs_cov.shape = }')
         sigma_XX = XAs_cov[:-1,:-1]
         sigma_XA = XAs_cov[-1,:-1]
+
+        if self.save_Sigmas:
+            self._Sigma_XX = self.engine.asnumpy(sigma_XX)
+            self._Sigma_XA = self.engine.asnumpy(sigma_XA)
+
         # now we don't need XAs_cov anymore
         del XAs_cov # this frees GPU memory
 
@@ -299,7 +305,7 @@ class Trainer(ln.Trainer):
 orig_train_model = ln.train_model
 @ut.exec_time(logger)
 @ut.indent_logger(logger)
-def train_model(model, X_tr, A_tr, Y_tr, X_va, A_va, Y_va, folder, return_metric='val_CrossEntropyLoss'):
+def train_model(model, X_tr, A_tr, Y_tr, X_va, A_va, Y_va, folder, return_metric='val_CrossEntropyLoss', save_Sigmas=False):
     '''
     Trains a given model
 
@@ -329,6 +335,7 @@ def train_model(model, X_tr, A_tr, Y_tr, X_va, A_va, Y_va, folder, return_metric
     # log the amount af data that is entering the network
     logger.info(f'Training the network on {len(Y_tr)} datapoint and validating on {len(Y_va)}')
 
+    model.save_Sigmas = save_Sigmas
     # fit the model
     model.fit(X_tr, A_tr)
 
@@ -348,6 +355,11 @@ def train_model(model, X_tr, A_tr, Y_tr, X_va, A_va, Y_va, folder, return_metric
     np.save(f'{folder}/Y_va.npy', Y_va)
     np.save(f'{folder}/f_va.npy', model.f)
     np.save(f'{folder}/Y_pred_unbiased.npy', q_va)
+
+    ## save Sigmas (takes a lot of space)
+    if save_Sigmas:
+        np.save(f'{folder}/Sigma_XX.npy', model._Sigma_XX)
+        np.save(f'{folder}/Sigma_XA.npy', model._Sigma_XA)
 
     ## deal with history
     np.save(f'{folder}/history.npy', history)
