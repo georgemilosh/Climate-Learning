@@ -213,7 +213,7 @@ class GaussianCommittor(object):
 
         if self.GPU:
             # convert back to CPU
-            self.p = np.copy(self.p)
+            self.p = self.engine.asnumpy(self.p)
 
         # compute the projected coordinate and the rescaling
         self.f_tr = X @ self.p
